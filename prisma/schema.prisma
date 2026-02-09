@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  name        String
+  status      String   @default("online")   // online, busy, away, offline
+  currentRoom String?                        // virtual office room ID
+  activity    String   @default("Available")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  teams     TeamMember[]
+  meetings  Meeting[] @relation("HostedMeetings")
+  tasks     Task[]    @relation("UserTasks")
+  messages  Message[] @relation("SentMessages")
+}
+
+model Team {
+  id        String       @id @default(uuid())
+  name      String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  members   TeamMember[]
+  meetings  Meeting[]
+  tasks     Task[]
+  channels  Channel[]
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  role      String   @default("member")
+  createdAt DateTime @default(now())
+
+  userId String
+  teamId String
+
+  user   User @relation(fields: [userId], references: [id])
+  team   Team @relation(fields: [teamId], references: [id])
+
+  @@unique([userId, teamId])
+}
+
+model Meeting {
+  id              String   @id @default(uuid())
+  title           String
+  description     String?
+  startTime       DateTime
+  endTime         DateTime
+  waitingRoom     Boolean  @default(true)
+  allowScreenShare Boolean @default(true)
+  status          String   @default("scheduled")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  teamId String?
+  hostId String
+
+  team   Team? @relation(fields: [teamId], references: [id])
+  host   User  @relation("HostedMeetings", fields: [hostId], references: [id])
+  tasks  Task[]
+}
+
+model Task {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  priority    String   @default("medium")
+  status      String   @default("todo") // todo, in_progress, review, done
+  dueDate     DateTime?
+  tags        String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  assigneeId String?
+  teamId     String?
+  meetingId  String?
+
+  assignee   User?    @relation("UserTasks", fields: [assigneeId], references: [id])
+  team       Team?    @relation(fields: [teamId], references: [id])
+  meeting    Meeting? @relation(fields: [meetingId], references: [id])
+}
+
+model Channel {
+  id          String   @id @default(uuid())
+  name        String
+  type        String   @default("general") // general, announcement, voice
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id])
+
+  messages Message[]
+
+  @@unique([teamId, name])
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  text      String
+  isPinned  Boolean  @default(false)
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  channelId String
+  senderId   String
+  replyToId  String?
+
+  channel Channel @relation(fields: [channelId], references: [id])
+  sender   User   @relation("SentMessages", fields: [senderId], references: [id])
+  replyTo  Message? @relation("Replies", fields: [replyToId], references: [id])
+  replies  Message[] @relation("Replies")
+}
+
+
