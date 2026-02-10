@@ -34,6 +34,8 @@ export class MessagesController {
             text: string;
             senderId: string;
             replyToId?: string;
+            attachments?: Array<{ url: string; name: string; type: string }>;
+            mentions?: string[];
         },
     ) {
         return this.messagesService.create({

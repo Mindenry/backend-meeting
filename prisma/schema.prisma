@@ -110,6 +110,8 @@ model Message {
   text      String
   isPinned  Boolean  @default(false)
   isSystem  Boolean  @default(false)
+  attachments Json?  // Array of { url: string, name: string, type: string }
+  mentions   String[] @default([]) // Array of user IDs mentioned
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

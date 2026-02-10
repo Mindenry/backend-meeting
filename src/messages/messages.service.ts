@@ -37,6 +37,8 @@ export class MessagesService {
         channelId: string;
         senderId: string;
         replyToId?: string;
+        attachments?: Array<{ url: string; name: string; type: string }>;
+        mentions?: string[];
     }) {
         const channel = await this.prisma.channel.findUnique({ where: { id: data.channelId } });
         if (!channel) throw new NotFoundException('Channel not found');
@@ -47,6 +49,8 @@ export class MessagesService {
                 channelId: data.channelId,
                 senderId: data.senderId,
                 replyToId: data.replyToId,
+                attachments: data.attachments ? data.attachments as any : null,
+                mentions: data.mentions || [],
             },
             include: {
                 sender: true,

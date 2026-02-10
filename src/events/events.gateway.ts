@@ -35,6 +35,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private meetingParticipants: Map<string, MeetingParticipant[]> = new Map();
   // Map socket IDs to meeting IDs for cleanup on disconnect
   private socketMeetings: Map<string, { meetingId: string; peerId: string }> = new Map();
+  // Online presence: socketId -> { userId, name }
+  private onlineUsers: Map<string, { userId: string; name: string }> = new Map();
 
   handleConnection(client: Socket) {
     console.log(`Client connected: ${client.id}`);
@@ -48,6 +50,12 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (meetingInfo) {
       this.removeMeetingParticipant(meetingInfo.meetingId, meetingInfo.peerId, client);
       this.socketMeetings.delete(client.id);
+    }
+
+    // Clean up presence
+    if (this.onlineUsers.has(client.id)) {
+      this.onlineUsers.delete(client.id);
+      this.broadcastPresence();
     }
   }
 
@@ -131,6 +139,59 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const rooms = this.getActiveRoomsData();
     client.emit('rooms:active', rooms);
     return { event: 'rooms:active', count: rooms.length };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ONLINE PRESENCE
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  @SubscribeMessage('presence:online')
+  handlePresenceOnline(
+    @MessageBody() data: { userId: string; name: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    this.onlineUsers.set(client.id, { userId: data.userId, name: data.name });
+    this.broadcastPresence();
+    return { event: 'presence:registered' };
+  }
+
+  @SubscribeMessage('presence:get')
+  handlePresenceGet(@ConnectedSocket() client: Socket) {
+    const onlineList = this.getOnlineUsersData();
+    client.emit('presence:update', onlineList);
+    return { event: 'presence:sent' };
+  }
+
+  private getOnlineUsersData(): Array<{ userId: string; name: string }> {
+    // Deduplicate by userId (same user may have multiple sockets)
+    const seen = new Map<string, { userId: string; name: string }>();
+    for (const [, info] of this.onlineUsers) {
+      seen.set(info.userId, info);
+    }
+    return Array.from(seen.values());
+  }
+
+  private broadcastPresence() {
+    const onlineList = this.getOnlineUsersData();
+    this.server.emit('presence:update', onlineList);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // DIRECT MESSAGES
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  @SubscribeMessage('dm:send')
+  handleDmSend(
+    @MessageBody() data: { id: string; text: string; senderId: string; senderName: string; receiverId: string; createdAt: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    // Find all sockets belonging to the receiver
+    for (const [socketId, userInfo] of this.onlineUsers) {
+      if (userInfo.userId === data.receiverId) {
+        this.server.to(socketId).emit('dm:message', data);
+      }
+    }
+    return { event: 'dm:sent' };
   }
 
   private getActiveRoomsData() {
