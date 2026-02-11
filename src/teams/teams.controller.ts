@@ -25,7 +25,7 @@ export class TeamsController {
   }
 
   @Post()
-  create(@Body() body: { name: string }) {
+  create(@Body() body: { name: string; description?: string; organizationId?: string }) {
     return this.teamsService.create(body);
   }
 

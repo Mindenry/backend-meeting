@@ -10,13 +10,13 @@ export class MessagesService {
         private readonly eventsGateway: EventsGateway,
     ) { }
 
-    async findByChannel(channelId: string, params?: { limit?: number; before?: string }) {
-        const { limit = 50, before } = params || {};
+    async findByChannel(channelId: string, params?: { limit?: number; before?: string; userId?: string }) {
+        const { limit = 50, before, userId } = params || {};
 
         const channel = await this.prisma.channel.findUnique({ where: { id: channelId } });
         if (!channel) throw new NotFoundException('Channel not found');
 
-        return this.prisma.message.findMany({
+        const messages = await this.prisma.message.findMany({
             where: {
                 channelId,
                 ...(before ? { createdAt: { lt: new Date(before) } } : {}),
@@ -24,12 +24,159 @@ export class MessagesService {
             take: limit,
             orderBy: { createdAt: 'desc' },
             include: {
-                sender: true,
+                sender: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        avatar: true,
+                    },
+                },
                 replyTo: {
-                    include: { sender: true },
+                    include: { 
+                        sender: {
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true,
+                            },
+                },
+                    },
+                },
+                reads: userId ? {
+                    where: { userId },
+                } : false,
+            },
+        });
+
+        // Mark messages as read for the user
+        if (userId && messages.length > 0) {
+            const messageIds = messages.map(m => m.id);
+            const existingReads = await this.prisma.messageRead.findMany({
+                where: {
+                    messageId: { in: messageIds },
+                    userId,
+                },
+            });
+
+            const unreadMessageIds = messageIds.filter(
+                id => !existingReads.some(r => r.messageId === id)
+            );
+
+            if (unreadMessageIds.length > 0) {
+                await this.prisma.messageRead.createMany({
+                    data: unreadMessageIds.map(messageId => ({
+                        messageId,
+                        userId,
+                    })),
+                });
+            }
+        }
+
+        return messages.reverse();
+    }
+
+    async search(params: {
+        query: string;
+        channelId?: string;
+        senderId?: string;
+        startDate?: Date;
+        endDate?: Date;
+        limit?: number;
+    }) {
+        const { query, channelId, senderId, startDate, endDate, limit = 50 } = params;
+
+        const where: any = {
+            text: {
+                contains: query,
+                mode: 'insensitive',
+            },
+        };
+
+        if (channelId) {
+            where.channelId = channelId;
+        }
+
+        if (senderId) {
+            where.senderId = senderId;
+        }
+
+        if (startDate || endDate) {
+            where.createdAt = {};
+            if (startDate) {
+                where.createdAt.gte = startDate;
+            }
+            if (endDate) {
+                where.createdAt.lte = endDate;
+            }
+        }
+
+        return this.prisma.message.findMany({
+            where,
+            take: limit,
+            orderBy: { createdAt: 'desc' },
+            include: {
+                sender: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        avatar: true,
+                    },
+                },
+                channel: {
+                    select: {
+                        id: true,
+                        name: true,
+                        team: {
+                            select: {
+                                id: true,
+                                name: true,
+                            },
+                        },
+                    },
                 },
             },
-        }).then(messages => messages.reverse());
+        });
+    }
+
+    async markAsRead(messageId: string, userId: string) {
+        const existing = await this.prisma.messageRead.findUnique({
+            where: {
+                messageId_userId: {
+                    messageId,
+                    userId,
+                },
+            },
+        });
+
+        if (existing) {
+            return existing;
+        }
+
+        return this.prisma.messageRead.create({
+            data: {
+                messageId,
+                userId,
+            },
+        });
+    }
+
+    async getUnreadCount(channelId: string, userId: string) {
+        const totalMessages = await this.prisma.message.count({
+            where: { channelId },
+        });
+
+        const readMessages = await this.prisma.messageRead.count({
+            where: {
+                userId,
+                message: {
+                    channelId,
+                },
+            },
+        });
+
+        return totalMessages - readMessages;
     }
 
     async create(data: {

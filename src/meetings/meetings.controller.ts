@@ -76,6 +76,42 @@ export class MeetingsController {
   remove(@Param('id') id: string) {
     return this.meetingsService.remove(id);
   }
+
+  @Get('code/:code')
+  findByCode(@Param('code') code: string) {
+    return this.meetingsService.findByCode(code);
+  }
+
+  @Post(':id/start')
+  startMeeting(@Param('id') id: string) {
+    return this.meetingsService.startMeeting(id);
+  }
+
+  @Post(':id/end')
+  endMeeting(
+    @Param('id') id: string,
+    @Body() body: { summary?: string },
+  ) {
+    return this.meetingsService.endMeeting(id, body.summary);
+  }
+
+  @Post(':id/lock')
+  lockMeeting(@Param('id') id: string) {
+    return this.meetingsService.lockMeeting(id);
+  }
+
+  @Post(':id/unlock')
+  unlockMeeting(@Param('id') id: string) {
+    return this.meetingsService.unlockMeeting(id);
+  }
+
+  @Patch(':id/summary')
+  updateSummary(
+    @Param('id') id: string,
+    @Body() body: { summary: string },
+  ) {
+    return this.meetingsService.updateSummary(id, body.summary);
+  }
 }
 
 

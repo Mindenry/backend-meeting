@@ -19,8 +19,26 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { id } });
   }
 
-  async create(data: Prisma.UserCreateInput) {
-    return this.prisma.user.create({ data });
+  async create(data: { email: string; name: string; organizationId?: string; password?: string; role?: string }) {
+    // Get default organization if not provided
+    let organizationId = data.organizationId;
+    if (!organizationId) {
+      const defaultOrg = await this.prisma.organization.findFirst();
+      if (!defaultOrg) {
+        throw new Error('No organization found. Please create an organization first.');
+      }
+      organizationId = defaultOrg.id;
+    }
+
+    return this.prisma.user.create({
+      data: {
+        email: data.email,
+        name: data.name,
+        password: data.password,
+        role: data.role || 'employee',
+        organizationId,
+      },
+    });
   }
 
   async update(id: string, data: Prisma.UserUpdateInput) {

@@ -31,6 +31,8 @@
     "@nestjs/serve-static": "^5.0.4",
     "@nestjs/websockets": "^11.0.0",
     "@prisma/client": "^6.0.0",
+    "@types/bcrypt": "^6.0.0",
+    "bcrypt": "^6.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.7.5"

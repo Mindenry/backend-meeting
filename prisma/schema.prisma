@@ -7,27 +7,58 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Organization {
+  id              String   @id @default(uuid())
+  name            String
+  domain          String?  // Allowed email domain (e.g., "company.com")
+  allowedDomains  String[] @default([]) // Multiple allowed domains
+  settings        Json?    // Organization settings
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  users    User[]
+  teams    Team[]
+  invites  Invite[]
+}
+
 model User {
   id          String   @id @default(uuid())
   email       String   @unique
   name        String
+  password    String?  // Hashed password (nullable for invited users)
+  role        String   @default("employee") // org_owner, admin, manager, employee
   status      String   @default("online")   // online, busy, away, offline
   currentRoom String?                        // virtual office room ID
   activity    String   @default("Available")
+  avatar      String?  // Avatar URL
+  isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  teams     TeamMember[]
-  meetings  Meeting[] @relation("HostedMeetings")
-  tasks     Task[]    @relation("UserTasks")
-  messages  Message[] @relation("SentMessages")
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  teams              TeamMember[]
+  meetings           Meeting[] @relation("HostedMeetings")
+  meetingParticipants MeetingParticipant[]
+  tasks              Task[]    @relation("UserTasks")
+  messages           Message[] @relation("SentMessages")
+  notifications      Notification[]
+  taskComments       TaskComment[]
+  messageReads       MessageRead[]
+  auditLogs          AuditLog[]
+  taskActivityLogs   TaskActivityLog[]
 }
 
 model Team {
   id        String       @id @default(uuid())
   name      String
+  description String?
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
   members   TeamMember[]
   meetings  Meeting[]
@@ -54,10 +85,15 @@ model Meeting {
   title           String
   description     String?
   startTime       DateTime
-  endTime         DateTime
+  endTime         DateTime?
+  meetingCode     String   @unique // Unique meeting code/ID
   waitingRoom     Boolean  @default(true)
   allowScreenShare Boolean @default(true)
-  status          String   @default("scheduled")
+  isLocked        Boolean  @default(false)
+  status          String   @default("scheduled") // scheduled, live, ended
+  actualStartTime DateTime?
+  actualEndTime   DateTime?
+  summary         String?  // Post-meeting summary
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -67,13 +103,14 @@ model Meeting {
   team   Team? @relation(fields: [teamId], references: [id])
   host   User  @relation("HostedMeetings", fields: [hostId], references: [id])
   tasks  Task[]
+  participants MeetingParticipant[]
 }
 
 model Task {
   id          String   @id @default(uuid())
   title       String
   description String?
-  priority    String   @default("medium")
+  priority    String   @default("medium") // low, medium, high, urgent
   status      String   @default("todo") // todo, in_progress, review, done
   dueDate     DateTime?
   tags        String[]
@@ -87,6 +124,8 @@ model Task {
   assignee   User?    @relation("UserTasks", fields: [assigneeId], references: [id])
   team       Team?    @relation(fields: [teamId], references: [id])
   meeting    Meeting? @relation(fields: [meetingId], references: [id])
+  comments   TaskComment[]
+  activityLog TaskActivityLog[]
 }
 
 model Channel {
@@ -123,6 +162,120 @@ model Message {
   sender   User   @relation("SentMessages", fields: [senderId], references: [id])
   replyTo  Message? @relation("Replies", fields: [replyToId], references: [id])
   replies  Message[] @relation("Replies")
+  reads    MessageRead[]
+}
+
+// New models for additional features
+
+model Invite {
+  id          String   @id @default(uuid())
+  email       String
+  token       String   @unique
+  role        String   @default("employee")
+  teamId      String?  // Optional initial team
+  invitedBy   String   // User ID who sent the invite
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([token])
+  @@index([email])
+}
+
+model MeetingParticipant {
+  id          String   @id @default(uuid())
+  joinedAt    DateTime @default(now())
+  leftAt      DateTime?
+  handRaised  Boolean  @default(false)
+  isMuted     Boolean  @default(false)
+  isVideoOn   Boolean  @default(false)
+  isSharing   Boolean  @default(false)
+  waitingRoom Boolean  @default(true) // true if in waiting room, false if admitted
+
+  meetingId String
+  userId    String
+
+  meeting Meeting @relation(fields: [meetingId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([meetingId, userId])
+  @@index([meetingId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  type      String   // mention, task_assigned, meeting_starting, announcement, etc.
+  title     String
+  message   String
+  link      String?  // URL to related resource
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
+}
+
+model TaskComment {
+  id        String   @id @default(uuid())
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  taskId String
+  userId String
+
+  task Task @relation(fields: [taskId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+}
+
+model TaskActivityLog {
+  id        String   @id @default(uuid())
+  action    String   // created, status_changed, assigned, due_date_changed, etc.
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime @default(now())
+
+  taskId String
+  userId String? // User who performed the action
+
+  task Task @relation(fields: [taskId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
+}
+
+model MessageRead {
+  id        String   @id @default(uuid())
+  readAt    DateTime @default(now())
+
+  messageId String
+  userId    String
+
+  message Message @relation(fields: [messageId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([messageId, userId])
+  @@index([userId, messageId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String   // create_user, delete_team, update_permission, etc.
+  resource  String   // user, team, meeting, etc.
+  resourceId String?
+  details   Json?    // Additional details
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  userId String?
+  user   User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([resource, resourceId])
+  @@index([createdAt])
 }
 
 

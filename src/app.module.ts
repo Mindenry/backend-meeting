@@ -12,6 +12,13 @@ import { TasksModule } from './tasks/tasks.module';
 import { EventsModule } from './events/events.module';
 import { ChannelsModule } from './channels/channels.module';
 import { MessagesModule } from './messages/messages.module';
+import { AuthModule } from './auth/auth.module';
+import { InvitesModule } from './invites/invites.module';
+import { OrganizationsModule } from './organizations/organizations.module';
+import { MeetingParticipantsModule } from './meeting-participants/meeting-participants.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { TaskCommentsModule } from './task-comments/task-comments.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -25,6 +32,13 @@ import { MessagesModule } from './messages/messages.module';
     }),
     PrismaModule,
     EventsModule,
+    AuthModule,
+    InvitesModule,
+    OrganizationsModule,
+    MeetingParticipantsModule,
+    NotificationsModule,
+    TaskCommentsModule,
+    ReportsModule,
     UsersModule,
     TeamsModule,
     MeetingsModule,
