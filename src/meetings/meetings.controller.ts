@@ -35,6 +35,7 @@ export class MeetingsController {
       description?: string;
       startTime: string;
       endTime: string;
+      password?: string;
       waitingRoom?: boolean;
       allowScreenShare?: boolean;
       status?: string;

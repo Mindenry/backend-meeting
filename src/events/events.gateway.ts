@@ -8,6 +8,8 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { PrismaService } from '../prisma/prisma.service';
+import { MessagesService } from '../messages/messages.service';
 
 interface MeetingParticipant {
   peerId: string;
@@ -30,6 +32,11 @@ interface MeetingParticipant {
 export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly messagesService: MessagesService,
+  ) {}
 
   // Track participants in each meeting
   private meetingParticipants: Map<string, MeetingParticipant[]> = new Map();
@@ -61,7 +68,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private removeMeetingParticipant(meetingId: string, peerId: string, client: Socket) {
     const participants = this.meetingParticipants.get(meetingId) || [];
-    const updated = participants.filter(p => p.peerId !== peerId);
+    const updated = participants.filter((p) => p.peerId !== peerId);
     this.meetingParticipants.set(meetingId, updated);
 
     // Notify others in the meeting room
@@ -94,15 +101,20 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       peerId,
       name: peerName,
       socketId: client.id,
-      state: state || { isMuted: false, isCameraOn: true, isScreenSharing: false, isHandRaised: false },
+      state: state || {
+        isMuted: false,
+        isCameraOn: true,
+        isScreenSharing: false,
+        isHandRaised: false,
+      },
     };
     participants.push(newParticipant);
     this.meetingParticipants.set(meetingId, participants);
 
     // Send existing participants to the new joiner
     const existingParticipants = participants
-      .filter(p => p.peerId !== peerId)
-      .map(p => ({ peerId: p.peerId, name: p.name, state: p.state }));
+      .filter((p) => p.peerId !== peerId)
+      .map((p) => ({ peerId: p.peerId, name: p.name, state: p.state }));
 
     client.emit('meeting:participants', existingParticipants);
 
@@ -182,8 +194,15 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('dm:send')
   handleDmSend(
-    @MessageBody() data: { id: string; text: string; senderId: string; senderName: string; receiverId: string; createdAt: string },
-    @ConnectedSocket() client: Socket,
+    @MessageBody()
+    data: {
+      id: string;
+      text: string;
+      senderId: string;
+      senderName: string;
+      receiverId: string;
+      createdAt: string;
+    },
   ) {
     // Find all sockets belonging to the receiver
     for (const [socketId, userInfo] of this.onlineUsers) {
@@ -192,6 +211,12 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
     }
     return { event: 'dm:sent' };
+  }
+
+  @SubscribeMessage('user:room:change')
+  handleUserRoomChange(@MessageBody() data: { userId: string; room: string | null }) {
+    this.server.emit('user:room:changed', data);
+    return { event: 'room:changed' };
   }
 
   private getActiveRoomsData() {
@@ -207,7 +232,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
         rooms.push({
           roomId: meetingId,
           name: meetingId === 'quick-huddle' ? 'Quick Huddle' : `Meeting ${meetingId.slice(0, 8)}`,
-          participants: participants.map(p => ({ peerId: p.peerId, name: p.name })),
+          participants: participants.map((p) => ({ peerId: p.peerId, name: p.name })),
           createdAt: new Date(),
         });
       }
@@ -230,7 +255,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     // Update stored state
     const participants = this.meetingParticipants.get(meetingId) || [];
-    const participant = participants.find(p => p.peerId === peerId);
+    const participant = participants.find((p) => p.peerId === peerId);
     if (participant) {
       participant.state = state;
     }
@@ -305,8 +330,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private findSocketByPeerId(peerId: string): string | null {
-    for (const [meetingId, participants] of this.meetingParticipants) {
-      const participant = participants.find(p => p.peerId === peerId);
+    for (const [, participants] of this.meetingParticipants) {
+      const participant = participants.find((p) => p.peerId === peerId);
       if (participant) {
         return participant.socketId;
       }
@@ -320,40 +345,95 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // ROOM MANAGEMENT (existing)
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  @SubscribeMessage('join-room')
-  handleJoinRoom(@MessageBody() room: string, @ConnectedSocket() client: Socket) {
-    client.join(room);
-    return { event: 'joined', room };
-  }
-
-  @SubscribeMessage('leave-room')
-  handleLeaveRoom(@MessageBody() room: string, @ConnectedSocket() client: Socket) {
-    client.leave(room);
-    return { event: 'left', room };
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // MEETING CHAT
+  // MEETING CHAT (persisted via Channels/Messages)
   // ─────────────────────────────────────────────────────────────────────────────
 
   @SubscribeMessage('meeting:chat:send')
-  handleMeetingChat(
-    @MessageBody() data: { meetingId: string; message: { id: string; sender: string; text: string; time: string } },
-    @ConnectedSocket() client: Socket,
+  async handleMeetingChat(
+    @MessageBody()
+    data: {
+      meetingId: string;
+      message: {
+        id: string;
+        senderId: string;
+        senderName: string;
+        text: string;
+        time?: string;
+        attachments?: Array<{ url: string; name: string; type: string }>;
+        mentions?: string[];
+      };
+    },
   ) {
-    // Broadcast chat message to all in the meeting
-    this.server.to(`meeting:${data.meetingId}`).emit('meeting:chat:message', data.message);
-    return { event: 'chat:sent' };
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: data.meetingId },
+      select: { id: true, teamId: true, meetingCode: true, title: true },
+    });
+
+    if (!meeting || !meeting.teamId) {
+      // Fallback: keep legacy behavior (ephemeral chat)
+      this.server.to(`meeting:${data.meetingId}`).emit('meeting:chat:message', {
+        id: data.message.id,
+        sender: data.message.senderName,
+        time: data.message.time || new Date().toISOString(),
+        text: data.message.text,
+      });
+      return { event: 'chat:sent' };
+    }
+
+    const channelName = `meeting-${meeting.meetingCode || meeting.id.slice(0, 8)}`;
+
+    const channel =
+      (await this.prisma.channel.findFirst({
+        where: { teamId: meeting.teamId, name: channelName },
+      })) ||
+      (await this.prisma.channel.create({
+        data: {
+          teamId: meeting.teamId,
+          name: channelName,
+          type: 'general',
+          description: `Meeting chat: ${meeting.title}`,
+        },
+      }));
+
+    const created = await this.messagesService.create({
+      channelId: channel.id,
+      senderId: data.message.senderId,
+      text: data.message.text,
+      attachments: data.message.attachments,
+      mentions: data.message.mentions,
+    });
+
+    // Broadcast to meeting room (MeetingRoom.tsx listens to this)
+    this.server.to(`meeting:${data.meetingId}`).emit('meeting:chat:message', {
+      id: created.id,
+      sender: created.sender?.name || data.message.senderName,
+      time: new Date(created.createdAt).toLocaleTimeString('th-TH', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      text: created.text,
+      type: 'text',
+    });
+
+    return { event: 'chat:sent', channelId: channel.id, messageId: created.id };
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // EXISTING EVENTS (kept from original)
+  // EVENT EMISSIONS FOR SERVICES
   // ─────────────────────────────────────────────────────────────────────────────
 
-  // Meeting events
+  emitChannelCreated(channel: any) {
+    this.server.emit('channel:created', channel);
+  }
+
+  emitChannelUpdated(channel: any) {
+    this.server.emit('channel:updated', channel);
+  }
+
+  emitChannelDeleted(id: string) {
+    this.server.emit('channel:deleted', id);
+  }
+
   emitMeetingCreated(meeting: any) {
     this.server.emit('meeting:created', meeting);
   }
@@ -362,11 +442,24 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.emit('meeting:updated', meeting);
   }
 
-  emitMeetingDeleted(meetingId: string) {
-    this.server.emit('meeting:deleted', { id: meetingId });
+  emitMeetingDeleted(id: string) {
+    this.server.emit('meeting:deleted', id);
   }
 
-  // Task events
+  emitMessageCreated(message: any) {
+    this.server.to(`channel:${message.channelId}`).emit('message:created', message);
+    // Also emit to the general server for global updates if needed
+    this.server.emit('message:created', message);
+  }
+
+  emitMessageUpdated(message: any) {
+    this.server.to(`channel:${message.channelId}`).emit('message:updated', message);
+  }
+
+  emitMessageDeleted(id: string, channelId: string) {
+    this.server.to(`channel:${channelId}`).emit('message:deleted', id);
+  }
+
   emitTaskCreated(task: any) {
     this.server.emit('task:created', task);
   }
@@ -375,11 +468,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.emit('task:updated', task);
   }
 
-  emitTaskDeleted(taskId: string) {
-    this.server.emit('task:deleted', { id: taskId });
+  emitTaskDeleted(id: string) {
+    this.server.emit('task:deleted', id);
   }
 
-  // Team events
   emitTeamCreated(team: any) {
     this.server.emit('team:created', team);
   }
@@ -389,42 +481,14 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   emitTeamMemberAdded(teamId: string, member: any) {
-    this.server.to(`team:${teamId}`).emit('team:member:added', member);
+    this.server.emit('team:member:added', { teamId, member });
   }
 
-  // User events
   emitUserStatusChanged(userId: string, status: string) {
     this.server.emit('user:status:changed', { userId, status });
   }
 
-  emitUserRoomChanged(userId: string, room: string | null) {
-    this.server.emit('user:room:changed', { userId, room });
-  }
-
-  // Channel events
-  emitChannelCreated(channel: any) {
-    this.server.emit('channel:created', channel);
-  }
-
-  emitChannelUpdated(channel: any) {
-    this.server.emit('channel:updated', channel);
-  }
-
-  emitChannelDeleted(channelId: string) {
-    this.server.emit('channel:deleted', { id: channelId });
-  }
-
-  // Message events
-  emitMessageCreated(message: any) {
-    this.server.emit('message:created', message);
-    this.server.to(`channel:${message.channelId}`).emit('message:created', message);
-  }
-
-  emitMessageUpdated(message: any) {
-    this.server.emit('message:updated', message);
-  }
-
-  emitMessageDeleted(messageId: string, channelId: string) {
-    this.server.emit('message:deleted', { id: messageId, channelId });
+  emitUserRoomChanged(userId: string, currentRoom: string | null) {
+    this.server.emit('user:room:changed', { userId, currentRoom });
   }
 }

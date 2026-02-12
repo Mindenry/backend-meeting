@@ -19,11 +19,12 @@ export class MeetingParticipantsController {
   @Post()
   async joinMeeting(
     @Param('meetingId') meetingId: string,
-    @Body() body: { userId: string; skipWaitingRoom?: boolean },
+    @Body() body: { userId: string; password?: string; skipWaitingRoom?: boolean },
   ) {
     return this.participantsService.joinMeeting(
       meetingId,
       body.userId,
+      body.password,
       body.skipWaitingRoom,
     );
   }
@@ -93,6 +94,19 @@ export class MeetingParticipantsController {
     @Body() body: { hostId: string },
   ) {
     return this.participantsService.muteAll(meetingId, body.hostId);
+  }
+
+  @Post(':userId/remove')
+  async removeParticipantPost(
+    @Param('meetingId') meetingId: string,
+    @Param('userId') userId: string,
+    @Body() body: { hostId: string },
+  ) {
+    return this.participantsService.removeParticipant(
+      meetingId,
+      userId,
+      body.hostId,
+    );
   }
 
   @Delete(':userId/remove')

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/commo
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { randomBytes } from 'crypto';
+import { hashPassword } from '../auth/password';
 
 @Injectable()
 export class MeetingsService {
@@ -102,6 +103,7 @@ export class MeetingsService {
     description?: string;
     startTime: Date;
     endTime?: Date;
+    password?: string;
     waitingRoom?: boolean;
     allowScreenShare?: boolean;
     status?: string;
@@ -118,6 +120,7 @@ export class MeetingsService {
     const meeting = await this.prisma.meeting.create({
       data: {
         ...data,
+        password: data.password ? hashPassword(data.password) : undefined,
         meetingCode,
         status: data.status || (data.isInstant ? 'live' : 'scheduled'),
         actualStartTime: data.isInstant ? new Date() : undefined,

@@ -87,6 +87,7 @@ model Meeting {
   startTime       DateTime
   endTime         DateTime?
   meetingCode     String   @unique // Unique meeting code/ID
+  password        String?  // Meeting password (hashed or plain)
   waitingRoom     Boolean  @default(true)
   allowScreenShare Boolean @default(true)
   isLocked        Boolean  @default(false)
@@ -94,6 +95,9 @@ model Meeting {
   actualStartTime DateTime?
   actualEndTime   DateTime?
   summary         String?  // Post-meeting summary
+  recordingUrl    String?  // URL to recording file
+  aiSummary       String?  // AI generated summary
+  transcript      String?  // Meeting transcript
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -158,7 +162,7 @@ model Message {
   senderId   String
   replyToId  String?
 
-  channel Channel @relation(fields: [channelId], references: [id])
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
   sender   User   @relation("SentMessages", fields: [senderId], references: [id])
   replyTo  Message? @relation("Replies", fields: [replyToId], references: [id])
   replies  Message[] @relation("Replies")
@@ -254,7 +258,7 @@ model MessageRead {
   messageId String
   userId    String
 
-  message Message @relation(fields: [messageId], references: [id])
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id])
 
   @@unique([messageId, userId])
