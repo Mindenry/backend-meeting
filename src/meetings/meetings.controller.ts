@@ -38,6 +38,7 @@ export class MeetingsController {
       description?: string;
       startTime: string;
       endTime: string;
+      password?: string;
       waitingRoom?: boolean;
       allowScreenShare?: boolean;
       status?: string;
@@ -80,6 +81,7 @@ export class MeetingsController {
     return this.meetingsService.remove(id);
   }
 
+<<<<<<< HEAD
   // Participants
   @Post(':id/participants')
   joinMeeting(
@@ -100,6 +102,42 @@ export class MeetingsController {
     @Body() body: { userId: string },
   ) {
     return this.meetingsService.leaveMeeting(meetingId, body.userId);
+=======
+  @Get('code/:code')
+  findByCode(@Param('code') code: string) {
+    return this.meetingsService.findByCode(code);
+  }
+
+  @Post(':id/start')
+  startMeeting(@Param('id') id: string) {
+    return this.meetingsService.startMeeting(id);
+  }
+
+  @Post(':id/end')
+  endMeeting(
+    @Param('id') id: string,
+    @Body() body: { summary?: string },
+  ) {
+    return this.meetingsService.endMeeting(id, body.summary);
+  }
+
+  @Post(':id/lock')
+  lockMeeting(@Param('id') id: string) {
+    return this.meetingsService.lockMeeting(id);
+  }
+
+  @Post(':id/unlock')
+  unlockMeeting(@Param('id') id: string) {
+    return this.meetingsService.unlockMeeting(id);
+  }
+
+  @Patch(':id/summary')
+  updateSummary(
+    @Param('id') id: string,
+    @Body() body: { summary: string },
+  ) {
+    return this.meetingsService.updateSummary(id, body.summary);
+>>>>>>> fcc8e9c8dda5a4d582d762cef59437d32dbac700
   }
 }
 

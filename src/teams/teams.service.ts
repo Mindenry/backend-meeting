@@ -31,8 +31,24 @@ export class TeamsService {
     });
   }
 
-  async create(data: { name: string }) {
-    const team = await this.prisma.team.create({ data });
+  async create(data: { name: string; description?: string; organizationId?: string }) {
+    // Get default organization if not provided
+    let organizationId = data.organizationId;
+    if (!organizationId) {
+      const defaultOrg = await this.prisma.organization.findFirst();
+      if (!defaultOrg) {
+        throw new Error('No organization found. Please create an organization first.');
+      }
+      organizationId = defaultOrg.id;
+    }
+
+    const team = await this.prisma.team.create({
+      data: {
+        name: data.name,
+        description: data.description,
+        organizationId,
+      },
+    });
     this.eventsGateway.emitTeamCreated(team);
     return team;
   }

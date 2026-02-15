@@ -22,10 +22,12 @@ export class MessagesController {
         @Param('channelId') channelId: string,
         @Query('limit') limit?: string,
         @Query('before') before?: string,
+        @Query('userId') userId?: string,
     ) {
         return this.messagesService.findByChannel(channelId, {
             limit: limit ? parseInt(limit, 10) : undefined,
             before,
+            userId,
         });
     }
 
@@ -62,5 +64,40 @@ export class MessagesController {
     @Delete('messages/:id')
     remove(@Param('id') id: string) {
         return this.messagesService.remove(id);
+    }
+
+    @Get('messages/search')
+    search(
+        @Query('query') query: string,
+        @Query('channelId') channelId?: string,
+        @Query('senderId') senderId?: string,
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+        @Query('limit') limit?: string,
+    ) {
+        return this.messagesService.search({
+            query,
+            channelId,
+            senderId,
+            startDate: startDate ? new Date(startDate) : undefined,
+            endDate: endDate ? new Date(endDate) : undefined,
+            limit: limit ? parseInt(limit, 10) : undefined,
+        });
+    }
+
+    @Post('messages/:id/read')
+    markAsRead(
+        @Param('id') id: string,
+        @Body() body: { userId: string },
+    ) {
+        return this.messagesService.markAsRead(id, body.userId);
+    }
+
+    @Get('channels/:channelId/unread-count')
+    getUnreadCount(
+        @Param('channelId') channelId: string,
+        @Query('userId') userId: string,
+    ) {
+        return this.messagesService.getUnreadCount(channelId, userId);
     }
 }

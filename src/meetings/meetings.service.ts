@@ -1,8 +1,13 @@
 import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
+<<<<<<< HEAD
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../common/audit.service';
+=======
+import { randomBytes } from 'crypto';
+import { hashPassword } from '../auth/password';
+>>>>>>> fcc8e9c8dda5a4d582d762cef59437d32dbac700
 
 @Injectable()
 export class MeetingsService {
@@ -14,17 +19,35 @@ export class MeetingsService {
     private readonly auditService: AuditService,
   ) {}
 
-  findAll(params?: { status?: string; teamId?: string }) {
-    const { status, teamId } = params || {};
+  generateMeetingCode(): string {
+    // Generate a 9-digit meeting code
+    return randomBytes(4).toString('hex').substring(0, 9).toUpperCase();
+  }
+
+  findAll(params?: { status?: string; teamId?: string; hostId?: string }) {
+    const { status, teamId, hostId } = params || {};
     return this.prisma.meeting.findMany({
       where: {
         status: status || undefined,
         teamId: teamId || undefined,
+        hostId: hostId || undefined,
       },
       include: {
         team: true,
         host: true,
         tasks: true,
+        participants: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                avatar: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { startTime: 'asc' },
     });
@@ -39,11 +62,53 @@ export class MeetingsService {
         tasks: true,
         participants: {
           include: {
+<<<<<<< HEAD
             user: true,
           },
         },
         recordings: true,
         minutes: true,
+=======
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                avatar: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  findByCode(meetingCode: string) {
+    return this.prisma.meeting.findUnique({
+      where: { meetingCode },
+      include: {
+        team: true,
+        host: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+        participants: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                avatar: true,
+              },
+            },
+          },
+        },
+>>>>>>> fcc8e9c8dda5a4d582d762cef59437d32dbac700
       },
     });
   }
@@ -52,20 +117,33 @@ export class MeetingsService {
     title: string;
     description?: string;
     startTime: Date;
-    endTime: Date;
+    endTime?: Date;
+    password?: string;
     waitingRoom?: boolean;
     allowScreenShare?: boolean;
     status?: string;
     teamId?: string | null;
     hostId: string;
+    isInstant?: boolean;
   }) {
+    let meetingCode = this.generateMeetingCode();
+    // Ensure unique meeting code
+    while (await this.prisma.meeting.findUnique({ where: { meetingCode } })) {
+      meetingCode = this.generateMeetingCode();
+    }
+
     const meeting = await this.prisma.meeting.create({
       data: {
         ...data,
+        password: data.password ? hashPassword(data.password) : undefined,
+        meetingCode,
+        status: data.status || (data.isInstant ? 'live' : 'scheduled'),
+        actualStartTime: data.isInstant ? new Date() : undefined,
       },
       include: {
         team: true,
         host: true,
+        participants: true,
       },
     });
     this.eventsGateway.emitMeetingCreated(meeting);
@@ -110,6 +188,65 @@ export class MeetingsService {
     }
     
     return meeting;
+  }
+
+  async startMeeting(id: string) {
+    const meeting = await this.prisma.meeting.findUnique({ where: { id } });
+    if (!meeting) throw new NotFoundException('Meeting not found');
+
+    return this.prisma.meeting.update({
+      where: { id },
+      data: {
+        status: 'live',
+        actualStartTime: new Date(),
+      },
+      include: {
+        team: true,
+        host: true,
+        participants: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                avatar: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async endMeeting(id: string, summary?: string) {
+    const meeting = await this.prisma.meeting.findUnique({ where: { id } });
+    if (!meeting) throw new NotFoundException('Meeting not found');
+
+    return this.prisma.meeting.update({
+      where: { id },
+      data: {
+        status: 'ended',
+        actualEndTime: new Date(),
+        summary,
+      },
+      include: {
+        team: true,
+        host: true,
+        participants: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                avatar: true,
+              },
+            },
+          },
+        },
+      },
+    });
   }
 
   async update(
@@ -172,6 +309,7 @@ export class MeetingsService {
     return { success: true };
   }
 
+<<<<<<< HEAD
   // Participants
   async joinMeeting(meetingId: string, userId: string, role: string = 'participant') {
     const meeting = await this.prisma.meeting.findUnique({ where: { id: meetingId } });
@@ -251,6 +389,35 @@ export class MeetingsService {
         user: true,
       },
       orderBy: { joinedAt: 'asc' },
+=======
+  async lockMeeting(id: string) {
+    const meeting = await this.prisma.meeting.findUnique({ where: { id } });
+    if (!meeting) throw new NotFoundException('Meeting not found');
+
+    return this.prisma.meeting.update({
+      where: { id },
+      data: { isLocked: true },
+    });
+  }
+
+  async unlockMeeting(id: string) {
+    const meeting = await this.prisma.meeting.findUnique({ where: { id } });
+    if (!meeting) throw new NotFoundException('Meeting not found');
+
+    return this.prisma.meeting.update({
+      where: { id },
+      data: { isLocked: false },
+    });
+  }
+
+  async updateSummary(id: string, summary: string) {
+    const meeting = await this.prisma.meeting.findUnique({ where: { id } });
+    if (!meeting) throw new NotFoundException('Meeting not found');
+
+    return this.prisma.meeting.update({
+      where: { id },
+      data: { summary },
+>>>>>>> fcc8e9c8dda5a4d582d762cef59437d32dbac700
     });
   }
 }

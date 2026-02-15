@@ -13,6 +13,7 @@ import { TasksModule } from './tasks/tasks.module';
 import { EventsModule } from './events/events.module';
 import { ChannelsModule } from './channels/channels.module';
 import { MessagesModule } from './messages/messages.module';
+<<<<<<< HEAD
 import { NotificationsModule } from './notifications/notifications.module';
 import { AuditController } from './common/audit.controller';
 import { AuthModule } from './auth/auth.module';
@@ -29,6 +30,15 @@ import { AIModule } from './ai/ai.module';
 import { VirtualOfficeModule } from './virtual-office/virtual-office.module';
 import { WorkflowsModule } from './workflows/workflows.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+=======
+import { AuthModule } from './auth/auth.module';
+import { InvitesModule } from './invites/invites.module';
+import { OrganizationsModule } from './organizations/organizations.module';
+import { MeetingParticipantsModule } from './meeting-participants/meeting-participants.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { TaskCommentsModule } from './task-comments/task-comments.module';
+import { ReportsModule } from './reports/reports.module';
+>>>>>>> fcc8e9c8dda5a4d582d762cef59437d32dbac700
 
 @Module({
   imports: [
@@ -45,6 +55,13 @@ import { AnalyticsModule } from './analytics/analytics.module';
     PrismaModule,
     AuthModule,
     EventsModule,
+    AuthModule,
+    InvitesModule,
+    OrganizationsModule,
+    MeetingParticipantsModule,
+    NotificationsModule,
+    TaskCommentsModule,
+    ReportsModule,
     UsersModule,
     TeamsModule,
     MeetingsModule,

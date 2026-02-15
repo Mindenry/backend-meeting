@@ -41,13 +41,14 @@ export class TasksController {
     body: {
       title: string;
       description?: string;
-      priority?: 'high' | 'medium' | 'low';
+      priority?: 'high' | 'medium' | 'low' | 'urgent';
       status?: 'todo' | 'in_progress' | 'review' | 'done';
       dueDate?: string | null;
       tags?: string[];
       assigneeId?: string | null;
       teamId?: string | null;
       meetingId?: string | null;
+      createdBy?: string;
     },
   ) {
     return this.tasksService.create({
@@ -63,20 +64,25 @@ export class TasksController {
     body: Partial<{
       title: string;
       description?: string;
-      priority: 'high' | 'medium' | 'low';
+      priority: 'high' | 'medium' | 'low' | 'urgent';
       status: 'todo' | 'in_progress' | 'review' | 'done';
       dueDate: string | null;
       tags: string[];
       assigneeId?: string | null;
       teamId?: string | null;
       meetingId?: string | null;
+      userId?: string;
     }>,
   ) {
-    const { dueDate, ...rest } = body;
-    return this.tasksService.update(id, {
+    const { dueDate, userId, ...rest } = body;
+    return this.tasksService.update(
+      id,
+      {
       ...rest,
       dueDate: dueDate ? new Date(dueDate) : null,
-    });
+      },
+      userId,
+    );
   }
 
   @Delete(':id')

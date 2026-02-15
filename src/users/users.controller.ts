@@ -35,6 +35,9 @@ export class UsersController {
     body: {
       email: string;
       name: string;
+      organizationId?: string;
+      password?: string;
+      role?: string;
     },
   ) {
     return this.usersService.create(body);

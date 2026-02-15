@@ -7,17 +7,36 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Organization {
+  id              String   @id @default(uuid())
+  name            String
+  domain          String?  // Allowed email domain (e.g., "company.com")
+  allowedDomains  String[] @default([]) // Multiple allowed domains
+  settings        Json?    // Organization settings
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  users    User[]
+  teams    Team[]
+  invites  Invite[]
+}
+
 model User {
   id          String   @id @default(uuid())
   email       String   @unique
   name        String
-  password    String?  // Hashed password for authentication
-  role        String   @default("member") // admin, manager, member
+  password    String?  // Hashed password (nullable for invited users)
+  role        String   @default("employee") // org_owner, admin, manager, employee, member
   status      String   @default("online")   // online, busy, away, offline
   currentRoom String?                        // virtual office room ID
   activity    String   @default("Available")
+  avatar      String?  // Avatar URL
+  isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 
   teams     TeamMember[]
   meetings  Meeting[] @relation("HostedMeetings")
@@ -46,13 +65,22 @@ model User {
   virtualRoomPresences VirtualRoomPresence[]
   workflows Workflow[] @relation("WorkflowCreator")
   workflowRuns WorkflowRun[]
+  
+  taskComments       TaskComment[]
+  messageReads       MessageRead[]
+  auditLogs          AuditLog[]
+  taskActivityLogs   TaskActivityLog[]
 }
 
 model Team {
   id        String       @id @default(uuid())
   name      String
+  description String?
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
   members   TeamMember[]
   meetings  Meeting[]
@@ -85,10 +113,19 @@ model Meeting {
   title           String
   description     String?
   startTime       DateTime
-  endTime         DateTime
+  endTime         DateTime?
+  meetingCode     String   @unique // Unique meeting code/ID
+  password        String?  // Meeting password (hashed or plain)
   waitingRoom     Boolean  @default(true)
   allowScreenShare Boolean @default(true)
-  status          String   @default("scheduled")
+  isLocked        Boolean  @default(false)
+  status          String   @default("scheduled") // scheduled, live, ended
+  actualStartTime DateTime?
+  actualEndTime   DateTime?
+  summary         String?  // Post-meeting summary
+  recordingUrl    String?  // URL to recording file
+  aiSummary       String?  // AI generated summary
+  transcript      String?  // Meeting transcript
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -107,7 +144,7 @@ model Task {
   id          String   @id @default(uuid())
   title       String
   description String?
-  priority    String   @default("medium")
+  priority    String   @default("medium") // low, medium, high, urgent
   status      String   @default("todo") // todo, in_progress, review, done
   dueDate     DateTime?
   tags        String[]
@@ -123,6 +160,8 @@ model Task {
   meeting    Meeting? @relation(fields: [meetingId], references: [id])
   timeEntries TimeEntry[]
   linkedPullRequests PullRequest[] @relation("LinkedPullRequests")
+  comments   TaskComment[]
+  activityLog TaskActivityLog[]
 }
 
 model Channel {
@@ -158,7 +197,7 @@ model Message {
   replyToId  String?
   threadId   String?  // For thread replies
 
-  channel Channel @relation(fields: [channelId], references: [id])
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
   sender   User   @relation("SentMessages", fields: [senderId], references: [id])
   replyTo  Message? @relation("Replies", fields: [replyToId], references: [id])
   replies  Message[] @relation("Replies")
@@ -166,7 +205,75 @@ model Message {
   threadMessage Thread? @relation("ThreadMessage")
   
   reactions MessageReaction[]
+  reads    MessageRead[]
 }
+
+// New models for additional features
+
+model Invite {
+  id          String   @id @default(uuid())
+  email       String
+  token       String   @unique
+  role        String   @default("employee")
+  teamId      String?  // Optional initial team
+  invitedBy   String   // User ID who sent the invite
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([token])
+  @@index([email])
+}
+
+
+
+
+
+model TaskComment {
+  id        String   @id @default(uuid())
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  taskId String
+  userId String
+
+  task Task @relation(fields: [taskId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+}
+
+model TaskActivityLog {
+  id        String   @id @default(uuid())
+  action    String   // created, status_changed, assigned, due_date_changed, etc.
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime @default(now())
+
+  taskId String
+  userId String? // User who performed the action
+
+  task Task @relation(fields: [taskId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
+}
+
+model MessageRead {
+  id        String   @id @default(uuid())
+  readAt    DateTime @default(now())
+
+  messageId String
+  userId    String
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([messageId, userId])
+  @@index([userId, messageId])
+}
+
+
 
 model MessageReaction {
   id        String   @id @default(uuid())
@@ -236,6 +343,7 @@ model Notification {
   type      String   // task_assigned, meeting_created, message_mention, etc.
   title     String
   message   String
+  link      String?  // URL to related resource
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -255,6 +363,7 @@ model AuditLog {
   entity    String   // user, team, meeting, task, channel, message
   entityId  String
   userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
   userName  String?
   details   Json?    // Additional details about the action
   ipAddress String?
@@ -407,6 +516,11 @@ model MeetingParticipant {
   leftAt      DateTime?
   duration    Int?     // in seconds
   role        String   @default("participant") // host, co-host, participant
+  handRaised  Boolean  @default(false)
+  isMuted     Boolean  @default(false)
+  isVideoOn   Boolean  @default(false)
+  isSharing   Boolean  @default(false)
+  waitingRoom Boolean  @default(true) // true if in waiting room, false if admitted
 
   meeting    Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
