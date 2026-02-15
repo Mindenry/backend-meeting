@@ -23,7 +23,7 @@ interface MeetingParticipant {
 
 @WebSocketGateway({
   cors: {
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: true, // Allow all origins
     credentials: true,
   },
 })
@@ -426,5 +426,41 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   emitMessageDeleted(messageId: string, channelId: string) {
     this.server.emit('message:deleted', { id: messageId, channelId });
+  }
+
+  // Reaction events
+  emitReactionAdded(messageId: string, reaction: any) {
+    this.server.emit('reaction:added', { messageId, reaction });
+  }
+
+  emitReactionRemoved(messageId: string, reaction: any) {
+    this.server.emit('reaction:removed', { messageId, reaction });
+  }
+
+  // Thread events
+  emitThreadCreated(thread: any) {
+    this.server.to(`channel:${thread.channelId}`).emit('thread:created', thread);
+  }
+
+  emitThreadReplyAdded(threadId: string, reply: any) {
+    this.server.emit('thread:reply:added', { threadId, reply });
+  }
+
+  // Typing indicators
+  emitTypingStarted(channelId: string, userId: string, userName: string) {
+    this.server.to(`channel:${channelId}`).emit('typing:started', { userId, userName });
+  }
+
+  emitTypingStopped(channelId: string, userId: string) {
+    this.server.to(`channel:${channelId}`).emit('typing:stopped', { userId });
+  }
+
+  // Voice channel events
+  emitVoiceJoin(channelId: string, userId: string, peerId: string) {
+    this.server.to(`voice:${channelId}`).emit('voice:user:joined', { userId, peerId });
+  }
+
+  emitVoiceLeave(channelId: string, userId: string, peerId: string) {
+    this.server.to(`voice:${channelId}`).emit('voice:user:left', { userId, peerId });
   }
 }

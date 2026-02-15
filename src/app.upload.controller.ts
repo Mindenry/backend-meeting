@@ -4,10 +4,12 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
 
 // กำหนด interface สำหรับ uploaded file
 interface UploadedFileType {
@@ -23,6 +25,7 @@ interface UploadedFileType {
 }
 
 @Controller('upload')
+@UseGuards(JwtAuthGuard)
 export class UploadController {
   @Post()
   @UseInterceptors(
@@ -34,6 +37,9 @@ export class UploadController {
           callback(null, `${uniqueSuffix}${extname(file.originalname)}`);
         },
       }),
+      limits: {
+        fileSize: 50 * 1024 * 1024, // 50MB
+      },
     }),
   )
   uploadFile(@UploadedFile() file: UploadedFileType | undefined) {

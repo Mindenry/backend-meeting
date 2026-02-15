@@ -7,10 +7,14 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { TeamsService } from './teams.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard, Roles } from '../auth/roles.guard';
 
 @Controller('teams')
+@UseGuards(JwtAuthGuard)
 export class TeamsController {
   constructor(private readonly teamsService: TeamsService) {}
 
@@ -35,6 +39,8 @@ export class TeamsController {
   }
 
   @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   remove(@Param('id') id: string) {
     return this.teamsService.remove(id);
   }
@@ -55,6 +61,8 @@ export class TeamsController {
   }
 
   @Delete(':id/members')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager')
   removeMember(
     @Param('id') id: string,
     @Query('userId') userId: string,

@@ -7,10 +7,13 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { MeetingsService } from './meetings.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('meetings')
+@UseGuards(JwtAuthGuard)
 export class MeetingsController {
   constructor(private readonly meetingsService: MeetingsService) {}
 
@@ -75,6 +78,28 @@ export class MeetingsController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.meetingsService.remove(id);
+  }
+
+  // Participants
+  @Post(':id/participants')
+  joinMeeting(
+    @Param('id') meetingId: string,
+    @Body() body: { userId: string; role?: string },
+  ) {
+    return this.meetingsService.joinMeeting(meetingId, body.userId, body.role);
+  }
+
+  @Get(':id/participants')
+  getParticipants(@Param('id') meetingId: string) {
+    return this.meetingsService.getParticipants(meetingId);
+  }
+
+  @Post(':id/participants/leave')
+  leaveMeeting(
+    @Param('id') meetingId: string,
+    @Body() body: { userId: string },
+  ) {
+    return this.meetingsService.leaveMeeting(meetingId, body.userId);
   }
 }
 

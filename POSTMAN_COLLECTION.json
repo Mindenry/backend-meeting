@@ -1,0 +1,365 @@
+{
+  "info": {
+    "name": "Team Connect Hub API",
+    "description": "API collection for Team Connect Hub - Unified Collaboration Platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Repositories",
+      "item": [
+        {
+          "name": "Create Repository",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"my-project\",\n  \"description\": \"Project repository\",\n  \"isPrivate\": true,\n  \"teamId\": \"team-uuid\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/repositories",
+              "host": ["{{baseUrl}}"],
+              "path": ["repositories"]
+            }
+          }
+        },
+        {
+          "name": "List Repositories",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/repositories?teamId=team-uuid",
+              "host": ["{{baseUrl}}"],
+              "path": ["repositories"],
+              "query": [
+                {
+                  "key": "teamId",
+                  "value": "team-uuid"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Pull Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Add new feature\",\n  \"description\": \"This PR adds a new feature\",\n  \"sourceBranch\": \"feature/new-feature\",\n  \"targetBranch\": \"main\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/repositories/:repoId/pull-requests",
+              "host": ["{{baseUrl}}"],
+              "path": ["repositories", ":repoId", "pull-requests"],
+              "variable": [
+                {
+                  "key": "repoId",
+                  "value": "repository-uuid"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI",
+      "item": [
+        {
+          "name": "Generate Meeting Summary",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transcription\": \"Meeting transcript here...\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/meetings/:meetingId/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "meetings", ":meetingId", "summary"],
+              "variable": [
+                {
+                  "key": "meetingId",
+                  "value": "meeting-uuid"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Chat Assistant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"What tasks do I have today?\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/chat",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "chat"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Virtual Office",
+      "item": [
+        {
+          "name": "Create Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Main Office\",\n  \"description\": \"Team workspace\",\n  \"type\": \"office\",\n  \"capacity\": 50\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/virtual-office/rooms",
+              "host": ["{{baseUrl}}"],
+              "path": ["virtual-office", "rooms"]
+            }
+          }
+        },
+        {
+          "name": "Join Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"position\": {\n    \"x\": 100,\n    \"y\": 200\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/virtual-office/rooms/:roomId/join",
+              "host": ["{{baseUrl}}"],
+              "path": ["virtual-office", "rooms", ":roomId", "join"],
+              "variable": [
+                {
+                  "key": "roomId",
+                  "value": "room-uuid"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workflows",
+      "item": [
+        {
+          "name": "Create Workflow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Auto-create task from PR\",\n  \"description\": \"Creates a task when PR is merged\",\n  \"trigger\": \"pr_merged\",\n  \"actions\": [\n    {\n      \"type\": \"create_task\",\n      \"title\": \"Deploy: {{title}}\",\n      \"priority\": \"high\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/workflows",
+              "host": ["{{baseUrl}}"],
+              "path": ["workflows"]
+            }
+          }
+        },
+        {
+          "name": "Execute Workflow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": {\n    \"id\": \"pr-uuid\",\n    \"title\": \"PR Title\",\n    \"type\": \"pullrequest\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/workflows/:workflowId/execute",
+              "host": ["{{baseUrl}}"],
+              "path": ["workflows", ":workflowId", "execute"],
+              "variable": [
+                {
+                  "key": "workflowId",
+                  "value": "workflow-uuid"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "Get Team Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/teams/:teamId",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "teams", ":teamId"],
+              "variable": [
+                {
+                  "key": "teamId",
+                  "value": "team-uuid"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Dashboard Data",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/dashboard/:teamId",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "dashboard", ":teamId"],
+              "variable": [
+                {
+                  "key": "teamId",
+                  "value": "team-uuid"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

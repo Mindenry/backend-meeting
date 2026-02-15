@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -6,6 +7,9 @@ async function main() {
   console.log('🌱 Starting seed...');
 
   // Clear existing data
+  await prisma.refreshToken.deleteMany();
+  await prisma.notification.deleteMany();
+  await prisma.auditLog.deleteMany();
   await prisma.message.deleteMany();
   await prisma.channel.deleteMany();
   await prisma.task.deleteMany();
@@ -14,60 +18,89 @@ async function main() {
   await prisma.team.deleteMany();
   await prisma.user.deleteMany();
 
+  // Hash default password
+  const defaultPassword = await bcrypt.hash('password123', 10);
+
   // Create Users
   const users = await Promise.all([
     prisma.user.create({
       data: {
+        email: 'admin@acme.com',
+        name: 'Admin User',
+        password: defaultPassword,
+        role: 'admin',
+      },
+    }),
+    prisma.user.create({
+      data: {
         email: 'somchai@acme.com',
         name: 'สมชาย K.',
+        password: defaultPassword,
+        role: 'manager',
       },
     }),
     prisma.user.create({
       data: {
         email: 'arisa@acme.com',
         name: 'อริสา P.',
+        password: defaultPassword,
+        role: 'member',
       },
     }),
     prisma.user.create({
       data: {
         email: 'jirawat@acme.com',
         name: 'จิรวัฒน์ W.',
+        password: defaultPassword,
+        role: 'member',
       },
     }),
     prisma.user.create({
       data: {
         email: 'pim@acme.com',
         name: 'พิมพ์ L.',
+        password: defaultPassword,
+        role: 'member',
       },
     }),
     prisma.user.create({
       data: {
         email: 'thana@acme.com',
         name: 'ธนา S.',
+        password: defaultPassword,
+        role: 'member',
       },
     }),
     prisma.user.create({
       data: {
         email: 'napa@acme.com',
         name: 'นภา M.',
+        password: defaultPassword,
+        role: 'member',
       },
     }),
     prisma.user.create({
       data: {
         email: 'wipa@acme.com',
         name: 'วิภา T.',
+        password: defaultPassword,
+        role: 'member',
       },
     }),
     prisma.user.create({
       data: {
         email: 'kitti@acme.com',
         name: 'กิตติ R.',
+        password: defaultPassword,
+        role: 'member',
       },
     }),
     prisma.user.create({
       data: {
         email: 'preeya@acme.com',
         name: 'ปรียา S.',
+        password: defaultPassword,
+        role: 'member',
       },
     }),
   ]);
@@ -95,18 +128,19 @@ async function main() {
 
   console.log('✅ Created 3 teams');
 
-  // Add team members
+  // Add team members (users[0] = admin, users[1] = somchai manager, users[2-9] = members)
   await prisma.teamMember.createMany({
     data: [
-      { userId: users[0].id, teamId: engineeringTeam.id, role: 'admin' },
-      { userId: users[2].id, teamId: engineeringTeam.id, role: 'member' },
-      { userId: users[4].id, teamId: engineeringTeam.id, role: 'member' },
-      { userId: users[5].id, teamId: engineeringTeam.id, role: 'member' },
-      { userId: users[1].id, teamId: designTeam.id, role: 'admin' },
-      { userId: users[3].id, teamId: designTeam.id, role: 'member' },
-      { userId: users[6].id, teamId: operationsTeam.id, role: 'admin' },
-      { userId: users[7].id, teamId: operationsTeam.id, role: 'member' },
-      { userId: users[8].id, teamId: operationsTeam.id, role: 'member' },
+      { userId: users[1].id, teamId: engineeringTeam.id, role: 'admin' }, // somchai (manager)
+      { userId: users[2].id, teamId: engineeringTeam.id, role: 'member' }, // arisa
+      { userId: users[3].id, teamId: engineeringTeam.id, role: 'member' }, // jirawat
+      { userId: users[4].id, teamId: engineeringTeam.id, role: 'member' }, // pim
+      { userId: users[5].id, teamId: engineeringTeam.id, role: 'member' }, // thana
+      { userId: users[2].id, teamId: designTeam.id, role: 'admin' }, // arisa
+      { userId: users[3].id, teamId: designTeam.id, role: 'member' }, // jirawat
+      { userId: users[6].id, teamId: operationsTeam.id, role: 'admin' }, // napa
+      { userId: users[7].id, teamId: operationsTeam.id, role: 'member' }, // wipa
+      { userId: users[8].id, teamId: operationsTeam.id, role: 'member' }, // kitti
     ],
   });
 

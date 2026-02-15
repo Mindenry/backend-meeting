@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { join } from 'path';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { AppController } from './app.controller';
@@ -12,18 +13,37 @@ import { TasksModule } from './tasks/tasks.module';
 import { EventsModule } from './events/events.module';
 import { ChannelsModule } from './channels/channels.module';
 import { MessagesModule } from './messages/messages.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { AuditController } from './common/audit.controller';
+import { AuthModule } from './auth/auth.module';
+import { ReactionsModule } from './reactions/reactions.module';
+import { ThreadsModule } from './threads/threads.module';
+import { DocumentsModule } from './documents/documents.module';
+import { RecordingsModule } from './recordings/recordings.module';
+import { MinutesModule } from './minutes/minutes.module';
+import { TimeTrackingModule } from './time-tracking/time-tracking.module';
+import { RemindersModule } from './reminders/reminders.module';
+import { ReportsModule } from './reports/reports.module';
+import { RepositoriesModule } from './repositories/repositories.module';
+import { AIModule } from './ai/ai.module';
+import { VirtualOfficeModule } from './virtual-office/virtual-office.module';
+import { WorkflowsModule } from './workflows/workflows.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), '..', 'team-connect-hub', 'dist'),
-      exclude: ['/api*'],
     }),
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
     }),
     PrismaModule,
+    AuthModule,
     EventsModule,
     UsersModule,
     TeamsModule,
@@ -31,8 +51,22 @@ import { MessagesModule } from './messages/messages.module';
     TasksModule,
     ChannelsModule,
     MessagesModule,
+    NotificationsModule,
+    ReactionsModule,
+    ThreadsModule,
+    DocumentsModule,
+    RecordingsModule,
+    MinutesModule,
+    TimeTrackingModule,
+    RemindersModule,
+    ReportsModule,
+    RepositoriesModule,
+    AIModule,
+    VirtualOfficeModule,
+    WorkflowsModule,
+    AnalyticsModule,
   ],
-  controllers: [AppController, UploadController],
+  controllers: [AppController, UploadController, AuditController],
   providers: [AppService],
 })
 export class AppModule { }
