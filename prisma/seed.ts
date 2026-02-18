@@ -1,20 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-
-// Simple password hash function (using bcrypt if available, otherwise use a placeholder)
-// In production, always use bcrypt
-let bcrypt: any;
-try {
-  bcrypt = require('bcrypt');
-} catch (e) {
-  // Fallback if bcrypt is not installed
-  console.warn('⚠️  bcrypt not found, using placeholder hash. Please install: npm install bcrypt @types/bcrypt');
-  bcrypt = {
-    hash: async (password: string, rounds: number) => {
-      // Placeholder hash - NOT SECURE, only for development
-      return `$2b$${rounds}$placeholder${Buffer.from(password).toString('base64')}`;
-    },
-  };
-}
+import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -38,6 +23,7 @@ async function main() {
 
   // Clear existing data (in correct order to respect foreign keys)
   console.log('🧹 Clearing existing data...');
+  // Data from Incoming
   await prisma.messageRead.deleteMany();
   await prisma.message.deleteMany();
   await prisma.channel.deleteMany();
@@ -51,6 +37,13 @@ async function main() {
   await prisma.auditLog.deleteMany();
   await prisma.teamMember.deleteMany();
   await prisma.team.deleteMany();
+
+  // Data from HEAD
+  await prisma.refreshToken.deleteMany();
+  // Tables in both or already covered above:
+  // await prisma.auditLog.deleteMany(); // Covered
+  // await prisma.notification.deleteMany(); // Covered
+
   await prisma.user.deleteMany();
   await prisma.organization.deleteMany();
 
@@ -83,7 +76,7 @@ async function main() {
   // 2. Create Users with passwords
   console.log('👥 Creating users...');
   const defaultPassword = await hashPassword('password123');
-  
+
   const users = await Promise.all([
     prisma.user.create({
       data: {
@@ -220,15 +213,16 @@ async function main() {
   console.log('➕ Adding team members...');
   await prisma.teamMember.createMany({
     data: [
-      { userId: users[0].id, teamId: engineeringTeam.id, role: 'admin' },
-      { userId: users[2].id, teamId: engineeringTeam.id, role: 'member' },
-      { userId: users[4].id, teamId: engineeringTeam.id, role: 'member' },
-      { userId: users[5].id, teamId: engineeringTeam.id, role: 'member' },
-      { userId: users[1].id, teamId: designTeam.id, role: 'admin' },
-      { userId: users[3].id, teamId: designTeam.id, role: 'member' },
-      { userId: users[6].id, teamId: operationsTeam.id, role: 'admin' },
-      { userId: users[7].id, teamId: operationsTeam.id, role: 'member' },
-      { userId: users[8].id, teamId: operationsTeam.id, role: 'member' },
+      { userId: users[1].id, teamId: engineeringTeam.id, role: 'admin' }, // somchai (manager)
+      { userId: users[2].id, teamId: engineeringTeam.id, role: 'member' }, // arisa
+      { userId: users[3].id, teamId: engineeringTeam.id, role: 'member' }, // jirawat
+      { userId: users[4].id, teamId: engineeringTeam.id, role: 'member' }, // pim
+      { userId: users[5].id, teamId: engineeringTeam.id, role: 'member' }, // thana
+      { userId: users[2].id, teamId: designTeam.id, role: 'admin' }, // arisa
+      { userId: users[3].id, teamId: designTeam.id, role: 'member' }, // jirawat
+      { userId: users[6].id, teamId: operationsTeam.id, role: 'admin' }, // napa
+      { userId: users[7].id, teamId: operationsTeam.id, role: 'member' }, // wipa
+      { userId: users[8].id, teamId: operationsTeam.id, role: 'member' }, // kitti
     ],
   });
   console.log('✅ Added team members');
@@ -275,7 +269,7 @@ async function main() {
   console.log('📅 Creating meetings...');
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  
+
   const meetings = await Promise.all([
     prisma.meeting.create({
       data: {
@@ -787,7 +781,7 @@ async function main() {
         title: 'Meeting starting soon',
         message: 'Sprint Planning starts in 15 minutes',
         link: `/meeting-lobby/${meetings[0].id}`,
-        isRead: false,
+        read: false,
         userId: users[2].id,
       },
     }),
@@ -797,7 +791,7 @@ async function main() {
         title: 'Task assigned to you',
         message: 'Fix Safari upload bug has been assigned to you',
         link: `/tasks?task=${tasks[1].id}`,
-        isRead: false,
+        read: false,
         userId: users[2].id,
       },
     }),
@@ -807,7 +801,7 @@ async function main() {
         title: 'You were mentioned',
         message: 'สมชาย mentioned you in #general',
         link: `/chat?channel=${channels[0].id}`,
-        isRead: true,
+        read: true,
         userId: users[2].id,
       },
     }),
@@ -817,7 +811,7 @@ async function main() {
         title: 'New announcement',
         message: 'New security policy effective next week',
         link: `/chat?channel=${channels[2].id}`,
-        isRead: false,
+        read: false,
         userId: users[3].id,
       },
     }),
@@ -827,7 +821,7 @@ async function main() {
         title: 'Task assigned to you',
         message: 'Design new onboarding flow has been assigned to you',
         link: `/tasks?task=${tasks[2].id}`,
-        isRead: false,
+        read: false,
         userId: users[3].id,
       },
     }),
@@ -840,8 +834,8 @@ async function main() {
     prisma.auditLog.create({
       data: {
         action: 'create_user',
-        resource: 'user',
-        resourceId: users[1].id,
+        entity: 'user',
+        entityId: users[1].id,
         details: { email: users[1].email, role: 'admin' },
         userId: users[0].id,
         ipAddress: '192.168.1.100',
@@ -850,8 +844,8 @@ async function main() {
     prisma.auditLog.create({
       data: {
         action: 'create_team',
-        resource: 'team',
-        resourceId: engineeringTeam.id,
+        entity: 'team',
+        entityId: engineeringTeam.id,
         details: { name: engineeringTeam.name },
         userId: users[0].id,
         ipAddress: '192.168.1.100',
@@ -860,8 +854,8 @@ async function main() {
     prisma.auditLog.create({
       data: {
         action: 'create_meeting',
-        resource: 'meeting',
-        resourceId: meetings[0].id,
+        entity: 'meeting',
+        entityId: meetings[0].id,
         details: { title: meetings[0].title, meetingCode: meetings[0].meetingCode },
         userId: users[0].id,
         ipAddress: '192.168.1.101',
@@ -870,8 +864,8 @@ async function main() {
     prisma.auditLog.create({
       data: {
         action: 'delete_task',
-        resource: 'task',
-        resourceId: 'deleted-task-id',
+        entity: 'task',
+        entityId: 'deleted-task-id',
         details: { title: 'Old task' },
         userId: users[0].id,
         ipAddress: '192.168.1.102',
@@ -880,8 +874,8 @@ async function main() {
     prisma.auditLog.create({
       data: {
         action: 'update_permission',
-        resource: 'user',
-        resourceId: users[2].id,
+        entity: 'user',
+        entityId: users[2].id,
         details: { oldRole: 'employee', newRole: 'manager' },
         userId: users[0].id,
         ipAddress: '192.168.1.100',

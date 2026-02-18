@@ -7,10 +7,14 @@ import {
     Patch,
     Post,
     Query,
+    UseGuards,
 } from '@nestjs/common';
 import { ChannelsService } from './channels.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard, Roles } from '../auth/roles.guard';
 
 @Controller('channels')
+@UseGuards(JwtAuthGuard)
 export class ChannelsController {
     constructor(private readonly channelsService: ChannelsService) { }
 
@@ -25,6 +29,8 @@ export class ChannelsController {
     }
 
     @Post()
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'manager')
     create(
         @Body()
         body: {
@@ -38,6 +44,8 @@ export class ChannelsController {
     }
 
     @Patch(':id')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'manager')
     update(
         @Param('id') id: string,
         @Body()
@@ -51,6 +59,8 @@ export class ChannelsController {
     }
 
     @Delete(':id')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'manager')
     remove(@Param('id') id: string) {
         return this.channelsService.remove(id);
     }

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class MessagesService {
@@ -8,6 +9,7 @@ export class MessagesService {
         private readonly prisma: PrismaService,
         @Inject(forwardRef(() => EventsGateway))
         private readonly eventsGateway: EventsGateway,
+        private readonly notificationsService: NotificationsService,
     ) { }
 
     async findByChannel(channelId: string, params?: { limit?: number; before?: string; userId?: string }) {
@@ -19,6 +21,7 @@ export class MessagesService {
         const messages = await this.prisma.message.findMany({
             where: {
                 channelId,
+                threadId: null, // Only get main messages, not thread replies
                 ...(before ? { createdAt: { lt: new Date(before) } } : {}),
             },
             take: limit,
@@ -136,6 +139,12 @@ export class MessagesService {
                         },
                     },
                 },
+                reactions: {
+                    include: { user: { select: { id: true, name: true } } },
+                },
+                _count: {
+                    select: { replies: true },
+                },
             },
         });
     }
@@ -209,6 +218,31 @@ export class MessagesService {
         });
 
         this.eventsGateway.emitMessageCreated(message);
+        
+        // Create notifications for mentioned users
+        if (data.mentions && data.mentions.length > 0) {
+            try {
+                const notifications = data.mentions
+                    .filter(mentionId => mentionId !== data.senderId) // Don't notify self
+                    .map(mentionId =>
+                        this.notificationsService.create({
+                            userId: mentionId,
+                            type: 'message_mention',
+                            title: 'You were mentioned',
+                            message: `${message.sender.name} mentioned you in #${channel.name}: ${data.text.slice(0, 100)}`,
+                            relatedId: message.id,
+                            relatedType: 'message',
+                        }).catch(err => {
+                            console.error(`Failed to create mention notification for user ${mentionId}:`, err);
+                        })
+                    );
+                
+                await Promise.allSettled(notifications);
+            } catch (err) {
+                console.error('Failed to create mention notifications:', err);
+            }
+        }
+        
         return message;
     }
 

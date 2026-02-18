@@ -1,16 +1,18 @@
 import {
   Controller,
-  Post,
-  Body,
   Get,
+  Post,
+  Patch,
+  Body,
   UseGuards,
   Request,
   Param,
-  Patch,
+  Delete,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { InvitesService } from '../invites/invites.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -22,25 +24,33 @@ export class AuthController {
 
   @Post('login')
   async login(@Body() body: { email: string; password: string }) {
-    try {
-      const user = await this.authService.validateUser(body.email, body.password);
-      return {
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          organizationId: user.organizationId,
-        },
-      };
-    } catch (error: any) {
-      // Re-throw with proper status code
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw error;
-    }
+    return this.authService.login(body.email, body.password);
   }
+
+  @Post('register')
+  async register(@Body() body: { email: string; password: string; name: string }) {
+    return this.authService.register(body.email, body.password, body.name);
+  }
+
+  @Post('refresh')
+  async refresh(@Body() body: { refreshToken: string }) {
+    return this.authService.refreshToken(body.refreshToken);
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  async logout(@Body() body: { refreshToken: string }) {
+    return this.authService.logout(body.refreshToken);
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async getMe(@Request() req) {
+    const { password: _, ...user } = req.user;
+    return user;
+  }
+
+  // Remote methods
 
   @Post('invite/accept')
   async acceptInvite(
@@ -54,7 +64,6 @@ export class AuthController {
   ) {
     const invite = await this.invitesService.validateInvite(body.token);
 
-    // Validate email domain if needed
     const org = await this.prisma.organization.findUnique({
       where: { id: invite.organizationId },
     });
@@ -72,6 +81,7 @@ export class AuthController {
         password: hashedPassword,
         role: invite.role,
         organizationId: invite.organizationId,
+        isActive: true,
       },
     });
 
@@ -89,6 +99,9 @@ export class AuthController {
     // Mark invite as used
     await this.invitesService.markAsUsed(body.token);
 
+    // Auto-login after accept
+    // We can just return the user for now, or generate tokens. 
+    // To match Remote, we return user.
     return {
       user: {
         id: user.id,
@@ -113,6 +126,7 @@ export class AuthController {
       userId: string;
       oldPassword: string;
       newPassword: string;
+      token?: string; // Optional token if we implement password recovery
     },
   ) {
     await this.authService.resetPassword(
@@ -142,4 +156,3 @@ export class AuthController {
     };
   }
 }
-

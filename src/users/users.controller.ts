@@ -6,10 +6,14 @@ import {
   Param,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard, Roles } from '../auth/roles.guard';
 
 @Controller('users')
+@UseGuards(JwtAuthGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) { }
 
@@ -24,6 +28,8 @@ export class UsersController {
   }
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager')
   create(
     @Body()
     body: {
@@ -38,12 +44,15 @@ export class UsersController {
   }
 
   @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager')
   update(
     @Param('id') id: string,
     @Body()
     body: {
       email?: string;
       name?: string;
+      role?: string;
     },
   ) {
     return this.usersService.update(id, body);
@@ -62,6 +71,8 @@ export class UsersController {
   }
 
   @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);
   }

@@ -1,44 +1,14 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
-
-// Try to import bcrypt, fallback if not available
-let bcrypt: any;
-try {
-  bcrypt = require('bcrypt');
-} catch (e) {
-  console.warn('⚠️  bcrypt not found. Password hashing will use placeholder method.');
-  bcrypt = null;
-}
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly prisma: PrismaService) {}
-
-  async hashPassword(password: string): Promise<string> {
-    if (bcrypt) {
-      const saltRounds = 10;
-      return bcrypt.hash(password, saltRounds);
-    }
-    // Fallback placeholder hash (NOT SECURE - for development only)
-    return `$2b$10$placeholder${Buffer.from(password).toString('base64')}`;
-  }
-
-  async comparePassword(password: string, hash: string): Promise<boolean> {
-    // Handle placeholder hash from seed (development only)
-    if (hash.startsWith('$2b$10$placeholder')) {
-      // Extract original password from placeholder hash
-      const originalPassword = Buffer.from(hash.replace('$2b$10$placeholder', ''), 'base64').toString();
-      return password === originalPassword;
-    }
-    
-    if (bcrypt) {
-      return bcrypt.compare(password, hash);
-    }
-    
-    // Fallback: direct comparison (NOT SECURE - for development only)
-    console.warn('⚠️  Using insecure password comparison. Please install bcrypt.');
-    return password === hash;
-  }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
     const user = await this.prisma.user.findUnique({
@@ -51,20 +21,116 @@ export class AuthService {
     }
 
     if (!user.password) {
-      throw new UnauthorizedException('Please set your password first');
+      // Allow migration scenario or require set password
+      throw new UnauthorizedException('Password not set. Please contact admin or reset password.');
     }
 
-    if (!user.isActive) {
-      throw new UnauthorizedException('Account is deactivated');
+    if (user.isActive === false) { // Explicitly check for false, assuming default true if undefined or strictly boolean
+       throw new UnauthorizedException('Account is deactivated');
     }
 
-    const isPasswordValid = await this.comparePassword(password, user.password);
+    const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const { password: _, ...result } = user;
     return result;
+  }
+
+  async login(email: string, password: string) {
+    const user = await this.validateUser(email, password);
+    
+    const payload = { email: user.email, sub: user.id, role: user.role || 'member' };
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+    // Store refresh token
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+    await this.prisma.refreshToken.create({
+      data: {
+        token: refreshToken,
+        userId: user.id,
+        expiresAt,
+      },
+    });
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role || 'member',
+        organizationId: user.organizationId,
+      },
+    };
+  }
+
+  async register(email: string, password: string, name: string) {
+    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      throw new BadRequestException('User already exists');
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Create a default organization for the new user
+    const organization = await this.prisma.organization.create({
+      data: {
+        name: `${name}'s Workspace`,
+      },
+    });
+
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        name,
+        password: hashedPassword,
+        role: 'org_owner', // User is owner of their own org
+        organizationId: organization.id,
+      },
+    });
+
+    return user;
+  }
+
+  async refreshToken(token: string) {
+    try {
+      const payload = this.jwtService.verify(token);
+      const storedToken = await this.prisma.refreshToken.findUnique({
+        where: { token },
+        include: { user: true },
+      });
+
+      if (!storedToken || storedToken.expiresAt < new Date()) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      const user = storedToken.user;
+      const newPayload = { email: user.email, sub: user.id, role: user.role || 'member' };
+      const accessToken = this.jwtService.sign(newPayload, { expiresIn: '15m' });
+
+      return { accessToken };
+    } catch (error) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+  }
+
+  async logout(token: string) {
+    await this.prisma.refreshToken.deleteMany({ where: { token } });
+    return { success: true };
+  }
+
+  // Remote methods adapted to use bcryptjs
+  async hashPassword(password: string): Promise<string> {
+    return bcrypt.hash(password, 10);
+  }
+
+  async comparePassword(password: string, hash: string): Promise<boolean> {
+    return bcrypt.compare(password, hash);
   }
 
   async validateEmailDomain(email: string, organizationId: string): Promise<boolean> {
@@ -134,4 +200,3 @@ export class AuthService {
     await this.setPassword(userId, newPassword);
   }
 }
-

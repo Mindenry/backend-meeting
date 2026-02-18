@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, Inject, forwardRef, InternalServerErrorException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { AuditService } from '../common/audit.service';
 import { randomBytes } from 'crypto';
 import { hashPassword } from '../auth/password';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -11,6 +13,8 @@ export class MeetingsService {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => EventsGateway))
     private readonly eventsGateway: EventsGateway,
+    private readonly notificationsService: NotificationsService,
+    private readonly auditService: AuditService,
   ) {}
 
   private readonly logger = new Logger(MeetingsService.name);
@@ -80,6 +84,8 @@ export class MeetingsService {
             },
           },
         },
+        recordings: true,
+        minutes: true,
       },
     });
   }
@@ -161,6 +167,46 @@ export class MeetingsService {
     }
 
     this.eventsGateway.emitMeetingCreated(meeting);
+    
+    // Audit log
+    await this.auditService.log({
+      action: 'create',
+      entity: 'meeting',
+      entityId: meeting.id,
+      userId: meeting.hostId,
+      userName: meeting.host.name,
+      details: { title: meeting.title, teamId: meeting.teamId, startTime: meeting.startTime },
+    });
+    
+    // Create notifications for team members if meeting is team-based
+    if (meeting.teamId) {
+      try {
+        const teamMembers = await this.prisma.teamMember.findMany({
+          where: { teamId: meeting.teamId },
+          include: { user: true },
+        });
+        
+        const notifications = teamMembers
+          .filter(m => m.userId !== meeting.hostId)
+          .map(member => 
+            this.notificationsService.create({
+              userId: member.userId,
+              type: 'meeting_created',
+              title: 'New meeting scheduled',
+              message: `${meeting.host.name} scheduled: ${meeting.title}`,
+              relatedId: meeting.id,
+              relatedType: 'meeting',
+            }).catch(err => {
+              console.error(`Failed to create notification for user ${member.userId}:`, err);
+            })
+          );
+        
+        await Promise.allSettled(notifications);
+      } catch (err) {
+        console.error('Failed to create meeting notifications:', err);
+      }
+    }
+    
     return meeting;
   }
 
@@ -247,15 +293,122 @@ export class MeetingsService {
       },
     });
     this.eventsGateway.emitMeetingUpdated(meeting);
+    
+    // Audit log
+    await this.auditService.log({
+      action: 'update',
+      entity: 'meeting',
+      entityId: meeting.id,
+      userId: meeting.hostId,
+      userName: meeting.host.name,
+      details: { 
+        changes: Object.keys(data),
+        title: meeting.title,
+        status: meeting.status,
+      },
+    });
+    
     return meeting;
   }
 
   async remove(id: string) {
     const exists = await this.prisma.meeting.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException('Meeting not found');
+    
+    // Audit log before delete
+    await this.auditService.log({
+      action: 'delete',
+      entity: 'meeting',
+      entityId: id,
+      userId: exists.hostId,
+      details: { title: exists.title },
+    });
+    
     await this.prisma.meeting.delete({ where: { id } });
     this.eventsGateway.emitMeetingDeleted(id);
     return { success: true };
+  }
+
+  // Participants
+  async joinMeeting(meetingId: string, userId: string, role: string = 'participant') {
+    const meeting = await this.prisma.meeting.findUnique({ where: { id: meetingId } });
+    if (!meeting) {
+      throw new NotFoundException('Meeting not found');
+    }
+
+    const participant = await this.prisma.meetingParticipant.upsert({
+      where: {
+        meetingId_userId: { meetingId, userId },
+      },
+      update: {
+        joinedAt: new Date(),
+        leftAt: null,
+        role,
+      },
+      create: {
+        meetingId,
+        userId,
+        role,
+        joinedAt: new Date(),
+      },
+    });
+
+    await this.auditService.log({
+      action: 'join',
+      entity: 'meeting_participant',
+      entityId: participant.id,
+      userId,
+      details: { meetingId, role },
+    });
+
+    return participant;
+  }
+
+  async leaveMeeting(meetingId: string, userId: string) {
+    const participant = await this.prisma.meetingParticipant.findUnique({
+      where: {
+        meetingId_userId: { meetingId, userId },
+      },
+    });
+
+    if (!participant) {
+      return { success: true };
+    }
+
+    const leftAt = new Date();
+    const duration = Math.floor(
+      (leftAt.getTime() - participant.joinedAt.getTime()) / 1000,
+    );
+
+    await this.prisma.meetingParticipant.update({
+      where: {
+        meetingId_userId: { meetingId, userId },
+      },
+      data: {
+        leftAt,
+        duration,
+      },
+    });
+
+    await this.auditService.log({
+      action: 'leave',
+      entity: 'meeting_participant',
+      entityId: participant.id,
+      userId,
+      details: { meetingId, duration },
+    });
+
+    return { success: true };
+  }
+
+  async getParticipants(meetingId: string) {
+    return this.prisma.meetingParticipant.findMany({
+      where: { meetingId },
+      include: {
+        user: true,
+      },
+      orderBy: { joinedAt: 'asc' },
+    });
   }
 
   async lockMeeting(id: string) {
@@ -309,6 +462,7 @@ export class MeetingsService {
                 id: true,
                 name: true,
                 email: true,
+                avatar: true,
               },
             },
           },
@@ -355,7 +509,7 @@ export class MeetingsService {
               const name = m.sender?.name || 'Unknown';
               return `[${ts}] ${name}: ${m.text}`;
             });
-            transcriptText = transcriptLines.join('\n');
+            transcriptText = transcriptLines.join('\\n');
           }
         }
       }
@@ -410,14 +564,14 @@ export class MeetingsService {
           transcriptText,
         ]
           .filter(Boolean)
-          .join('\n');
+          .join('\\n');
 
         const apiKey = process.env.GEMINI_API_KEY!;
         const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash-latest';
         const client = this.geminiClient ?? new GoogleGenerativeAI(apiKey);
         const model = client.getGenerativeModel({ model: modelName });
 
-        const prompt = `${systemPrompt}\n\n[MEETING CONTEXT]\n${userPrompt}`;
+        const prompt = `${systemPrompt}\\n\\n[MEETING CONTEXT]\\n${userPrompt}`;
         const result = await model.generateContent(prompt);
         const rawText = result.response.text() || '';
 
@@ -427,11 +581,11 @@ export class MeetingsService {
         const humanReadableAiSummaryParts: string[] = [];
         humanReadableAiSummaryParts.push('🔎 สรุปภาพรวมการประชุม');
         humanReadableAiSummaryParts.push(parsed.summary);
-        humanReadableAiSummaryParts.push('\n📌 หัวข้อ / ข้อสรุปสำคัญ');
+        humanReadableAiSummaryParts.push('\\n📌 หัวข้อ / ข้อสรุปสำคัญ');
         humanReadableAiSummaryParts.push(
-          parsed.decisions.map((d, idx) => `${idx + 1}. ${d}`).join('\n') || '-',
+          parsed.decisions.map((d, idx) => `${idx + 1}. ${d}`).join('\\n') || '-',
         );
-        humanReadableAiSummaryParts.push('\n✅ งานที่ต้องทำ (Action Items)');
+        humanReadableAiSummaryParts.push('\\n✅ งานที่ต้องทำ (Action Items)');
         if (parsed.actionItems.length) {
           humanReadableAiSummaryParts.push(
             parsed.actionItems
@@ -442,15 +596,15 @@ export class MeetingsService {
                     : 'ไม่ระบุผู้รับผิดชอบ';
                 const prio = a.priority ? a.priority.toUpperCase() : 'MEDIUM';
                 const due = a.dueDateNote || 'ยังไม่กำหนดกำหนดส่ง';
-                return `${idx + 1}. [${prio}] ${a.title}\n   ผู้รับผิดชอบ: ${who}\n   หมายเหตุเวลา: ${due}`;
+                return `${idx + 1}. [${prio}] ${a.title}\\n   ผู้รับผิดชอบ: ${who}\\n   หมายเหตุเวลา: ${due}`;
               })
-              .join('\n'),
+              .join('\\n'),
           );
         } else {
           humanReadableAiSummaryParts.push('- ไม่มีงานที่ต้องทำจาก AI');
         }
 
-        humanReadableAiSummary = humanReadableAiSummaryParts.join('\n');
+        humanReadableAiSummary = humanReadableAiSummaryParts.join('\\n');
 
         // สร้าง tasks จาก action items (เหมือนเดิม)
         const createdTasks: { id: string }[] = [];
@@ -475,7 +629,7 @@ export class MeetingsService {
             data: {
               title: item.title,
               description: item.dueDateNote
-                ? `สร้างจาก AI Meeting Summary\n\nหมายเหตุเวลา: ${item.dueDateNote}`
+                ? `สร้างจาก AI Meeting Summary\\n\\nหมายเหตุเวลา: ${item.dueDateNote}`
                 : 'สร้างจาก AI Meeting Summary',
               priority,
               status: 'todo',
@@ -563,24 +717,24 @@ export class MeetingsService {
       const humanReadableParts: string[] = [];
       humanReadableParts.push('🔎 สรุปภาพรวมการประชุม (โหมดไม่ใช้ AI)');
       humanReadableParts.push(parsed.summary);
-      humanReadableParts.push('\n📌 หัวข้อ / ข้อสรุปสำคัญ');
+      humanReadableParts.push('\\n📌 หัวข้อ / ข้อสรุปสำคัญ');
       humanReadableParts.push('- ระบบยังไม่ได้วิเคราะห์ข้อสรุปอัตโนมัติ');
-      humanReadableParts.push('\n✅ งานที่ต้องทำ (Action Items จาก Tasks ที่มีอยู่แล้ว)');
+      humanReadableParts.push('\\n✅ งานที่ต้องทำ (Action Items จาก Tasks ที่มีอยู่แล้ว)');
       if (parsed.actionItems.length) {
         humanReadableParts.push(
           parsed.actionItems
             .map((a, idx) => {
               const prio = a.priority ? a.priority.toUpperCase() : 'MEDIUM';
               const due = a.dueDateNote || 'ยังไม่กำหนดกำหนดส่ง';
-              return `${idx + 1}. [${prio}] ${a.title}\n   หมายเหตุเวลา: ${due}`;
+              return `${idx + 1}. [${prio}] ${a.title}\\n   หมายเหตุเวลา: ${due}`;
             })
-            .join('\n'),
+            .join('\\n'),
         );
       } else {
         humanReadableParts.push('- ยังไม่มีงานที่เชื่อมกับการประชุมนี้');
       }
 
-      humanReadableAiSummary = humanReadableParts.join('\n');
+      humanReadableAiSummary = humanReadableParts.join('\\n');
       createdTasksCount = 0;
     }
 
@@ -742,5 +896,3 @@ export class MeetingsService {
     return this.generateRecurringInstances(templateId);
   }
 }
-
-

@@ -3,17 +3,20 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async create(data: {
     userId: string;
     type: string;
     title: string;
     message: string;
+    relatedId?: string;
+    relatedType?: string;
     link?: string;
   }) {
     return this.prisma.notification.create({
       data,
+      include: { user: true },
     });
   }
 
@@ -29,6 +32,7 @@ export class NotificationsService {
     const notifications = userIds.map((userId) => ({
       userId,
       ...data,
+      read: false,
     }));
 
     return this.prisma.notification.createMany({
@@ -36,69 +40,62 @@ export class NotificationsService {
     });
   }
 
-  async getUserNotifications(userId: string, unreadOnly: boolean = false) {
+  async findAll(userId: string, unreadOnly = false) {
     return this.prisma.notification.findMany({
       where: {
         userId,
-        isRead: unreadOnly ? false : undefined,
+        ...(unreadOnly ? { read: false } : {}),
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      take: 100,
+      orderBy: { createdAt: 'desc' },
+      include: { user: true },
     });
   }
 
-  async markAsRead(notificationId: string, userId: string) {
-    const notification = await this.prisma.notification.findUnique({
-      where: { id: notificationId },
+  // Alias for backward compatibility if needed, or just use findAll
+  async getUserNotifications(userId: string, unreadOnly: boolean = false) {
+    return this.findAll(userId, unreadOnly);
+  }
+
+  async markAsRead(id: string, userId: string) {
+    const notification = await this.prisma.notification.findFirst({
+      where: { id, userId },
     });
 
-    if (!notification || notification.userId !== userId) {
+    if (!notification) {
       throw new NotFoundException('Notification not found');
     }
 
     return this.prisma.notification.update({
-      where: { id: notificationId },
-      data: { isRead: true },
+      where: { id },
+      data: { read: true },
     });
   }
 
   async markAllAsRead(userId: string) {
     return this.prisma.notification.updateMany({
-      where: {
-        userId,
-        isRead: false,
-      },
-      data: {
-        isRead: true,
-      },
+      where: { userId, read: false },
+      data: { read: true },
     });
   }
 
   async getUnreadCount(userId: string) {
     return this.prisma.notification.count({
-      where: {
-        userId,
-        isRead: false,
-      },
+      where: { userId, read: false },
     });
   }
 
-  async delete(notificationId: string, userId: string) {
-    const notification = await this.prisma.notification.findUnique({
-      where: { id: notificationId },
+  async remove(id: string, userId: string) {
+    const notification = await this.prisma.notification.findFirst({
+      where: { id, userId },
     });
-
-    if (!notification || notification.userId !== userId) {
+    if (!notification) {
       throw new NotFoundException('Notification not found');
     }
+    return this.prisma.notification.delete({ where: { id } });
+  }
 
-    await this.prisma.notification.delete({
-      where: { id: notificationId },
-    });
-
-    return { success: true };
+  async delete(notificationId: string, userId: string) {
+    return this.remove(notificationId, userId);
   }
 
   // Helper methods for common notification types
@@ -114,6 +111,8 @@ export class NotificationsService {
       title: `${mentionedByUser?.name || 'Someone'} mentioned you`,
       message: `You were mentioned in a message`,
       link: `/chat?channel=${channelId}&message=${messageId}`,
+      relatedId: messageId,
+      relatedType: 'message',
     });
   }
 
@@ -129,6 +128,8 @@ export class NotificationsService {
       title: 'New task assigned',
       message: `${assignedByUser?.name || 'Someone'} assigned you: ${taskTitle}`,
       link: `/tasks?task=${taskId}`,
+      relatedId: taskId,
+      relatedType: 'task',
     });
   }
 
@@ -139,7 +140,8 @@ export class NotificationsService {
       title: 'Meeting starting soon',
       message: `Meeting "${meetingTitle}" starts in 5 minutes`,
       link: `/meeting-lobby/${meetingId}`,
+      relatedId: meetingId,
+      relatedType: 'meeting',
     });
   }
 }
-

@@ -27,8 +27,9 @@ model User {
   email       String   @unique
   name        String
   password    String? // Hashed password (nullable for invited users)
-  role        String   @default("employee") // org_owner, admin, manager, employee
+  role        String   @default("employee") // org_owner, admin, manager, employee, member
   status      String   @default("online") // online, busy, away, offline
+  currentRoom String?                        // virtual office room ID
   activity    String   @default("Available")
   avatar      String? // Avatar URL
   isActive    Boolean  @default(true)
@@ -43,7 +44,7 @@ model User {
   meetingParticipants   MeetingParticipant[]
   tasks                 Task[]               @relation("UserTasks")
   messages              Message[]            @relation("SentMessages")
-  notifications         Notification[]
+  notifications         Notification[]       @relation("UserNotifications")
   taskComments          TaskComment[]
   messageReads          MessageRead[]
   auditLogs             AuditLog[]
@@ -55,8 +56,28 @@ model User {
   workHours             WorkHours[]
   timeEntries           TimeEntry[]
   createdSprints        Sprint[]             @relation("SprintCreator")
-  createdEpics           Epic[]               @relation("EpicCreator")
+  createdEpics          Epic[]               @relation("EpicCreator")
   taskAttachments       TaskAttachment[]
+  refreshTokens RefreshToken[]
+  reactions MessageReaction[]
+  createdPolls Poll[] @relation("CreatedPolls")
+  pollVotes PollVote[] @relation("PollVotes")
+  createdDocuments Document[] @relation("CreatedDocuments")
+  documentPermissions DocumentPermission[]
+  createdVersions DocumentVersion[] @relation("CreatedVersions")
+  createdFolders DocumentFolder[] @relation("CreatedFolders")
+  createdReminders Reminder[] @relation("CreatedReminders")
+  reminderRecipients ReminderRecipient[]
+  meetingMinutes MeetingMinutes[] @relation("CreatedMinutes")
+  repositories Repository[] @relation("RepositoryOwner")
+  commits Commit[] @relation("CommitAuthor")
+  pullRequests PullRequest[] @relation("PullRequestCreator")
+  pullRequestReviews PullRequestReview[] @relation("ReviewAuthor")
+  codeComments CodeComment[] @relation("CommentAuthor")
+  aiInteractions AIInteraction[] @relation("AIUser")
+  virtualRoomPresences VirtualRoomPresence[]
+  workflows Workflow[] @relation("WorkflowCreator")
+  workflowRuns WorkflowRun[]
 }
 
 model Team {
@@ -78,6 +99,12 @@ model Team {
   workHours     WorkHours[]
   sprints       Sprint[]
   epics         Epic[]
+  documents Document[]
+  documentFolders DocumentFolder[]
+  repositories Repository[]
+  virtualRooms VirtualRoom[]
+  workflows Workflow[]
+  teamAnalytics TeamAnalytics[]
 }
 
 model TeamMember {
@@ -131,6 +158,8 @@ model Meeting {
   team         Team?                @relation(fields: [teamId], references: [id])
   host         User                 @relation("HostedMeetings", fields: [hostId], references: [id])
   tasks        Task[]
+  recordings   MeetingRecording[]
+  minutes      MeetingMinutes[]
   participants MeetingParticipant[]
   reminders    MeetingReminder[]
 }
@@ -161,6 +190,7 @@ model Task {
   sprint      Sprint?           @relation(fields: [sprintId], references: [id])
   epic        Epic?             @relation(fields: [epicId], references: [id])
   comments    TaskComment[]
+  linkedPullRequests PullRequest[] @relation("LinkedPullRequests")
   activityLog TaskActivityLog[]
   subtasks    Subtask[]
   timeEntries TimeEntry[]
@@ -179,6 +209,8 @@ model Channel {
   team   Team   @relation(fields: [teamId], references: [id])
 
   messages Message[]
+  threads Thread[]
+  polls   Poll[]
 
   @@unique([teamId, name])
 }
@@ -196,12 +228,17 @@ model Message {
   channelId String
   senderId  String
   replyToId String?
+  threadId   String?  // For thread replies
 
   channel Channel       @relation(fields: [channelId], references: [id], onDelete: Cascade)
   sender  User          @relation("SentMessages", fields: [senderId], references: [id])
   replyTo Message?      @relation("Replies", fields: [replyToId], references: [id])
   replies Message[]     @relation("Replies")
   reads   MessageRead[]
+  thread   Thread?  @relation("ThreadReplies", fields: [threadId], references: [id])
+  threadMessage Thread? @relation("ThreadMessage")
+  
+  reactions MessageReaction[]
 }
 
 // New models for additional features
@@ -224,40 +261,11 @@ model Invite {
   @@index([email])
 }
 
-model MeetingParticipant {
-  id          String    @id @default(uuid())
-  joinedAt    DateTime  @default(now())
-  leftAt      DateTime?
-  handRaised  Boolean   @default(false)
-  isMuted     Boolean   @default(false)
-  isVideoOn   Boolean   @default(false)
-  isSharing   Boolean   @default(false)
-  waitingRoom Boolean   @default(true) // true if in waiting room, false if admitted
 
-  meetingId String
-  userId    String
 
-  meeting Meeting @relation(fields: [meetingId], references: [id])
-  user    User    @relation(fields: [userId], references: [id])
 
-  @@unique([meetingId, userId])
-  @@index([meetingId])
-}
 
-model Notification {
-  id        String   @id @default(uuid())
-  type      String // mention, task_assigned, meeting_starting, announcement, etc.
-  title     String
-  message   String
-  link      String? // URL to related resource
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now())
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  @@index([userId, isRead])
-}
 
 model TaskComment {
   id        String   @id @default(uuid())
@@ -300,20 +308,503 @@ model MessageRead {
   @@index([userId, messageId])
 }
 
-model AuditLog {
-  id         String   @id @default(uuid())
-  action     String // create_user, delete_team, update_permission, etc.
-  resource   String // user, team, meeting, etc.
-  resourceId String?
-  details    Json? // Additional details
-  ipAddress  String?
-  createdAt  DateTime @default(now())
 
-  userId String?
-  user   User?   @relation(fields: [userId], references: [id])
+
+model MessageReaction {
+  id        String   @id @default(uuid())
+  emoji     String   // e.g., "👍", "❤️", "😂"
+  messageId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+}
+
+model Thread {
+  id        String   @id @default(uuid())
+  messageId String   @unique // The original message that started the thread
+  channelId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  channel Channel @relation(fields: [channelId], references: [id])
+  message Message @relation("ThreadMessage", fields: [messageId], references: [id])
+  replies Message[] @relation("ThreadReplies") // Thread replies
+
+  @@index([channelId])
+}
+
+model Poll {
+  id          String   @id @default(uuid())
+  question    String
+  options     Json     // Array of { id: string, text: string, votes: number }
+  channelId   String?
+  messageId   String?  // If created from a message
+  createdBy   String
+  expiresAt   DateTime?
+  isActive    Boolean  @default(true)
+  allowMultiple Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  channel Channel? @relation(fields: [channelId], references: [id])
+  creator User     @relation("CreatedPolls", fields: [createdBy], references: [id])
+  votes   PollVote[]
+
+  @@index([channelId])
+  @@index([isActive])
+}
+
+model PollVote {
+  id        String   @id @default(uuid())
+  pollId    String
+  userId    String
+  optionId  String   // Which option was voted for
+  createdAt DateTime @default(now())
+
+  poll Poll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user User @relation("PollVotes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, userId])
+  @@index([pollId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  type      String   // task_assigned, meeting_created, message_mention, etc.
+  title     String
+  message   String
+  link      String?  // URL to related resource
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation("UserNotifications", fields: [userId], references: [id])
+
+  relatedId String? // ID of related entity (task, meeting, message, etc.)
+  relatedType String? // task, meeting, message, etc.
+
+  @@index([userId, read])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String   // create, update, delete
+  entity    String   // user, team, meeting, task, channel, message
+  entityId  String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  userName  String?
+  details   Json?    // Additional details about the action
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@index([resource, resourceId])
+  @@index([token])
+}
+
+// Document Management System
+model DocumentFolder {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  parentId    String?  // For nested folders
+  teamId      String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  team       Team?     @relation(fields: [teamId], references: [id])
+  creator    User      @relation("CreatedFolders", fields: [createdBy], references: [id])
+  parent     DocumentFolder? @relation("FolderHierarchy", fields: [parentId], references: [id])
+  children   DocumentFolder[] @relation("FolderHierarchy")
+  documents  Document[]
+
+  @@index([teamId])
+  @@index([parentId])
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  fileUrl     String
+  fileSize    Int      // in bytes
+  mimeType    String
+  folderId    String?
+  teamId      String?
+  createdBy   String
+  version     Int      @default(1)
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  team       Team?            @relation(fields: [teamId], references: [id])
+  folder     DocumentFolder?  @relation(fields: [folderId], references: [id])
+  creator    User             @relation("CreatedDocuments", fields: [createdBy], references: [id])
+  versions   DocumentVersion[]
+  permissions DocumentPermission[]
+
+  @@index([teamId])
+  @@index([folderId])
+  @@index([createdBy])
+  @@index([isArchived])
+}
+
+model DocumentVersion {
+  id          String   @id @default(uuid())
+  documentId  String
+  version     Int
+  fileUrl     String
+  fileSize    Int
+  mimeType    String
+  changeNote  String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  creator    User     @relation("CreatedVersions", fields: [createdBy], references: [id])
+
+  @@unique([documentId, version])
+  @@index([documentId])
+}
+
+model DocumentPermission {
+  id          String   @id @default(uuid())
+  documentId  String
+  userId      String
+  permission  String   @default("view") // view, edit, delete
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+  @@index([documentId])
+  @@index([userId])
+}
+
+// Meeting Recording & Minutes
+model MeetingRecording {
+  id          String   @id @default(uuid())
+  meetingId   String
+  fileUrl     String
+  fileSize    Int      // in bytes
+  duration    Int      // in seconds
+  transcription String? // Optional transcription text
+  status      String   @default("processing") // processing, completed, failed
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  meeting    Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@index([status])
+}
+
+model MeetingMinutes {
+  id          String   @id @default(uuid())
+  meetingId   String
+  title       String
+  content     String   // Markdown or rich text
+  actionItems Json?    // Array of { id, task, assignee, dueDate, status }
+  decisions   Json?    // Array of decisions made
+  attendees   String[] // User IDs who attended
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  meeting    Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  creator    User     @relation("CreatedMinutes", fields: [createdBy], references: [id])
+
+  @@index([meetingId])
+  @@index([createdBy])
+}
+
+model MeetingParticipant {
+  id          String   @id @default(uuid())
+  meetingId   String
+  userId      String
+  joinedAt    DateTime @default(now())
+  leftAt      DateTime?
+  duration    Int?     // in seconds
+  role        String   @default("participant") // host, co-host, participant
+  handRaised  Boolean  @default(false)
+  isMuted     Boolean  @default(false)
+  isVideoOn   Boolean  @default(false)
+  isSharing   Boolean  @default(false)
+  waitingRoom Boolean  @default(true) // true if in waiting room, false if admitted
+
+  meeting    Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId])
+  @@index([meetingId])
+  @@index([userId])
+}
+
+// Time Tracking
+model TimeEntry {
+  id          String   @id @default(uuid())
+  userId      String
+  taskId      String?
+  meetingId   String?
+  description String?
+  startTime   DateTime
+  endTime     DateTime?
+  duration    Int?     // in seconds (calculated)
+  billable    Boolean  @default(false)
+  tags        String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user       User     @relation(fields: [userId], references: [id])
+  task       Task?    @relation(fields: [taskId], references: [id])
+
+  @@index([userId])
+  @@index([taskId])
+  @@index([meetingId])
+  @@index([startTime])
+}
+
+// Calendar & Reminders
+model Reminder {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  type        String   // meeting, task, custom
+  relatedId   String?  // ID of related entity
+  relatedType String?  // meeting, task, etc.
+  remindAt    DateTime
+  isSent      Boolean  @default(false)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  creator     User     @relation("CreatedReminders", fields: [createdBy], references: [id])
+  recipients  ReminderRecipient[]
+
+  @@index([remindAt])
+  @@index([isSent])
+  @@index([createdBy])
+}
+
+model ReminderRecipient {
+  id          String   @id @default(uuid())
+  reminderId  String
+  userId      String
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  reminder    Reminder @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([reminderId, userId])
+  @@index([reminderId])
+  @@index([userId])
+}
+
+// ============================================
+// Git Repository Integration
+// ============================================
+// แก้ปัญหา: Code กับ Communication แยกกัน
+// ใช้งานจริง: Push/Pull, Code Review, PR Management ในแพลตฟอร์มเดียว
+
+model Repository {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  url         String?  // External Git URL (GitHub, GitLab, etc.)
+  isPrivate   Boolean  @default(true)
+  defaultBranch String @default("main")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  teamId      String?
+  ownerId     String
+
+  team        Team?    @relation(fields: [teamId], references: [id])
+  owner       User     @relation("RepositoryOwner", fields: [ownerId], references: [id])
+  branches    Branch[]
+  commits     Commit[]
+  pullRequests PullRequest[]
+  webhooks    RepositoryWebhook[]
+
+  @@index([teamId])
+  @@index([ownerId])
+  @@unique([teamId, name])
+}
+
+model Branch {
+  id          String   @id @default(uuid())
+  name        String
+  isDefault   Boolean  @default(false)
+  lastCommit  String?  // Last commit SHA
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, name])
+  @@index([repositoryId])
+}
+
+model Commit {
+  id          String   @id @default(uuid())
+  sha         String   // Git commit SHA
+  message     String
+  branch      String
+  filesChanged Json?   // Array of { path: string, additions: number, deletions: number }
+  createdAt   DateTime @default(now())
+
+  repositoryId String
+  authorId     String
+
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  author       User       @relation("CommitAuthor", fields: [authorId], references: [id])
+  pullRequest  PullRequest?
+
+  @@unique([repositoryId, sha])
+  @@index([repositoryId])
+  @@index([authorId])
+  @@index([createdAt])
+}
+
+model PullRequest {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  number      Int      // PR number
+  status      String   @default("open") // open, merged, closed
+  sourceBranch String
+  targetBranch String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  mergedAt    DateTime?
+
+  repositoryId String
+  commitId     String? @unique
+  creatorId    String
+
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  commit       Commit?    @relation(fields: [commitId], references: [id])
+  creator      User       @relation("PullRequestCreator", fields: [creatorId], references: [id])
+  reviews      PullRequestReview[]
+  comments     CodeComment[]
+  linkedTasks  Task[]     @relation("LinkedPullRequests")
+
+  @@index([repositoryId])
+  @@index([creatorId])
+  @@index([status])
+}
+
+model PullRequestReview {
+  id          String   @id @default(uuid())
+  status      String   // approved, changes_requested, commented
+  comment     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  pullRequestId String
+  reviewerId    String
+
+  pullRequest PullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  reviewer    User        @relation("ReviewAuthor", fields: [reviewerId], references: [id])
+
+  @@unique([pullRequestId, reviewerId])
+  @@index([pullRequestId])
+}
+
+model CodeComment {
+  id          String   @id @default(uuid())
+  content     String
+  filePath    String
+  lineNumber  Int?
+  isResolved  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  pullRequestId String
+  authorId      String
+  replyToId     String?
+
+  pullRequest PullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  author      User        @relation("CommentAuthor", fields: [authorId], references: [id])
+  replyTo     CodeComment? @relation("CodeCommentReplies", fields: [replyToId], references: [id])
+  replies     CodeComment[] @relation("CodeCommentReplies")
+
+  @@index([pullRequestId])
+  @@index([authorId])
+}
+
+model RepositoryWebhook {
+  id          String   @id @default(uuid())
+  url         String
+  events      String[] // push, pull_request, etc.
+  secret      String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([repositoryId])
+}
+
+// ============================================
+// AI Features
+// ============================================
+// แก้ปัญหา: Meeting fatigue, Code review ช้า, Task prioritization
+// ใช้งานจริง: AI สรุป meeting, Review code, แนะนำ task, Chat assistant
+
+model AIInteraction {
+  id          String   @id @default(uuid())
+  type        String   // meeting_summary, code_review, task_suggestion, chat, document_generation
+  prompt      String?
+  response    String
+  context     Json?    // Related data (meetingId, taskId, etc.)
+  model       String   @default("gpt-4")
+  tokensUsed  Int?
+  cost        Float?
+  createdAt   DateTime @default(now())
+
+  userId      String?
+  meetingId   String?
+  taskId      String?
+  documentId  String?
+  repositoryId String?
+
+  user        User?    @relation("AIUser", fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([meetingId])
+  @@index([taskId])
+  @@index([type])
   @@index([createdAt])
 }
 
@@ -458,25 +949,6 @@ model Subtask {
   @@index([taskId])
 }
 
-model TimeEntry {
-  id          String   @id @default(uuid())
-  description String?
-  hours       Float
-  date        DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  taskId String
-  userId String
-
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id])
-
-  @@index([taskId])
-  @@index([userId])
-  @@index([date])
-}
-
 model TaskAttachment {
   id          String   @id @default(uuid())
   name        String
@@ -526,3 +998,177 @@ model Holiday {
   @@index([organizationId])
   @@index([country])
 }
+
+model AISummary {
+  id          String   @id @default(uuid())
+  type        String   // meeting, code_review, document
+  summary     String
+  keyPoints   Json?    // Array of key points
+  actionItems Json?    // Extracted action items
+  sentiment   String?  // positive, neutral, negative
+  confidence  Float?   // 0-1
+  createdAt   DateTime @default(now())
+
+  relatedId   String   // meetingId, documentId, etc.
+  relatedType String   // meeting, document, etc.
+
+  @@index([relatedId, relatedType])
+  @@index([type])
+}
+
+model AICodeReview {
+  id          String   @id @default(uuid())
+  pullRequestId String
+  suggestions  Json    // Array of { file: string, line: number, issue: string, severity: string, suggestion: string }
+  overallScore Float?  // 0-100
+  summary     String
+  createdAt   DateTime @default(now())
+
+  @@index([pullRequestId])
+}
+
+model AITaskSuggestion {
+  id          String   @id @default(uuid())
+  taskId      String?
+  suggestion  String
+  priority    String?  // high, medium, low
+  reasoning   String?
+  estimatedTime Int?   // in minutes
+  createdAt   DateTime @default(now())
+
+  @@index([taskId])
+}
+
+// ============================================
+// Virtual Office (Spatial Collaboration)
+// ============================================
+// แก้ปัญหา: WFH รู้สึกโดดเดี่ยว, ไม่รู้ใครทำงานอะไร
+// ใช้งานจริง: Virtual office เห็นเพื่อนร่วมงาน, Quick huddle, Presence awareness
+
+model VirtualRoom {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  type        String   @default("office") // office, meeting, break, focus
+  capacity    Int      @default(50)
+  isPrivate   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  teamId      String?
+  createdBy   String
+
+  team        Team?    @relation(fields: [teamId], references: [id])
+  presences   VirtualRoomPresence[]
+
+  @@index([teamId])
+  @@index([type])
+}
+
+model VirtualRoomPresence {
+  id          String   @id @default(uuid())
+  position    Json?    // { x: number, y: number } for spatial positioning
+  status      String   @default("active") // active, away, busy
+  joinedAt    DateTime @default(now())
+  lastSeen    DateTime @default(now())
+
+  roomId      String
+  userId      String
+
+  room        VirtualRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([roomId])
+  @@index([userId])
+}
+
+// ============================================
+// Workflow Automation
+// ============================================
+// แก้ปัญหา: งานซ้ำๆ, Context switching, Manual processes
+// ใช้งานจริง: Auto-create tasks from PR, Auto-schedule meetings, Auto-assign work
+
+model Workflow {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  trigger     String   // event type: pr_created, meeting_ended, task_completed, etc.
+  conditions  Json?    // Conditions to check
+  actions     Json     // Array of actions to execute
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  teamId      String?
+  createdBy   String
+
+  team        Team?    @relation(fields: [teamId], references: [id])
+  creator     User     @relation("WorkflowCreator", fields: [createdBy], references: [id])
+  runs        WorkflowRun[]
+
+  @@index([teamId])
+  @@index([isActive])
+  @@index([trigger])
+}
+
+model WorkflowRun {
+  id          String   @id @default(uuid())
+  status      String   @default("running") // running, completed, failed
+  input       Json?    // Input data
+  output      Json?    // Output/result
+  error       String?
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+
+  workflowId  String
+  userId      String?
+
+  workflow    Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  user        User?    @relation(fields: [userId], references: [id])
+
+  @@index([workflowId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+// ============================================
+// Analytics & Insights
+// ============================================
+// แก้ปัญหา: ไม่รู้ productivity, Meeting effectiveness, Team health
+// ใช้งานจริง: Dashboard, Reports, Insights สำหรับ manager
+
+model TeamAnalytics {
+  id          String   @id @default(uuid())
+  date        DateTime @default(now())
+  metrics     Json     // { meetings: number, tasksCompleted: number, codeCommits: number, etc. }
+  productivityScore Float? // 0-100
+  meetingHours Float?
+  activeMembers Int?
+  createdAt   DateTime @default(now())
+
+  teamId      String
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, date])
+  @@index([teamId])
+  @@index([date])
+}
+
+model ProductivityMetrics {
+  id          String   @id @default(uuid())
+  userId      String
+  date        DateTime @default(now())
+  tasksCompleted Int   @default(0)
+  meetingsAttended Int @default(0)
+  codeCommits Int     @default(0)
+  messagesSent Int    @default(0)
+  hoursWorked Float   @default(0)
+  focusTime   Float?  // Hours in focus mode
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([userId])
+  @@index([date])
+}
+
