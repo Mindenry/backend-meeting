@@ -116,6 +116,15 @@ export class MeetingParticipantsService {
   }
 
   async getParticipants(meetingId: string, includeWaitingRoom: boolean = false) {
+    // Check if meeting exists first
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+    });
+
+    if (!meeting) {
+      throw new NotFoundException('Meeting not found');
+    }
+
     return this.prisma.meetingParticipant.findMany({
       where: {
         meetingId,
@@ -139,6 +148,15 @@ export class MeetingParticipantsService {
   }
 
   async getWaitingRoom(meetingId: string) {
+    // Check if meeting exists first
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+    });
+
+    if (!meeting) {
+      throw new NotFoundException('Meeting not found');
+    }
+
     return this.prisma.meetingParticipant.findMany({
       where: {
         meetingId,

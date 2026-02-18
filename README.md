@@ -102,3 +102,21 @@ The server supports WebSocket connections for real-time updates:
 
 - `DATABASE_URL` - PostgreSQL connection string
 - `PORT` - Server port (default: 3000)
+
+### AI Copilot
+
+To enable the internal AI Copilot features (meeting summaries, overdue tasks overview, and generic assistant),
+configure **Gemini only**:
+
+- `GEMINI_API_KEY` – Google Gemini API key used by:
+  - `MeetingsService.generateAiSummary` (meeting chat summaries)
+  - `CopilotService` (`POST /ai/ask`) for questions such as:
+    - "สรุป meeting วันนี้"
+    - "ตอนนี้ task อะไรบ้างที่ overdue"
+    - "ช่วยร่างข้อความ standup ให้หน่อย"
+- `GEMINI_MODEL` – (optional) Gemini model name. If not set, the system will:
+  - Call `ListModels` to auto-select a model that supports `generateContent`.
+  - Fallback to `gemini-1.5-flash-latest` if auto-detection fails.
+
+If `GEMINI_API_KEY` is not set, any call to AI features will fail with an error indicating that Gemini is not configured.
+

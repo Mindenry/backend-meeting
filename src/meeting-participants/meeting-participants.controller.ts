@@ -7,6 +7,7 @@ import {
   Patch,
   Delete,
   Query,
+  BadRequestException,
 } from '@nestjs/common';
 import { MeetingParticipantsService } from './meeting-participants.service';
 
@@ -21,12 +22,20 @@ export class MeetingParticipantsController {
     @Param('meetingId') meetingId: string,
     @Body() body: { userId: string; password?: string; skipWaitingRoom?: boolean },
   ) {
-    return this.participantsService.joinMeeting(
-      meetingId,
-      body.userId,
-      body.password,
-      body.skipWaitingRoom,
-    );
+    try {
+      if (!body.userId) {
+        throw new BadRequestException('userId is required');
+      }
+      return await this.participantsService.joinMeeting(
+        meetingId,
+        body.userId,
+        body.password,
+        body.skipWaitingRoom,
+      );
+    } catch (error) {
+      console.error('Error joining meeting:', error);
+      throw error;
+    }
   }
 
   @Delete(':userId')
@@ -42,10 +51,15 @@ export class MeetingParticipantsController {
     @Param('meetingId') meetingId: string,
     @Query('includeWaitingRoom') includeWaitingRoom?: string,
   ) {
-    return this.participantsService.getParticipants(
-      meetingId,
-      includeWaitingRoom === 'true',
-    );
+    try {
+      return await this.participantsService.getParticipants(
+        meetingId,
+        includeWaitingRoom === 'true',
+      );
+    } catch (error) {
+      console.error('Error getting participants:', error);
+      throw error;
+    }
   }
 
   @Get('waiting-room')

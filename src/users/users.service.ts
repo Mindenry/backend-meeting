@@ -51,7 +51,7 @@ export class UsersService {
 
   async updateStatus(
     id: string,
-    data: { status?: string; currentRoom?: string | null; activity?: string },
+    data: { status?: string; activity?: string },
   ) {
     const exists = await this.prisma.user.findUnique({ where: { id } });
     if (!exists) {
@@ -63,9 +63,6 @@ export class UsersService {
     });
     if (data.status) {
       this.eventsGateway.emitUserStatusChanged(id, data.status);
-    }
-    if (data.currentRoom !== undefined) {
-      this.eventsGateway.emitUserRoomChanged(id, data.currentRoom);
     }
     return user;
   }

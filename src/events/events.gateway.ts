@@ -10,6 +10,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { PrismaService } from '../prisma/prisma.service';
 import { MessagesService } from '../messages/messages.service';
+import { MeetingParticipantsService } from '../meeting-participants/meeting-participants.service';
 
 interface MeetingParticipant {
   peerId: string;
@@ -36,6 +37,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly prisma: PrismaService,
     private readonly messagesService: MessagesService,
+    private readonly participantsService: MeetingParticipantsService,
   ) {}
 
   // Track participants in each meeting
@@ -49,13 +51,13 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     console.log(`Client connected: ${client.id}`);
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
     console.log(`Client disconnected: ${client.id}`);
 
     // Clean up meeting participation on disconnect
     const meetingInfo = this.socketMeetings.get(client.id);
     if (meetingInfo) {
-      this.removeMeetingParticipant(meetingInfo.meetingId, meetingInfo.peerId, client);
+      await this.removeMeetingParticipant(meetingInfo.meetingId, meetingInfo.peerId, client);
       this.socketMeetings.delete(client.id);
     }
 
@@ -66,10 +68,21 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  private removeMeetingParticipant(meetingId: string, peerId: string, client: Socket) {
+  private async removeMeetingParticipant(meetingId: string, peerId: string, client: Socket) {
     const participants = this.meetingParticipants.get(meetingId) || [];
     const updated = participants.filter((p) => p.peerId !== peerId);
     this.meetingParticipants.set(meetingId, updated);
+
+    // Record leave time in database if userId is available
+    const userInfo = this.onlineUsers.get(client.id);
+    if (userInfo?.userId && meetingId !== 'quick-huddle') {
+      try {
+        await this.participantsService.leaveMeeting(meetingId, userInfo.userId);
+      } catch (error) {
+        // Silently fail if participant doesn't exist or meeting is not found
+        console.warn(`Failed to record leave time for user ${userInfo.userId} in meeting ${meetingId}:`, error);
+      }
+    }
 
     // Notify others in the meeting room
     client.to(`meeting:${meetingId}`).emit('meeting:participant:left', { peerId });
@@ -81,17 +94,30 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // ─────────────────────────────────────────────────────────────────────────────
 
   @SubscribeMessage('meeting:join')
-  handleMeetingJoin(
-    @MessageBody() data: { meetingId: string; peerId: string; peerName: string; state: any },
+  async handleMeetingJoin(
+    @MessageBody() data: { meetingId: string; peerId: string; peerName: string; state: any; userId?: string },
     @ConnectedSocket() client: Socket,
   ) {
-    const { meetingId, peerId, peerName, state } = data;
+    const { meetingId, peerId, peerName, state, userId } = data;
 
     // Join the meeting room
     client.join(`meeting:${meetingId}`);
 
     // Track this socket's meeting
     this.socketMeetings.set(client.id, { meetingId, peerId });
+
+    // Record join time in database if userId is available and it's not a quick huddle
+    const userInfo = this.onlineUsers.get(client.id);
+    const actualUserId = userId || userInfo?.userId;
+    if (actualUserId && meetingId !== 'quick-huddle') {
+      try {
+        await this.participantsService.joinMeeting(meetingId, actualUserId, undefined, true);
+      } catch (error) {
+        // Silently fail if meeting doesn't exist or user is not authorized
+        // This allows the WebSocket connection to continue even if DB record fails
+        console.warn(`Failed to record join time for user ${actualUserId} in meeting ${meetingId}:`, error);
+      }
+    }
 
     // Get existing participants
     const participants = this.meetingParticipants.get(meetingId) || [];
@@ -132,11 +158,11 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('meeting:leave')
-  handleMeetingLeave(
+  async handleMeetingLeave(
     @MessageBody() data: { meetingId: string; peerId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    this.removeMeetingParticipant(data.meetingId, data.peerId, client);
+    await this.removeMeetingParticipant(data.meetingId, data.peerId, client);
     this.socketMeetings.delete(client.id);
 
     // Broadcast to all clients that someone left (for Meetings page)
@@ -223,18 +249,30 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const rooms: Array<{
       roomId: string;
       name: string;
-      participants: Array<{ peerId: string; name: string }>;
+      participants: Array<{ peerId: string; name: string; userId?: string }>;
       createdAt: Date;
     }> = [];
 
     for (const [meetingId, participants] of this.meetingParticipants) {
-      if (participants.length > 0) {
-        rooms.push({
-          roomId: meetingId,
-          name: meetingId === 'quick-huddle' ? 'Quick Huddle' : `Meeting ${meetingId.slice(0, 8)}`,
-          participants: participants.map((p) => ({ peerId: p.peerId, name: p.name })),
-          createdAt: new Date(),
-        });
+      const roomName = `meeting:${meetingId}`;
+      const roomAdapter = this.server.sockets.adapter.rooms.get(roomName);
+      
+      if (roomAdapter && roomAdapter.size > 0 && participants.length > 0) {
+        // Filter participants to only those whose socket is still in the room
+        const activeParticipants = participants.filter(p => roomAdapter.has(p.socketId));
+        
+        if (activeParticipants.length > 0) {
+          rooms.push({
+            roomId: meetingId,
+            name: meetingId === 'quick-huddle' ? 'Quick Huddle' : `Meeting ${meetingId.slice(0, 8)}`,
+            participants: activeParticipants.map((p) => ({ 
+              peerId: p.peerId, 
+              name: p.name,
+              userId: this.onlineUsers.get(p.socketId)?.userId
+            })),
+            createdAt: new Date(),
+          });
+        }
       }
     }
 

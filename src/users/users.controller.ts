@@ -55,7 +55,6 @@ export class UsersController {
     @Body()
     body: {
       status?: string;
-      currentRoom?: string | null;
       activity?: string;
     },
   ) {

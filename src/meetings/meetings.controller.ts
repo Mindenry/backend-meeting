@@ -41,12 +41,17 @@ export class MeetingsController {
       status?: string;
       teamId?: string | null;
       hostId: string;
+      isRecurring?: boolean;
+      recurringPattern?: string;
+      recurringDays?: number[];
+      recurringEndDate?: string;
     },
   ) {
     return this.meetingsService.create({
       ...body,
       startTime: new Date(body.startTime),
       endTime: new Date(body.endTime),
+      recurringEndDate: body.recurringEndDate ? new Date(body.recurringEndDate) : undefined,
     });
   }
 
@@ -94,6 +99,11 @@ export class MeetingsController {
     @Body() body: { summary?: string },
   ) {
     return this.meetingsService.endMeeting(id, body.summary);
+  }
+
+  @Post(':id/ai-summary')
+  generateAiSummary(@Param('id') id: string) {
+    return this.meetingsService.generateAiSummary(id);
   }
 
   @Post(':id/lock')

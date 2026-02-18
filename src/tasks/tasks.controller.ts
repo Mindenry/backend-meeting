@@ -19,12 +19,25 @@ export class TasksController {
     @Query('status') status?: any,
     @Query('teamId') teamId?: string,
     @Query('assigneeId') assigneeId?: string,
+    @Query('sprintId') sprintId?: string,
+    @Query('epicId') epicId?: string,
+    @Query('priority') priority?: string,
+    @Query('search') search?: string,
   ) {
     return this.tasksService.findAll({
       status,
       teamId,
       assigneeId,
+      sprintId,
+      epicId,
+      priority,
+      search,
     });
+  }
+
+  @Get('analytics')
+  getAnalytics(@Query('teamId') teamId?: string) {
+    return this.tasksService.getAnalytics(teamId);
   }
 
   @Get(':id')
@@ -45,6 +58,11 @@ export class TasksController {
       assigneeId?: string | null;
       teamId?: string | null;
       meetingId?: string | null;
+      sprintId?: string | null;
+      epicId?: string | null;
+      storyPoints?: number | null;
+      estimate?: number | null;
+      position?: number;
       createdBy?: string;
     },
   ) {
@@ -68,6 +86,11 @@ export class TasksController {
       assigneeId?: string | null;
       teamId?: string | null;
       meetingId?: string | null;
+      sprintId?: string | null;
+      epicId?: string | null;
+      storyPoints?: number | null;
+      estimate?: number | null;
+      position?: number;
       userId?: string;
     }>,
   ) {
@@ -80,6 +103,64 @@ export class TasksController {
       },
       userId,
     );
+  }
+
+  @Patch(':id/position')
+  updatePosition(
+    @Param('id') id: string,
+    @Body() body: { status: string; position: number; teamId?: string },
+  ) {
+    return this.tasksService.updatePosition(id, body.status, body.position, body.teamId);
+  }
+
+  @Post(':id/subtasks')
+  addSubtask(@Param('id') id: string, @Body() body: { title: string }) {
+    return this.tasksService.addSubtask(id, body.title);
+  }
+
+  @Patch('subtasks/:subtaskId')
+  updateSubtask(
+    @Param('subtaskId') subtaskId: string,
+    @Body() body: { title?: string; isCompleted?: boolean; position?: number },
+  ) {
+    return this.tasksService.updateSubtask(subtaskId, body);
+  }
+
+  @Delete('subtasks/:subtaskId')
+  deleteSubtask(@Param('subtaskId') subtaskId: string) {
+    return this.tasksService.deleteSubtask(subtaskId);
+  }
+
+  @Post(':id/time-entries')
+  addTimeEntry(
+    @Param('id') id: string,
+    @Body() body: { userId: string; hours: number; description?: string; date?: string },
+  ) {
+    return this.tasksService.addTimeEntry(
+      id,
+      body.userId,
+      body.hours,
+      body.description,
+      body.date ? new Date(body.date) : undefined,
+    );
+  }
+
+  @Delete('time-entries/:timeEntryId')
+  deleteTimeEntry(@Param('timeEntryId') timeEntryId: string) {
+    return this.tasksService.deleteTimeEntry(timeEntryId);
+  }
+
+  @Post(':id/attachments')
+  addAttachment(
+    @Param('id') id: string,
+    @Body() body: { userId: string; name: string; url: string; mimeType?: string; size?: number },
+  ) {
+    return this.tasksService.addAttachment(id, body.userId, body.name, body.url, body.mimeType, body.size);
+  }
+
+  @Delete('attachments/:attachmentId')
+  deleteAttachment(@Param('attachmentId') attachmentId: string) {
+    return this.tasksService.deleteAttachment(attachmentId);
   }
 
   @Delete(':id')
