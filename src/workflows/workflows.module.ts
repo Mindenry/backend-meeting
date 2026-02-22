@@ -6,7 +6,6 @@ import { EventsModule } from '../events/events.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { MeetingsModule } from '../meetings/meetings.module';
-import { RepositoriesModule } from '../repositories/repositories.module';
 import { CommonModule } from '../common/common.module';
 
 @Module({
@@ -16,7 +15,6 @@ import { CommonModule } from '../common/common.module';
     NotificationsModule,
     TasksModule,
     MeetingsModule,
-    RepositoriesModule,
     CommonModule,
   ],
   providers: [WorkflowsService],

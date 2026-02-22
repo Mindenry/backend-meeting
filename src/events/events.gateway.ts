@@ -46,6 +46,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private socketMeetings: Map<string, { meetingId: string; peerId: string }> = new Map();
   // Online presence: socketId -> { userId, name }
   private onlineUsers: Map<string, { userId: string; name: string }> = new Map();
+  // Task viewing: taskId -> Set<{ userId, name, socketId }>
+  private taskViewers: Map<string, Set<{ userId: string; name: string; socketId: string }>> = new Map();
 
   handleConnection(client: Socket) {
     console.log(`Client connected: ${client.id}`);
@@ -65,6 +67,19 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (this.onlineUsers.has(client.id)) {
       this.onlineUsers.delete(client.id);
       this.broadcastPresence();
+    }
+
+    // Clean up task viewing
+    for (const [taskId, viewers] of this.taskViewers.entries()) {
+      const viewer = Array.from(viewers).find(v => v.socketId === client.id);
+      if (viewer) {
+        viewers.delete(viewer);
+        if (viewers.size === 0) {
+          this.taskViewers.delete(taskId);
+        } else {
+          this.broadcastTaskViewing(taskId);
+        }
+      }
     }
   }
 
@@ -228,14 +243,30 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       senderName: string;
       receiverId: string;
       createdAt: string;
+      attachments?: any[];
+      mentions?: string[];
     },
+    @ConnectedSocket() client: Socket,
   ) {
-    // Find all sockets belonging to the receiver
+    // Emit to receiver
     for (const [socketId, userInfo] of this.onlineUsers) {
       if (userInfo.userId === data.receiverId) {
-        this.server.to(socketId).emit('dm:message', data);
+        this.server.to(socketId).emit('dm:message', {
+          ...data,
+          receiverId: data.receiverId,
+        });
       }
     }
+    
+    // Also emit back to sender so they see their own message immediately
+    const senderInfo = this.onlineUsers.get(client.id);
+    if (senderInfo && senderInfo.userId === data.senderId) {
+      client.emit('dm:message', {
+        ...data,
+        receiverId: data.receiverId,
+      });
+    }
+    
     return { event: 'dm:sent' };
   }
 
@@ -564,5 +595,78 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   emitVoiceLeave(channelId: string, userId: string, peerId: string) {
     this.server.to(`voice:${channelId}`).emit('voice:user:left', { userId, peerId });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // TASK VIEWING TRACKING
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  @SubscribeMessage('task:viewing')
+  handleTaskViewing(
+    @MessageBody() data: { taskId: string; userId: string; userName: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const { taskId, userId, userName } = data;
+    
+    if (!this.taskViewers.has(taskId)) {
+      this.taskViewers.set(taskId, new Set());
+    }
+    
+    const viewers = this.taskViewers.get(taskId)!;
+    // Remove existing viewer with same socketId
+    for (const viewer of viewers) {
+      if (viewer.socketId === client.id) {
+        viewers.delete(viewer);
+        break;
+      }
+    }
+    
+    viewers.add({ userId, name: userName, socketId: client.id });
+    this.broadcastTaskViewing(taskId);
+    
+    return { event: 'task:viewing:started' };
+  }
+
+  @SubscribeMessage('task:viewing:stop')
+  handleTaskViewingStop(
+    @MessageBody() data: { taskId: string; userId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const { taskId } = data;
+    const viewers = this.taskViewers.get(taskId);
+    
+    if (viewers) {
+      const viewer = Array.from(viewers).find(v => v.socketId === client.id);
+      if (viewer) {
+        viewers.delete(viewer);
+        if (viewers.size === 0) {
+          this.taskViewers.delete(taskId);
+        } else {
+          this.broadcastTaskViewing(taskId);
+        }
+      }
+    }
+    
+    return { event: 'task:viewing:stopped' };
+  }
+
+  private broadcastTaskViewing(taskId: string) {
+    const viewers = this.taskViewers.get(taskId);
+    if (!viewers) return;
+    
+    const viewersList = Array.from(viewers).map(v => ({
+      userId: v.userId,
+      name: v.name,
+    }));
+    
+    // Deduplicate by userId
+    const uniqueViewers = Array.from(
+      new Map(viewersList.map(v => [v.userId, v])).values()
+    );
+    
+    this.server.emit('task:viewing:update', {
+      taskId,
+      users: uniqueViewers,
+    });
   }
 }

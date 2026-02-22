@@ -8,14 +8,22 @@ import {
   Request,
   Param,
   Delete,
+  Logger,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { InvitesService } from '../invites/invites.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { LoginDto } from '../common/dto/login.dto';
+import { RegisterDto } from '../common/dto/register.dto';
+import { RefreshTokenDto } from '../common/dto/refresh-token.dto';
+import { SetPasswordDto } from '../common/dto/set-password.dto';
+import { ResetPasswordDto } from '../common/dto/reset-password.dto';
 
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly authService: AuthService,
     private readonly invitesService: InvitesService,
@@ -23,24 +31,71 @@ export class AuthController {
   ) {}
 
   @Post('login')
-  async login(@Body() body: { email: string; password: string }) {
-    return this.authService.login(body.email, body.password);
+  async login(@Body() loginDto: LoginDto) {
+    try {
+      this.logger.debug(`Login attempt for email: ${loginDto.email}`);
+      
+      const result = await this.authService.login(loginDto.email, loginDto.password);
+      
+      this.logger.debug('Auth service login result:', { 
+        hasResult: !!result, 
+        hasUser: !!result?.user,
+        userId: result?.user?.id 
+      });
+      
+      // Check if result and user exist
+      if (!result) {
+        this.logger.error('Login failed: No response from auth service');
+        throw new Error('Login failed: No response from auth service');
+      }
+      
+      if (!result.user) {
+        this.logger.error('Login failed: User data missing in response', { result });
+        throw new Error('Login failed: User data missing in response');
+      }
+      
+      if (!result.user.id) {
+        this.logger.error('Login failed: User ID missing', { user: result.user });
+        throw new Error('Login failed: User ID missing');
+      }
+
+      this.logger.log(`Login successful for user: ${result.user.id}`);
+      
+      // Log full response for debugging
+      this.logger.debug('Login response:', JSON.stringify({
+        hasAccessToken: !!result.accessToken,
+        hasRefreshToken: !!result.refreshToken,
+        hasUser: !!result.user,
+        userId: result.user?.id,
+        userEmail: result.user?.email,
+      }));
+      
+      return result;
+    } catch (error) {
+      this.logger.error('Login error:', error);
+      // Re-throw with better error message
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(`Login failed: ${error}`);
+    }
   }
 
+
   @Post('register')
-  async register(@Body() body: { email: string; password: string; name: string }) {
-    return this.authService.register(body.email, body.password, body.name);
+  async register(@Body() registerDto: RegisterDto) {
+    return this.authService.register(registerDto.email, registerDto.password, registerDto.name);
   }
 
   @Post('refresh')
-  async refresh(@Body() body: { refreshToken: string }) {
-    return this.authService.refreshToken(body.refreshToken);
+  async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
+    return this.authService.refreshToken(refreshTokenDto.refreshToken);
   }
 
   @Post('logout')
   @UseGuards(JwtAuthGuard)
-  async logout(@Body() body: { refreshToken: string }) {
-    return this.authService.logout(body.refreshToken);
+  async logout(@Body() refreshTokenDto: RefreshTokenDto) {
+    return this.authService.logout(refreshTokenDto.refreshToken);
   }
 
   @Get('me')
@@ -114,25 +169,17 @@ export class AuthController {
   }
 
   @Post('set-password')
-  async setPassword(@Body() body: { userId: string; password: string }) {
-    await this.authService.setPassword(body.userId, body.password);
+  async setPassword(@Body() setPasswordDto: SetPasswordDto) {
+    await this.authService.setPassword(setPasswordDto.userId, setPasswordDto.password);
     return { success: true };
   }
 
   @Patch('reset-password')
-  async resetPassword(
-    @Body()
-    body: {
-      userId: string;
-      oldPassword: string;
-      newPassword: string;
-      token?: string; // Optional token if we implement password recovery
-    },
-  ) {
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
     await this.authService.resetPassword(
-      body.userId,
-      body.oldPassword,
-      body.newPassword,
+      resetPasswordDto.userId,
+      resetPasswordDto.oldPassword,
+      resetPasswordDto.newPassword,
     );
     return { success: true };
   }

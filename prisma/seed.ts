@@ -884,6 +884,456 @@ async function main() {
   ]);
   console.log(`✅ Created ${auditLogs.length} audit logs`);
 
+  // 16. Create Wiki Articles
+  console.log('📚 Creating wiki articles...');
+  const wikiArticles = await Promise.all([
+    prisma.wikiArticle.create({
+      data: {
+        title: 'Getting Started with Team Connect',
+        content: `# Getting Started with Team Connect
+
+Welcome to Team Connect! This guide will help you get started.
+
+## Features
+
+- **Meetings**: Schedule and join video meetings
+- **Tasks**: Manage your tasks and track progress
+- **Chat**: Communicate with your team
+- **Knowledge Base**: Share and find information
+
+## Quick Tips
+
+1. Create your first meeting from the Meetings page
+2. Join team channels to start chatting
+3. Create tasks to track your work
+
+Happy collaborating! 🎉`,
+        category: 'Getting Started',
+        tags: ['onboarding', 'guide', 'basics'],
+        isPublic: true,
+        teamId: null,
+        createdBy: users[0].id,
+        version: 1,
+        viewCount: 42,
+      },
+    }),
+    prisma.wikiArticle.create({
+      data: {
+        title: 'API Documentation',
+        content: `# API Documentation
+
+## Authentication
+
+All API requests require authentication using JWT tokens.
+
+\`\`\`bash
+Authorization: Bearer <token>
+\`\`\`
+
+## Endpoints
+
+### Meetings
+- \`GET /api/meetings\` - List all meetings
+- \`POST /api/meetings\` - Create a meeting
+- \`GET /api/meetings/:id\` - Get meeting details
+
+### Tasks
+- \`GET /api/tasks\` - List all tasks
+- \`POST /api/tasks\` - Create a task
+- \`PATCH /api/tasks/:id\` - Update a task
+
+For more details, see the full API documentation.`,
+        category: 'Development',
+        tags: ['api', 'documentation', 'technical'],
+        isPublic: true,
+        teamId: engineeringTeam.id,
+        createdBy: users[1].id,
+        version: 1,
+        viewCount: 128,
+      },
+    }),
+    prisma.wikiArticle.create({
+      data: {
+        title: 'Best Practices for Remote Work',
+        content: `# Best Practices for Remote Work
+
+Working remotely requires discipline and good communication.
+
+## Communication
+
+- **Be responsive**: Reply to messages within reasonable time
+- **Use video**: Turn on video during meetings when possible
+- **Update status**: Keep your status updated so teammates know your availability
+
+## Time Management
+
+- Set clear boundaries between work and personal time
+- Use focus mode to minimize distractions
+- Take regular breaks
+
+## Collaboration
+
+- Document everything important
+- Share knowledge in the wiki
+- Participate in team standups
+
+Remember: Remote work is about flexibility, not isolation!`,
+        category: 'Workplace',
+        tags: ['remote-work', 'productivity', 'tips'],
+        isPublic: true,
+        teamId: null,
+        createdBy: users[2].id,
+        version: 1,
+        viewCount: 89,
+      },
+    }),
+    prisma.wikiArticle.create({
+      data: {
+        title: 'Design System Guidelines',
+        content: `# Design System Guidelines
+
+Our design system ensures consistency across all products.
+
+## Colors
+
+- **Primary**: #3B82F6 (Blue)
+- **Secondary**: #10B981 (Green)
+- **Accent**: #F59E0B (Amber)
+
+## Typography
+
+- **Headings**: Inter, Bold
+- **Body**: Inter, Regular
+- **Code**: Fira Code, Regular
+
+## Components
+
+All components follow our design system. See component library for details.`,
+        category: 'Design',
+        tags: ['design', 'ui', 'guidelines'],
+        isPublic: false,
+        teamId: designTeam.id,
+        createdBy: users[1].id,
+        version: 1,
+        viewCount: 56,
+      },
+    }),
+    prisma.wikiArticle.create({
+      data: {
+        title: 'Deployment Process',
+        content: `# Deployment Process
+
+## Pre-deployment Checklist
+
+- [ ] All tests passing
+- [ ] Code review approved
+- [ ] Database migrations ready
+- [ ] Environment variables configured
+
+## Deployment Steps
+
+1. Merge to main branch
+2. CI/CD pipeline runs automatically
+3. Deploy to staging first
+4. Run smoke tests
+5. Deploy to production
+
+## Rollback
+
+If issues occur, rollback immediately using:
+\`\`\`bash
+npm run rollback
+\`\`\``,
+        category: 'DevOps',
+        tags: ['deployment', 'ci-cd', 'operations'],
+        isPublic: false,
+        teamId: engineeringTeam.id,
+        createdBy: users[4].id,
+        version: 1,
+        viewCount: 34,
+      },
+    }),
+  ]);
+  console.log(`✅ Created ${wikiArticles.length} wiki articles`);
+
+  // 17. Create Announcements
+  console.log('📢 Creating announcements...');
+  const announcements = await Promise.all([
+    prisma.announcement.create({
+      data: {
+        title: 'Welcome to Team Connect!',
+        content: `# Welcome to Team Connect! 🎉
+
+We're excited to have you on board! Team Connect is your all-in-one collaboration platform.
+
+## What's New
+
+- **Video Meetings**: High-quality video conferencing
+- **Task Management**: Track and manage your work
+- **Team Chat**: Real-time communication
+- **Knowledge Base**: Share and discover information
+
+## Getting Started
+
+1. Complete your profile
+2. Join your team channels
+3. Explore the features
+
+If you have any questions, feel free to reach out to our support team.
+
+Happy collaborating!`,
+        priority: 'normal',
+        targetType: 'all',
+        targetIds: [],
+        attachments: undefined,
+        createdBy: users[0].id,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+        status: 'active',
+      },
+    }),
+    prisma.announcement.create({
+      data: {
+        title: 'Security Policy Update',
+        content: `# Security Policy Update 🔒
+
+We're updating our security policies to better protect your data.
+
+## Changes
+
+- **Password Requirements**: Minimum 12 characters
+- **2FA**: Required for all admin accounts
+- **Session Timeout**: 8 hours of inactivity
+
+## Action Required
+
+Please update your password by the end of this week if it doesn't meet the new requirements.
+
+## Questions?
+
+Contact IT support if you have any concerns.`,
+        priority: 'high',
+        targetType: 'all',
+        targetIds: [],
+        attachments: undefined,
+        createdBy: users[0].id,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        status: 'active',
+      },
+    }),
+    prisma.announcement.create({
+      data: {
+        title: 'Team Offsite Event',
+        content: `# Team Offsite Event 🎊
+
+We're organizing a team offsite event next month!
+
+## Details
+
+- **Date**: March 15-16, 2024
+- **Location**: Beach Resort, Pattaya
+- **Activities**: Team building, workshops, and fun!
+
+## RSVP
+
+Please confirm your attendance by March 1st.
+
+Looking forward to seeing everyone!`,
+        priority: 'normal',
+        targetType: 'team',
+        targetIds: [engineeringTeam.id, designTeam.id],
+        attachments: undefined,
+        createdBy: users[1].id,
+        expiresAt: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000), // 20 days
+        status: 'active',
+      },
+    }),
+    prisma.announcement.create({
+      data: {
+        title: 'New Feature: Knowledge Base',
+        content: `# New Feature: Knowledge Base 📚
+
+We've just launched our Knowledge Base feature!
+
+## What is it?
+
+A centralized place to store and share team knowledge, documentation, and best practices.
+
+## How to Use
+
+1. Go to Knowledge Base from the sidebar
+2. Create articles to share information
+3. Organize by categories and tags
+4. Search to find what you need
+
+Start documenting your team's knowledge today!`,
+        priority: 'normal',
+        targetType: 'all',
+        targetIds: [],
+        attachments: undefined,
+        createdBy: users[0].id,
+        expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days
+        status: 'active',
+      },
+    }),
+    prisma.announcement.create({
+      data: {
+        title: 'System Maintenance Tonight',
+        content: `# System Maintenance Tonight ⚙️
+
+We'll be performing system maintenance tonight.
+
+## Schedule
+
+- **Start**: 10:00 PM (February 21)
+- **End**: 2:00 AM (February 22)
+- **Duration**: ~4 hours
+
+## Impact
+
+The system will be unavailable during this time. Please save your work before the maintenance window.
+
+## Questions?
+
+Contact support if you have urgent matters.`,
+        priority: 'urgent',
+        targetType: 'all',
+        targetIds: [],
+        attachments: undefined,
+        createdBy: users[0].id,
+        expiresAt: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000), // 1 day
+        status: 'active',
+      },
+    }),
+  ]);
+  console.log(`✅ Created ${announcements.length} announcements`);
+
+  // 18. Create Announcement Reads (some users have read some announcements)
+  console.log('👁️ Creating announcement reads...');
+  const announcementReads = await Promise.all([
+    prisma.announcementRead.create({
+      data: {
+        announcementId: announcements[0].id,
+        userId: users[0].id,
+      },
+    }),
+    prisma.announcementRead.create({
+      data: {
+        announcementId: announcements[0].id,
+        userId: users[1].id,
+      },
+    }),
+    prisma.announcementRead.create({
+      data: {
+        announcementId: announcements[1].id,
+        userId: users[0].id,
+      },
+    }),
+    prisma.announcementRead.create({
+      data: {
+        announcementId: announcements[3].id,
+        userId: users[2].id,
+      },
+    }),
+  ]);
+  console.log(`✅ Created ${announcementReads.length} announcement reads`);
+
+  // 19. Create Time Entries (for Reports)
+  console.log('⏱️ Creating time entries...');
+  const timeEntries = await Promise.all([
+    // Time entries for this week
+    prisma.timeEntry.create({
+      data: {
+        userId: users[0].id,
+        taskId: tasks[3].id, // Implement user profile page
+        description: 'Working on user profile UI',
+        startTime: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000 + 9 * 60 * 60 * 1000), // 2 days ago, 9 AM
+        endTime: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000 + 12 * 60 * 60 * 1000), // 12 PM
+        duration: 3 * 60 * 60, // 3 hours
+        billable: true,
+        tags: ['frontend', 'ui'],
+      },
+    }),
+    prisma.timeEntry.create({
+      data: {
+        userId: users[1].id,
+        taskId: tasks[0].id, // Update API documentation
+        description: 'Writing API documentation',
+        startTime: new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000 + 10 * 60 * 60 * 1000), // Yesterday, 10 AM
+        endTime: new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000 + 13 * 60 * 60 * 1000), // 1 PM
+        duration: 3 * 60 * 60,
+        billable: true,
+        tags: ['docs'],
+      },
+    }),
+    prisma.timeEntry.create({
+      data: {
+        userId: users[2].id,
+        taskId: tasks[1].id, // Fix Safari upload bug
+        description: 'Debugging Safari CORS issue',
+        startTime: new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000 + 14 * 60 * 60 * 1000), // Yesterday, 2 PM
+        endTime: new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000 + 17 * 60 * 60 * 1000), // 5 PM
+        duration: 3 * 60 * 60,
+        billable: true,
+        tags: ['bug-fix', 'frontend'],
+      },
+    }),
+    prisma.timeEntry.create({
+      data: {
+        userId: users[0].id,
+        meetingId: meetings[0].id, // Sprint Planning
+        description: 'Sprint planning meeting',
+        startTime: new Date(today.getTime() + 10 * 60 * 60 * 1000), // Today, 10 AM
+        endTime: new Date(today.getTime() + 11 * 60 * 60 * 1000), // 11 AM
+        duration: 1 * 60 * 60,
+        billable: false,
+        tags: ['meeting'],
+      },
+    }),
+  ]);
+  console.log(`✅ Created ${timeEntries.length} time entries`);
+
+  // 20. Create Work Hours (for Reports)
+  console.log('📊 Creating work hours...');
+  const workHours = await Promise.all([
+    prisma.workHours.create({
+      data: {
+        userId: users[0].id,
+        teamId: engineeringTeam.id,
+        date: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
+        hours: 8.0,
+        notes: 'Full day of development work',
+      },
+    }),
+    prisma.workHours.create({
+      data: {
+        userId: users[1].id,
+        teamId: engineeringTeam.id,
+        date: new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000), // Yesterday
+        hours: 7.5,
+        notes: 'Documentation and code review',
+      },
+    }),
+    prisma.workHours.create({
+      data: {
+        userId: users[2].id,
+        teamId: engineeringTeam.id,
+        date: new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000), // Yesterday
+        hours: 8.0,
+        notes: 'Bug fixing and testing',
+      },
+    }),
+    prisma.workHours.create({
+      data: {
+        userId: users[0].id,
+        teamId: engineeringTeam.id,
+        date: new Date(today.getTime()), // Today
+        hours: 4.0,
+        notes: 'Morning work session',
+      },
+    }),
+  ]);
+  console.log(`✅ Created ${workHours.length} work hours`);
+
   console.log('\n🎉 Seed completed successfully!');
   console.log('\n📊 Summary:');
   console.log(`   - Organization: 1`);
@@ -901,6 +1351,11 @@ async function main() {
   console.log(`   - Message Reads: ${messageReads.length}`);
   console.log(`   - Notifications: ${notifications.length}`);
   console.log(`   - Audit Logs: ${auditLogs.length}`);
+  console.log(`   - Wiki Articles: ${wikiArticles.length}`);
+  console.log(`   - Announcements: ${announcements.length}`);
+  console.log(`   - Announcement Reads: ${announcementReads.length}`);
+  console.log(`   - Time Entries: ${timeEntries.length}`);
+  console.log(`   - Work Hours: ${workHours.length}`);
   console.log('\n🔑 Default password for all users: password123');
 }
 

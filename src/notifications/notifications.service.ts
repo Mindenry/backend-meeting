@@ -1,9 +1,45 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsGateway } from './notifications.gateway';
+import { NotificationPreferencesService } from './notification-preferences.service';
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => NotificationsGateway))
+    @Optional()
+    private readonly notificationsGateway?: NotificationsGateway,
+    @Inject(forwardRef(() => NotificationPreferencesService))
+    @Optional()
+    private readonly preferencesService?: NotificationPreferencesService,
+  ) { }
+
+  /**
+   * Calculate priority based on notification type
+   */
+  private getPriority(type: string): string {
+    if (['mention', 'task_assigned', 'meeting_starting', 'pullrequest_review'].includes(type)) {
+      return 'urgent';
+    }
+    if (['task_updated', 'meeting_created', 'pullrequest_created'].includes(type)) {
+      return 'high';
+    }
+    if (['message', 'message_mention'].includes(type)) {
+      return 'normal';
+    }
+    return 'low';
+  }
+
+  /**
+   * Generate grouped ID for related notifications
+   */
+  private generateGroupedId(type: string, relatedType?: string, relatedId?: string): string | null {
+    if (relatedType && relatedId) {
+      return `${type}_${relatedType}_${relatedId}`;
+    }
+    return null;
+  }
 
   async create(data: {
     userId: string;
@@ -13,11 +49,38 @@ export class NotificationsService {
     relatedId?: string;
     relatedType?: string;
     link?: string;
+    priority?: string;
   }) {
-    return this.prisma.notification.create({
-      data,
+    // Calculate priority if not provided
+    const priority = data.priority || this.getPriority(data.type);
+    
+    // Generate grouped ID for smart grouping
+    const groupedId = this.generateGroupedId(data.type, data.relatedType, data.relatedId);
+
+    const notification = await this.prisma.notification.create({
+      data: {
+        ...data,
+        priority,
+        groupedId,
+      },
       include: { user: true },
     });
+
+    // Check if should send realtime based on preferences
+    let shouldSendRealtime = true;
+    if (this.preferencesService) {
+      shouldSendRealtime = await this.preferencesService.shouldSendRealtime(data.userId, data.type);
+    }
+
+    // Send real-time notification via WebSocket only if preferences allow
+    if (shouldSendRealtime && this.notificationsGateway) {
+      await this.notificationsGateway.sendNotificationToUser(
+        data.userId,
+        notification,
+      );
+    }
+
+    return notification;
   }
 
   async createForUsers(
@@ -35,20 +98,104 @@ export class NotificationsService {
       read: false,
     }));
 
-    return this.prisma.notification.createMany({
+    const result = await this.prisma.notification.createMany({
       data: notifications,
     });
+
+    // Send real-time notifications via WebSocket
+    if (this.notificationsGateway) {
+      const notificationData = {
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        link: data.link,
+        read: false,
+        createdAt: new Date(),
+      };
+      await this.notificationsGateway.sendNotificationToUsers(
+        userIds,
+        notificationData,
+      );
+    }
+
+    return result;
   }
 
-  async findAll(userId: string, unreadOnly = false) {
-    return this.prisma.notification.findMany({
+  async findAll(userId: string, unreadOnly = false, options?: { priority?: string; grouped?: boolean }) {
+    const notifications = await this.prisma.notification.findMany({
       where: {
         userId,
         ...(unreadOnly ? { read: false } : {}),
+        ...(options?.priority ? { priority: options.priority } : {}),
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [
+        { priority: 'desc' }, // Urgent first
+        { createdAt: 'desc' }, // Then by time
+      ],
       include: { user: true },
     });
+
+    // Group notifications if requested
+    if (options?.grouped) {
+      return this.groupNotifications(notifications);
+    }
+
+    return notifications;
+  }
+
+  /**
+   * Group notifications by groupedId
+   */
+  private groupNotifications(notifications: any[]): any[] {
+    const groups = new Map<string, any[]>();
+    const ungrouped: any[] = [];
+
+    for (const notif of notifications) {
+      if (notif.groupedId) {
+        if (!groups.has(notif.groupedId)) {
+          groups.set(notif.groupedId, []);
+        }
+        groups.get(notif.groupedId)!.push(notif);
+      } else {
+        ungrouped.push(notif);
+      }
+    }
+
+    // Convert groups to grouped format
+    const grouped: any[] = [];
+    for (const [groupedId, groupNotifs] of groups) {
+      if (groupNotifs.length > 1) {
+        // Multiple notifications in group - create summary
+        const first = groupNotifs[0];
+        grouped.push({
+          id: `group_${groupedId}`,
+          type: 'grouped',
+          title: `${groupNotifs.length} ${first.type.replaceAll('_', ' ')}`,
+          message: `You have ${groupNotifs.length} related notifications`,
+          read: groupNotifs.every((n) => n.read),
+          priority: first.priority,
+          createdAt: first.createdAt,
+          groupedId,
+          notifications: groupNotifs,
+          count: groupNotifs.length,
+        });
+      } else {
+        // Single notification - add as ungrouped
+        ungrouped.push(groupNotifs[0]);
+      }
+    }
+
+    // Sort: unread first, then by priority and time
+    const sorted = [...grouped, ...ungrouped].sort((a, b) => {
+      if (a.read !== b.read) return a.read ? 1 : -1;
+      const priorityOrder = { urgent: 4, high: 3, normal: 2, low: 1 };
+      const aPriority = priorityOrder[a.priority as keyof typeof priorityOrder] || 0;
+      const bPriority = priorityOrder[b.priority as keyof typeof priorityOrder] || 0;
+      if (aPriority !== bPriority) return bPriority - aPriority;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    return sorted;
   }
 
   // Alias for backward compatibility if needed, or just use findAll
@@ -65,10 +212,21 @@ export class NotificationsService {
       throw new NotFoundException('Notification not found');
     }
 
-    return this.prisma.notification.update({
+    const updated = await this.prisma.notification.update({
       where: { id },
       data: { read: true },
     });
+
+    // Update unread count via WebSocket
+    if (this.notificationsGateway) {
+      const unreadCount = await this.getUnreadCount(userId);
+      await this.notificationsGateway.sendNotificationToUser(userId, {
+        type: 'unread-count-update',
+        count: unreadCount,
+      });
+    }
+
+    return updated;
   }
 
   async markAllAsRead(userId: string) {

@@ -1,19 +1,139 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/http-exception.filter';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
 import * as express from 'express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
+  const app = await NestFactory.create(AppModule, {
+    logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+  });
 
+  // Global exception filter
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // Enable CORS before setting global prefix
+  // Global interceptors
+  app.useGlobalInterceptors(
+    new TransformInterceptor(),
+    new TimeoutInterceptor(),
+  );
+
+  // Global validation pipe with detailed error messages
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true, // Strip properties that don't have decorators
+      forbidNonWhitelisted: true, // Throw error if non-whitelisted properties are present
+      transform: true, // Automatically transform payloads to DTO instances
+      transformOptions: {
+        enableImplicitConversion: true, // Enable implicit type conversion
+      },
+      disableErrorMessages: process.env.NODE_ENV === 'production', // Disable detailed errors in production
+      validationError: {
+        target: false, // Don't expose target object
+        value: false, // Don't expose value
+      },
+    }),
+  );
+
+  // Enhanced CORS configuration
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim())
+    : process.env.NODE_ENV === 'production'
+    ? [] // Must be set in production
+    : [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:8080',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:5173',
+        'http://127.0.0.1:5174',
+        'http://127.0.0.1:8080',
+      ]; // Development defaults
+
+  // Add ngrok domain if provided
+  const ngrokDomain = process.env.NGROK_DOMAIN;
+  if (ngrokDomain) {
+    allowedOrigins.push(`https://${ngrokDomain}`);
+    allowedOrigins.push(`http://${ngrokDomain}`);
+  }
+
   app.enableCors({
-    origin: true, // Allow any origin for testing
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, Postman, etc.) in development
+      if (!origin && process.env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+
+      // In development, allow all localhost origins for convenience
+      if (process.env.NODE_ENV !== 'production' && origin) {
+        const isLocalhost =
+          origin.startsWith('http://localhost:') ||
+          origin.startsWith('http://127.0.0.1:') ||
+          origin.startsWith('https://localhost:') ||
+          origin.startsWith('https://127.0.0.1:');
+
+        if (isLocalhost) {
+          return callback(null, true);
+        }
+      }
+
+      // Allow ngrok domains
+      if (origin && (origin.includes('.ngrok-free.app') || origin.includes('.ngrok.io') || origin.includes('.ngrok.app'))) {
+        return callback(null, true);
+      }
+
+      // Check if origin is in allowed list
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        logger.warn(`CORS blocked origin: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+    ],
+    exposedHeaders: ['X-Total-Count', 'X-Page', 'X-Per-Page'],
+    maxAge: 86400, // 24 hours
+  });
+
+  // Security headers
+  app.use((req, res, next) => {
+    // Prevent clickjacking (allow iframe for ngrok testing)
+    const isNgrok = req.headers.host?.includes('ngrok') || req.headers.origin?.includes('ngrok');
+    res.setHeader('X-Frame-Options', isNgrok ? 'SAMEORIGIN' : 'DENY');
+    
+    // Prevent MIME type sniffing
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    
+    // Enable XSS protection
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    
+    // Content Security Policy (relaxed for ngrok)
+    const cspDirectives = isNgrok
+      ? "default-src 'self' https://*.ngrok-free.app https://*.ngrok.io https://*.ngrok.app; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.ngrok-free.app https://*.ngrok.io https://*.ngrok.app ws://*.ngrok-free.app wss://*.ngrok-free.app ws://*.ngrok.io wss://*.ngrok.io;"
+      : "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';";
+    res.setHeader('Content-Security-Policy', cspDirectives);
+    
+    // Referrer Policy
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    
+    // Allow ngrok browser warning bypass
+    if (isNgrok) {
+      res.setHeader('ngrok-skip-browser-warning', 'true');
+    }
+    
+    next();
   });
 
   // Increase body size limit for file uploads
@@ -25,6 +145,24 @@ async function bootstrap() {
     exclude: ['socket.io'],
   });
 
-  await app.listen(process.env.PORT ?? 3000);
+  const port = process.env.PORT ?? 3000;
+  await app.listen(port);
+  
+  logger.log(`🚀 Application is running on: http://localhost:${port}`);
+  logger.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  if (ngrokDomain) {
+    logger.log(`🌐 Ngrok domain: https://${ngrokDomain}`);
+  }
+  
+  if (process.env.NODE_ENV === 'production') {
+    logger.log(`🔒 CORS enabled for: ${allowedOrigins.join(', ') || 'none (must configure ALLOWED_ORIGINS)'}`);
+  } else {
+    logger.log(`🔒 CORS enabled for: localhost:* and ngrok domains (development mode)`);
+    if (allowedOrigins.length > 0) {
+      logger.log(`   Also allowing: ${allowedOrigins.join(', ')}`);
+    }
+  }
 }
+
 bootstrap();

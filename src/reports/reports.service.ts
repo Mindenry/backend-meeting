@@ -718,70 +718,7 @@ export class ReportsService {
       })
     );
 
-    // 5. Peer feedback/rating system
-    const peerFeedbacks = await Promise.all(
-      filteredUsers.map(async (user) => {
-        const feedbackWhere: any = {
-          receiverId: user.id,
-          createdAt: {
-            gte: defaultStartDate,
-            lte: defaultEndDate,
-          },
-        };
 
-        if (teamId) {
-          feedbackWhere.teamId = teamId;
-        }
-
-        const feedbacks = await this.prisma.peerFeedback.findMany({
-          where: feedbackWhere,
-          include: {
-            giver: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-        });
-
-        const avgRating = feedbacks.length > 0
-          ? feedbacks.reduce((sum, f) => sum + f.rating, 0) / feedbacks.length
-          : 0;
-
-        const ratingsByCategory = feedbacks.reduce((acc, f) => {
-          if (!acc[f.category]) {
-            acc[f.category] = { total: 0, sum: 0 };
-          }
-          acc[f.category].total += 1;
-          acc[f.category].sum += f.rating;
-          return acc;
-        }, {} as Record<string, { total: number; sum: number }>);
-
-        return {
-          userId: user.id,
-          userName: user.name,
-          totalFeedbacks: feedbacks.length,
-          avgRating: Math.round(avgRating * 10) / 10,
-          ratingsByCategory: (
-            Object.entries(ratingsByCategory) as Array<[string, { total: number; sum: number }]>
-          ).map(([category, data]) => ({
-            category,
-            avgRating: Math.round((data.sum / data.total) * 10) / 10,
-            count: data.total,
-          })),
-          recentFeedbacks: feedbacks.slice(-5).map(f => ({
-            id: f.id,
-            rating: f.rating,
-            comment: f.comment,
-            category: f.category,
-            giverName: f.giver.name,
-            createdAt: f.createdAt,
-          })),
-        };
-      })
-    );
 
     return {
       period: {
@@ -792,45 +729,10 @@ export class ReportsService {
       meetingAttendanceRates,
       chatResponseTimes,
       workHoursVsOutput,
-      peerFeedbacks,
     };
   }
 
-  async createPeerFeedback(data: {
-    giverId: string;
-    receiverId: string;
-    rating: number;
-    comment?: string;
-    category?: string;
-    teamId?: string;
-  }) {
-    return this.prisma.peerFeedback.create({
-      data: {
-        giverId: data.giverId,
-        receiverId: data.receiverId,
-        rating: data.rating,
-        comment: data.comment,
-        category: data.category || 'general',
-        teamId: data.teamId,
-      },
-      include: {
-        giver: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        receiver: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
-    });
-  }
+
 
   async createWorkHours(data: {
     userId: string;

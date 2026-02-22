@@ -1,11 +1,82 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PrismaService } from '../prisma/prisma.service';
 
-@Controller('reports')
+@Controller('api/reports')
 @UseGuards(JwtAuthGuard)
 export class ReportsController {
-  constructor(private readonly reportsService: ReportsService) {}
+  constructor(
+    private readonly reportsService: ReportsService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  @Get()
+  async getUserReport(@Query('range') range: string = 'month', @Request() req: any) {
+    const endDate = new Date();
+    const startDate = new Date();
+    
+    switch (range) {
+      case 'week':
+        startDate.setDate(startDate.getDate() - 7);
+        break;
+      case 'month':
+        startDate.setMonth(startDate.getMonth() - 1);
+        break;
+      case 'quarter':
+        startDate.setMonth(startDate.getMonth() - 3);
+        break;
+      case 'year':
+        startDate.setFullYear(startDate.getFullYear() - 1);
+        break;
+    }
+
+    const userReport = await this.reportsService.getUserActivityReport(
+      req.user.id,
+      startDate,
+      endDate,
+    );
+
+    // Get team metrics
+    const memberships = await this.prisma.teamMember.findMany({
+      where: { userId: req.user.id },
+      include: { team: true },
+    });
+    const teams = memberships.map((m) => m.team);
+    
+    const teamMetrics = await Promise.all(
+      teams.map(async (team) => {
+        const teamReport = await this.reportsService.getTeamProductivityReport(
+          team.id,
+          startDate,
+          endDate,
+        );
+        return {
+          teamName: team.name,
+          tasksCompleted: teamReport.summary.tasks.completed,
+          meetingsAttended: teamReport.summary.meetings.completed,
+          hoursWorked: teamReport.members
+            .find((m) => m.user.id === req.user.id)
+            ?.timeTracking.totalHours || 0,
+        };
+      }),
+    );
+
+    // Calculate productivity score (simple calculation)
+    const tasksCompleted = userReport.summary.tasks.completed;
+    const hoursWorked = userReport.summary.timeTracking.totalHours;
+    const productivityScore = hoursWorked > 0
+      ? Math.min(100, (tasksCompleted / hoursWorked) * 10 * 100)
+      : 0;
+
+    return {
+      tasksCompleted: userReport.summary.tasks.completed,
+      meetingsAttended: userReport.summary.meetings.attended,
+      hoursWorked: userReport.summary.timeTracking.totalHours,
+      productivityScore,
+      teamMetrics,
+    };
+  }
 
   @Get('team-productivity')
   getTeamProductivityReport(
@@ -86,19 +157,6 @@ export class ReportsController {
     });
   }
 
-  @Post('peer-feedback')
-  async createPeerFeedback(
-    @Body() data: {
-      giverId: string;
-      receiverId: string;
-      rating: number;
-      comment?: string;
-      category?: string;
-      teamId?: string;
-    },
-  ) {
-    return this.reportsService.createPeerFeedback(data);
-  }
 
   @Post('work-hours')
   async createWorkHours(

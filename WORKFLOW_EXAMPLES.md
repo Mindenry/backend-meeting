@@ -48,24 +48,25 @@ Workflows allow you to automate repetitive tasks based on events. Each workflow 
 
 ### 2. Auto-generate Meeting Summary
 
-**Use Case**: After a meeting ends, automatically generate AI summary and create action items.
+**Use Case**: After a meeting ends, automatically generate meeting summary using rule-based analysis.
 
 ```json
 {
   "name": "Auto-generate meeting summary",
-  "description": "Generates AI summary and creates tasks from action items",
+  "description": "Generates meeting summary using rule-based analysis",
   "trigger": "meeting_ended",
   "actions": [
     {
-      "type": "create_ai_summary",
-      "meetingId": "{{id}}"
+      "type": "call_api",
+      "method": "POST",
+      "url": "/meetings/{{id}}/ai-summary"
     }
   ],
   "teamId": "your-team-id"
 }
 ```
 
-**Note**: The AI service will automatically:
+**Note**: The meeting summary service will automatically:
 - Generate meeting summary
 - Extract action items
 - Create tasks from action items
@@ -267,7 +268,6 @@ Available action types:
 - `send_notification` - Send notification to user
 - `update_task` - Update task status/properties
 - `link_pr_to_task` - Link PR to task
-- `create_ai_summary` - Generate AI summary
 
 ---
 

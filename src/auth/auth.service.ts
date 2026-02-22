@@ -41,6 +41,11 @@ export class AuthService {
   async login(email: string, password: string) {
     const user = await this.validateUser(email, password);
     
+    // Ensure user has required properties
+    if (!user || !user.id || !user.email) {
+      throw new UnauthorizedException('Invalid user data');
+    }
+    
     const payload = { email: user.email, sub: user.id, role: user.role || 'member' };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
@@ -48,6 +53,8 @@ export class AuthService {
     // Store refresh token
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
+    
+    try {
     await this.prisma.refreshToken.create({
       data: {
         token: refreshToken,
@@ -55,6 +62,10 @@ export class AuthService {
         expiresAt,
       },
     });
+    } catch (error) {
+      // Log error but don't fail login if refresh token creation fails
+      console.error('Failed to create refresh token:', error);
+    }
 
     return {
       accessToken,

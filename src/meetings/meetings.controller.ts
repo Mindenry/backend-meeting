@@ -126,11 +126,6 @@ export class MeetingsController {
     return this.meetingsService.endMeeting(id, body.summary);
   }
 
-  @Post(':id/ai-summary')
-  generateAiSummary(@Param('id') id: string) {
-    return this.meetingsService.generateAiSummary(id);
-  }
-
   @Post(':id/lock')
   lockMeeting(@Param('id') id: string) {
     return this.meetingsService.lockMeeting(id);
@@ -141,11 +136,4 @@ export class MeetingsController {
     return this.meetingsService.unlockMeeting(id);
   }
 
-  @Patch(':id/summary')
-  updateSummary(
-    @Param('id') id: string,
-    @Body() body: { summary: string },
-  ) {
-    return this.meetingsService.updateSummary(id, body.summary);
-  }
 }

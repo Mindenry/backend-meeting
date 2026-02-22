@@ -1,0 +1,134 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
+import { InvitesService } from '../invites/invites.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { JwtAuthGuard } from './jwt-auth.guard';
+
+describe('AuthController', () => {
+  let controller: AuthController;
+  let authService: AuthService;
+
+  const mockAuthService = {
+    login: jest.fn(),
+    register: jest.fn(),
+    refreshToken: jest.fn(),
+    logout: jest.fn(),
+    validateUser: jest.fn(),
+  };
+
+  const mockInvitesService = {
+    validateInvite: jest.fn(),
+    markAsUsed: jest.fn(),
+    getInviteByToken: jest.fn(),
+  };
+
+  const mockPrismaService = {
+    user: {
+      findUnique: jest.fn(),
+    },
+    user: {
+      create: jest.fn(),
+    },
+    teamMember: {
+      create: jest.fn(),
+    },
+    organization: {
+      findUnique: jest.fn(),
+    },
+  };
+
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [AuthController],
+      providers: [
+        {
+          provide: AuthService,
+          useValue: mockAuthService,
+        },
+        {
+          provide: InvitesService,
+          useValue: mockInvitesService,
+        },
+        {
+          provide: PrismaService,
+          useValue: mockPrismaService,
+        },
+      ],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+
+    controller = module.get<AuthController>(AuthController);
+    authService = module.get<AuthService>(AuthService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('login', () => {
+    it('should return login result', async () => {
+      const loginDto = {
+        email: 'test@example.com',
+        password: 'password123',
+      };
+
+      const mockResult = {
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        user: {
+          id: '1',
+          email: 'test@example.com',
+          name: 'Test User',
+          role: 'employee',
+          organizationId: 'org1',
+        },
+      };
+
+      mockAuthService.login.mockResolvedValue(mockResult);
+      mockPrismaService.user.findUnique = jest.fn().mockResolvedValue({
+        id: '1',
+      });
+
+      const result = await controller.login(loginDto);
+
+      expect(result).toHaveProperty('accessToken');
+      expect(result).toHaveProperty('refreshToken');
+      expect(result).toHaveProperty('user');
+      expect(mockAuthService.login).toHaveBeenCalledWith(
+        loginDto.email,
+        loginDto.password,
+      );
+    });
+  });
+
+  describe('register', () => {
+    it('should register a new user', async () => {
+      const registerDto = {
+        email: 'test@example.com',
+        password: 'password123',
+        name: 'Test User',
+      };
+
+      const mockUser = {
+        id: '1',
+        email: 'test@example.com',
+        name: 'Test User',
+      };
+
+      mockAuthService.register.mockResolvedValue(mockUser);
+
+      const result = await controller.register(registerDto);
+
+      expect(result).toBeDefined();
+      expect(mockAuthService.register).toHaveBeenCalledWith(
+        registerDto.email,
+        registerDto.password,
+        registerDto.name,
+      );
+    });
+  });
+});

@@ -43,6 +43,14 @@ export class TasksController {
     return this.tasksService.getAnalytics(teamId);
   }
 
+  @Get('activity')
+  getActivity(
+    @Query('teamId') teamId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.tasksService.getActivity(teamId, limit ? parseInt(limit) : 20);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.tasksService.findOne(id);

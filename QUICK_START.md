@@ -22,8 +22,6 @@ JWT_EXPIRES_IN="7d"
 PORT=3000
 NODE_ENV=development
 
-# Optional: For AI features
-OPENAI_API_KEY="sk-your-api-key"
 ```
 
 ### 3. Setup Database
@@ -91,15 +89,11 @@ curl -X POST http://localhost:3000/api/repositories \
   }'
 ```
 
-### 2. Test AI Features
+### 2. Test Meeting Summary
 ```bash
-# Generate meeting summary
-curl -X POST http://localhost:3000/api/ai/meetings/:meetingId/summary \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "transcription": "Meeting notes here..."
-  }'
+# Generate meeting summary (rule-based, no AI required)
+curl -X POST http://localhost:3000/api/meetings/:meetingId/ai-summary \
+  -H "Authorization: Bearer <token>"
 ```
 
 ### 3. Test Virtual Office

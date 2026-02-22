@@ -9,7 +9,6 @@ import { EventsGateway } from '../events/events.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { TasksService } from '../tasks/tasks.service';
 import { MeetingsService } from '../meetings/meetings.service';
-import { RepositoriesService } from '../repositories/repositories.service';
 import { AuditService } from '../common/audit.service';
 
 @Injectable()
@@ -23,8 +22,6 @@ export class WorkflowsService {
     private readonly tasksService: TasksService,
     @Inject(forwardRef(() => MeetingsService))
     private readonly meetingsService: MeetingsService,
-    @Inject(forwardRef(() => RepositoriesService))
-    private readonly repositoriesService: RepositoriesService,
     private readonly auditService: AuditService,
   ) {}
 
@@ -310,19 +307,7 @@ export class WorkflowsService {
         }
         return { success: false, error: 'No taskId in input' };
 
-      case 'link_pr_to_task':
-        if (input.pullRequestId && input.taskId) {
-          return await this.repositoriesService.linkPullRequestToTask(
-            input.pullRequestId,
-            input.taskId,
-          );
-        }
-        return { success: false, error: 'Missing pullRequestId or taskId' };
 
-      case 'create_ai_summary':
-        // This would call AI service
-        // For now, just return success
-        return { success: true, message: 'AI summary would be created' };
 
       default:
         throw new Error(`Unknown action type: ${action.type}`);

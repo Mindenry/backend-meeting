@@ -525,6 +525,36 @@ export class TasksService {
     };
   }
 
+  async getActivity(teamId?: string, limit: number = 20) {
+    const where: any = {};
+    
+    if (teamId) {
+      where.task = { teamId };
+    }
+
+    return this.prisma.taskActivityLog.findMany({
+      where,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+        task: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+  }
+
   async remove(id: string) {
     const exists = await this.prisma.task.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException('Task not found');

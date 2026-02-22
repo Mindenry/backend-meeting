@@ -6,7 +6,6 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { PrismaModule } from '../prisma/prisma.module';
 import { InvitesModule } from '../invites/invites.module';
-
 @Module({
   imports: [
     PrismaModule,

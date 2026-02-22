@@ -108,67 +108,18 @@ POST /repositories/pull-requests/:prId/link-task/:taskId
 
 ---
 
-## 🤖 AI API
+## 📝 Meeting Summary API
 
-### Generate Meeting Summary
+### Generate Meeting Summary (Rule-based)
 ```http
-POST /ai/meetings/:meetingId/summary
-Content-Type: application/json
-
-{
-  "transcription": "Meeting transcript here..."
-}
+POST /meetings/:id/ai-summary
+Authorization: Bearer <token>
 ```
 
-### Get Meeting Summary
-```http
-GET /ai/meetings/:meetingId/summary
-```
-
-### Generate Code Review
-```http
-POST /ai/pull-requests/:prId/review
-Content-Type: application/json
-
-{
-  "codeDiff": "diff --git a/file.ts..."
-}
-```
-
-### Get Task Suggestions
-```http
-POST /ai/tasks/:taskId/suggestions
-```
-
-### Chat Assistant
-```http
-POST /ai/chat
-Content-Type: application/json
-
-{
-  "message": "What tasks do I have today?",
-  "context": {}
-}
-```
-
-### Generate Document
-```http
-POST /ai/documents/generate
-Content-Type: application/json
-
-{
-  "type": "meeting_minutes",
-  "context": {
-    "title": "Team Meeting",
-    "participants": ["User 1", "User 2"]
-  }
-}
-```
-
-### Get AI History
-```http
-GET /ai/history?type=meeting_summary
-```
+**Note:** This endpoint generates a summary using rule-based analysis (no external AI required). It extracts:
+- Meeting information (title, participants, duration, host)
+- Chat transcript if available
+- Existing tasks connected to the meeting
 
 ---
 
@@ -438,15 +389,16 @@ GET /analytics/my-metrics?start=2024-01-01&end=2024-01-31
 }
 ```
 
-### 4. Auto-generate AI Summary
+### 4. Auto-generate Meeting Summary
 ```json
 {
-  "name": "Generate AI summary after meeting",
+  "name": "Generate meeting summary after meeting",
   "trigger": "meeting_ended",
   "actions": [
     {
-      "type": "create_ai_summary",
-      "meetingId": "{{id}}"
+      "type": "call_api",
+      "method": "POST",
+      "url": "/meetings/{{id}}/ai-summary"
     }
   ]
 }
@@ -465,8 +417,6 @@ DATABASE_URL="postgresql://user:password@localhost:5432/meetdb"
 JWT_SECRET="your-secret-key"
 JWT_EXPIRES_IN="7d"
 
-# OpenAI (Optional - for AI features)
-OPENAI_API_KEY="sk-..."
 
 # Server
 PORT=3000
