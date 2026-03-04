@@ -34,16 +34,20 @@ export class UploadController {
   async uploadFile(
     @UploadedFile() file: any | undefined,
     @Query('folder') folder?: string,
+    @Query('filename') filenameOverride?: string,
     @Request() req?: any,
   ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
 
+    // ใช้ filename จาก query เพื่อรองรับภาษาไทย (multer อาจ decode originalname ผิด)
+    const displayName = filenameOverride || file.originalname || 'attachment';
+
     // Convert to StorageUploadedFile format
     const storageFile: StorageUploadedFile = {
       fieldname: file.fieldname,
-      originalname: file.originalname,
+      originalname: displayName,
       encoding: file.encoding,
       mimetype: file.mimetype,
       size: file.size,
@@ -58,6 +62,14 @@ export class UploadController {
 
     // Log audit trail
     if (req?.user) {
+      const forwardedFor = req?.headers?.['x-forwarded-for'] as string | string[] | undefined;
+      const clientIp = forwardedFor
+        ? (Array.isArray(forwardedFor)
+            ? forwardedFor[0]
+            : forwardedFor.split(',')[0]
+          ).trim()
+        : req?.ip || null;
+
       await this.auditService.log({
         action: 'upload',
         entity: 'file',
@@ -70,7 +82,7 @@ export class UploadController {
           mimetype: file.mimetype,
           provider: result.provider,
         },
-        ipAddress: req.ip,
+        ipAddress: clientIp,
         userAgent: req.headers['user-agent'],
       });
     }
@@ -78,7 +90,7 @@ export class UploadController {
     return {
       url: result.url,
       key: result.key,
-      name: file.originalname,
+      name: displayName,
       size: result.size,
       mimetype: result.mimetype,
       provider: result.provider,

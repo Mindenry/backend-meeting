@@ -8,10 +8,13 @@ import {
   Delete,
   Query,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
 import { MeetingParticipantsService } from './meeting-participants.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('meetings/:meetingId/participants')
+@UseGuards(JwtAuthGuard)
 export class MeetingParticipantsController {
   constructor(
     private readonly participantsService: MeetingParticipantsService,

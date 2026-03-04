@@ -3,8 +3,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../common/audit.service';
+import { WorkflowsService } from '../workflows/workflows.service';
+import { CacheHelperService } from '../common/cache/cache-helper.service';
 import { randomBytes } from 'crypto';
 import { hashPassword } from '../auth/password';
+import { AccessToken } from 'livekit-server-sdk';
 
 @Injectable()
 export class MeetingsService {
@@ -14,6 +17,9 @@ export class MeetingsService {
     private readonly eventsGateway: EventsGateway,
     private readonly notificationsService: NotificationsService,
     private readonly auditService: AuditService,
+    @Inject(forwardRef(() => WorkflowsService))
+    private readonly workflowsService: WorkflowsService,
+    private readonly cacheHelper: CacheHelperService,
   ) {}
 
   private readonly logger = new Logger(MeetingsService.name);
@@ -104,6 +110,28 @@ export class MeetingsService {
         },
       },
     });
+  }
+
+  async generateLivekitToken(meetingId: string, userId: string, userName: string) {
+    const apiKey = process.env.LIVEKIT_API_KEY;
+    const apiSecret = process.env.LIVEKIT_API_SECRET;
+    
+    if (!apiKey || !apiSecret) {
+      throw new InternalServerErrorException('LiveKit API key or secret is not configured in environment variables');
+    }
+
+    // Use "quick-huddle" or the actual meeting ID as the room name
+    const roomName = meetingId || 'quick-huddle';
+
+    const at = new AccessToken(apiKey, apiSecret, {
+      identity: userId,
+      name: userName || 'Participant',
+    });
+    
+    at.addGrant({ roomJoin: true, room: roomName });
+    const token = await at.toJwt();
+    
+    return { token, room: roomName };
   }
 
   async create(data: {
@@ -201,7 +229,7 @@ export class MeetingsService {
     const meeting = await this.prisma.meeting.findUnique({ where: { id } });
     if (!meeting) throw new NotFoundException('Meeting not found');
 
-    return this.prisma.meeting.update({
+    const updatedMeeting = await this.prisma.meeting.update({
       where: { id },
       data: {
         status: 'live',
@@ -224,6 +252,37 @@ export class MeetingsService {
         },
       },
     });
+
+    // Trigger workflow for meeting_started
+    try {
+      await this.workflowsService.triggerWorkflow('meeting_started', {
+        id: updatedMeeting.id,
+        title: updatedMeeting.title,
+        description: updatedMeeting.description,
+        hostId: updatedMeeting.hostId,
+        teamId: updatedMeeting.teamId,
+        startTime: updatedMeeting.startTime,
+        actualStartTime: updatedMeeting.actualStartTime,
+        participants: updatedMeeting.participants.map(p => ({
+          userId: p.userId,
+          name: p.user.name,
+          email: p.user.email,
+        })),
+      });
+    } catch (err) {
+      console.error('Failed to trigger workflow:', err);
+    }
+
+    // Invalidate cache for host and participants
+    await this.cacheHelper.invalidateUserDashboard(updatedMeeting.hostId);
+    if (updatedMeeting.teamId) {
+      await this.cacheHelper.invalidateTeamDashboards(updatedMeeting.teamId);
+    }
+    for (const participant of updatedMeeting.participants) {
+      await this.cacheHelper.invalidateUserDashboard(participant.userId);
+    }
+
+    return updatedMeeting;
   }
 
   async endMeeting(id: string, summary?: string) {
@@ -252,8 +311,43 @@ export class MeetingsService {
             },
           },
         },
+        minutes: true,
+        recordings: true,
       },
     });
+
+    // Trigger workflow for meeting_ended
+    try {
+      await this.workflowsService.triggerWorkflow('meeting_ended', {
+        id: updatedMeeting.id,
+        title: updatedMeeting.title,
+        description: updatedMeeting.description,
+        hostId: updatedMeeting.hostId,
+        teamId: updatedMeeting.teamId,
+        startTime: updatedMeeting.startTime,
+        actualStartTime: updatedMeeting.actualStartTime,
+        actualEndTime: updatedMeeting.actualEndTime,
+        summary: updatedMeeting.summary,
+        participants: updatedMeeting.participants.map(p => ({
+          userId: p.userId,
+          name: p.user.name,
+          email: p.user.email,
+        })),
+        hasMinutes: updatedMeeting.minutes.length > 0,
+        hasRecordings: updatedMeeting.recordings.length > 0,
+      });
+    } catch (err) {
+      console.error('Failed to trigger workflow:', err);
+    }
+
+    // Invalidate cache for host and participants
+    await this.cacheHelper.invalidateUserDashboard(updatedMeeting.hostId);
+    if (updatedMeeting.teamId) {
+      await this.cacheHelper.invalidateTeamDashboards(updatedMeeting.teamId);
+    }
+    for (const participant of updatedMeeting.participants) {
+      await this.cacheHelper.invalidateUserDashboard(participant.userId);
+    }
 
     return updatedMeeting;
   }

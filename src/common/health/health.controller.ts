@@ -1,9 +1,13 @@
 import { Controller, Get } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { HealthService } from './health.service';
 
 @Controller('health')
 export class HealthController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private healthService: HealthService,
+  ) {}
 
   @Get()
   async check() {
@@ -75,5 +79,10 @@ export class HealthController {
       status: 'alive',
       timestamp: new Date().toISOString(),
     };
+  }
+
+  @Get('metrics')
+  async getMetrics() {
+    return this.healthService.getHealthMetrics();
   }
 }

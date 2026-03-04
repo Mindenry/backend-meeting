@@ -15,6 +15,7 @@ import { MeetingParticipantsService } from '../meeting-participants/meeting-part
 interface MeetingParticipant {
   peerId: string;
   name: string;
+  avatar?: string;
   socketId: string;
   state: {
     isMuted: boolean;
@@ -44,8 +45,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private meetingParticipants: Map<string, MeetingParticipant[]> = new Map();
   // Map socket IDs to meeting IDs for cleanup on disconnect
   private socketMeetings: Map<string, { meetingId: string; peerId: string }> = new Map();
-  // Online presence: socketId -> { userId, name }
-  private onlineUsers: Map<string, { userId: string; name: string }> = new Map();
+  // Online presence: socketId -> { userId, name, avatar }
+  private onlineUsers: Map<string, { userId: string; name: string; avatar?: string }> = new Map();
   // Task viewing: taskId -> Set<{ userId, name, socketId }>
   private taskViewers: Map<string, Set<{ userId: string; name: string; socketId: string }>> = new Map();
 
@@ -141,6 +142,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const newParticipant: MeetingParticipant = {
       peerId,
       name: peerName,
+      avatar: userInfo?.avatar,
       socketId: client.id,
       state: state || {
         isMuted: false,
@@ -155,7 +157,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Send existing participants to the new joiner
     const existingParticipants = participants
       .filter((p) => p.peerId !== peerId)
-      .map((p) => ({ peerId: p.peerId, name: p.name, state: p.state }));
+      .map((p) => ({ peerId: p.peerId, name: p.name, avatar: p.avatar, state: p.state }));
 
     client.emit('meeting:participants', existingParticipants);
 
@@ -163,6 +165,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client.to(`meeting:${meetingId}`).emit('meeting:participant:joined', {
       peerId,
       name: peerName,
+      avatar: userInfo?.avatar,
       state: newParticipant.state,
     });
 
@@ -200,10 +203,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('presence:online')
   handlePresenceOnline(
-    @MessageBody() data: { userId: string; name: string },
+    @MessageBody() data: { userId: string; name: string; avatar?: string },
     @ConnectedSocket() client: Socket,
   ) {
-    this.onlineUsers.set(client.id, { userId: data.userId, name: data.name });
+    this.onlineUsers.set(client.id, { userId: data.userId, name: data.name, avatar: data.avatar });
     this.broadcastPresence();
     return { event: 'presence:registered' };
   }
@@ -215,11 +218,13 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return { event: 'presence:sent' };
   }
 
-  private getOnlineUsersData(): Array<{ userId: string; name: string }> {
+  private getOnlineUsersData(): Array<{ userId: string; name: string; avatar?: string }> {
     // Deduplicate by userId (same user may have multiple sockets)
-    const seen = new Map<string, { userId: string; name: string }>();
+    const seen = new Map<string, { userId: string; name: string; avatar?: string }>();
     for (const [, info] of this.onlineUsers) {
-      seen.set(info.userId, info);
+      if (!seen.has(info.userId) || (info.avatar && !seen.get(info.userId)?.avatar)) {
+        seen.set(info.userId, info);
+      }
     }
     return Array.from(seen.values());
   }
@@ -234,7 +239,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // ─────────────────────────────────────────────────────────────────────────────
 
   @SubscribeMessage('dm:send')
-  handleDmSend(
+  async handleDmSend(
     @MessageBody()
     data: {
       id: string;
@@ -248,23 +253,52 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     },
     @ConnectedSocket() client: Socket,
   ) {
+    // Persist DM to database so it behaves like channel messages (no localStorage dependency)
+    try {
+      const saved = await this.messagesService.createDirectMessage({
+        id: data.id,
+        text: data.text,
+        senderId: data.senderId,
+        receiverId: data.receiverId,
+        createdAt: data.createdAt,
+        attachments: data.attachments,
+        mentions: data.mentions,
+      });
+      console.log(`[DM] Persisted DM ${saved.id} from ${data.senderId} to ${data.receiverId}`);
+    } catch (error) {
+      // Log but do not block real-time delivery
+      console.error('[DM] Failed to persist direct message:', error);
+    }
+
     // Emit to receiver
+    let receiverFound = false;
     for (const [socketId, userInfo] of this.onlineUsers) {
       if (userInfo.userId === data.receiverId) {
+        receiverFound = true;
+        console.log(`[DM] Emitting to receiver ${data.receiverId} on socket ${socketId}`);
         this.server.to(socketId).emit('dm:message', {
           ...data,
           receiverId: data.receiverId,
+          senderAvatar: this.onlineUsers.get(client.id)?.avatar,
         });
       }
+    }
+    
+    if (!receiverFound) {
+      console.log(`[DM] Receiver ${data.receiverId} not found in onlineUsers (${this.onlineUsers.size} online)`);
     }
     
     // Also emit back to sender so they see their own message immediately
     const senderInfo = this.onlineUsers.get(client.id);
     if (senderInfo && senderInfo.userId === data.senderId) {
+      console.log(`[DM] Emitting back to sender ${data.senderId}`);
       client.emit('dm:message', {
         ...data,
         receiverId: data.receiverId,
+        senderAvatar: senderInfo.avatar,
       });
+    } else {
+      console.log(`[DM] Sender ${data.senderId} not found in onlineUsers for socket ${client.id}`);
     }
     
     return { event: 'dm:sent' };
@@ -443,7 +477,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.server.to(`meeting:${data.meetingId}`).emit('meeting:chat:message', {
         id: data.message.id,
         sender: data.message.senderName,
-        time: data.message.time || new Date().toISOString(),
+        time: data.message.time || new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
         text: data.message.text,
       });
       return { event: 'chat:sent' };
@@ -459,8 +493,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
         data: {
           teamId: meeting.teamId,
           name: channelName,
-          type: 'general',
-          description: `Meeting chat: ${meeting.title}`,
+          type: 'meeting',
+          description: `Meeting chat history: ${meeting.title}`,
         },
       }));
 
@@ -539,6 +573,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   emitTaskDeleted(id: string) {
     this.server.emit('task:deleted', id);
+  }
+
+  emitCommentAdded(taskId: string, comment: any) {
+    this.server.emit('task:comment:added', { taskId, comment });
   }
 
   emitTeamCreated(team: any) {

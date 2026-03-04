@@ -6,22 +6,23 @@ export class AnnouncementsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(userId: string, userRole?: string, teamIds?: string[]) {
+    const now = new Date();
     const announcements = await this.prisma.announcement.findMany({
       where: {
         status: 'active',
         AND: [
           {
-        OR: [
-          { targetType: 'all' },
-          { targetType: 'role', targetIds: { has: userRole } },
-          { targetType: 'team', targetIds: { hasSome: teamIds || [] } },
-          { targetType: 'user', targetIds: { has: userId } },
-        ],
+            OR: [
+              { targetType: 'all' },
+              ...(userRole ? [{ targetType: 'role', targetIds: { has: userRole } }] : []),
+              ...(teamIds && teamIds.length > 0 ? [{ targetType: 'team', targetIds: { hasSome: teamIds } }] : []),
+              { targetType: 'user', targetIds: { has: userId } },
+            ],
           },
           {
-        OR: [
-          { expiresAt: null },
-          { expiresAt: { gt: new Date() } },
+            OR: [
+              { expiresAt: null },
+              { expiresAt: { gt: now } },
             ],
           },
         ],

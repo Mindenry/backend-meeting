@@ -7,10 +7,13 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { SprintsService } from './sprints.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('sprints')
+@UseGuards(JwtAuthGuard)
 export class SprintsController {
   constructor(private readonly sprintsService: SprintsService) {}
 

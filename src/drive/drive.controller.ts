@@ -8,11 +8,15 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
+// @ts-ignore - Optional Swagger decorators
+import { ApiTags, ApiBearerAuth } from '../common/decorators/swagger.decorators';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { DriveService } from './drive.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 // Mirror the uploaded file type used by UploadController
 interface UploadedFileType {
@@ -27,7 +31,10 @@ interface UploadedFileType {
   buffer?: Buffer;
 }
 
+@ApiTags('drive')
 @Controller('drive')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth('JWT-auth')
 export class DriveController {
   constructor(private readonly driveService: DriveService) {}
 

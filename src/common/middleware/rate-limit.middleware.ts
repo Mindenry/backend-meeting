@@ -18,8 +18,8 @@ export class RateLimitMiddleware implements NestMiddleware {
   private readonly cleanupInterval: number;
 
   constructor() {
-    // Configurable via environment variables
-    this.maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10);
+    // Configurable via environment variables (Fallback increased to prevent 429 on normal load)
+    this.maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '3000', 10);
     this.windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10); // 15 minutes default
     this.cleanupInterval = parseInt(process.env.RATE_LIMIT_CLEANUP_INTERVAL || '600000', 10); // 10 minutes
 

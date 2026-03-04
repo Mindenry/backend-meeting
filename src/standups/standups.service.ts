@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, forwardRef, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
@@ -12,7 +12,7 @@ interface StandupMessagePayload {
 }
 
 @Injectable()
-export class StandupsService {
+export class StandupsService implements OnModuleInit {
   private readonly logger = new Logger(StandupsService.name);
   private readonly timezone = 'Asia/Bangkok';
 
@@ -22,6 +22,24 @@ export class StandupsService {
     private readonly eventsGateway: EventsGateway,
     private readonly auditService: AuditService,
   ) {}
+
+  async onModuleInit() {
+    try {
+      const botUser = await this.ensureBotUser();
+      const teams = await this.prisma.team.findMany({ select: { id: true } });
+
+      await Promise.all(
+        teams.map(async (team) => {
+          await this.ensureBotMembership(team.id, botUser.id);
+          await this.ensureStandupChannel(team.id);
+        }),
+      );
+
+      this.logger.log('Standup bot initialized successfully');
+    } catch (error) {
+      this.logger.error(`Failed to initialize standup bot: ${error.message}`, error.stack);
+    }
+  }
 
   /**
    * Daily cron: send standup prompt to each team's standup channel once per day
@@ -49,11 +67,19 @@ export class StandupsService {
         // Ensure standup channel exists
         const channel = await this.ensureStandupChannel(team.id);
 
+        // Ensure bot account is a team member for visibility/auditing consistency
+        await this.ensureBotMembership(team.id, botUser.id);
+
         // Check if we've already sent a standup prompt today in this channel
         const existingPrompt = await this.prisma.message.findFirst({
           where: {
             channelId: channel.id,
             isSystem: true,
+            senderId: botUser.id,
+            text: {
+              contains: 'Daily standup for team',
+              mode: 'insensitive',
+            },
             createdAt: {
               gte: startOfDay,
             },
@@ -278,6 +304,27 @@ export class StandupsService {
     }
 
     return user;
+  }
+
+  private async ensureBotMembership(teamId: string, botUserId: string) {
+    const existingMembership = await this.prisma.teamMember.findUnique({
+      where: {
+        userId_teamId: {
+          userId: botUserId,
+          teamId,
+        },
+      },
+    });
+
+    if (!existingMembership) {
+      await this.prisma.teamMember.create({
+        data: {
+          userId: botUserId,
+          teamId,
+          role: 'member',
+        },
+      });
+    }
   }
 
   private async ensureStandupChannel(teamId: string) {

@@ -56,9 +56,21 @@ export class NotificationsGateway
       }
 
       // Verify JWT token
-      const payload = this.jwtService.verify(token, {
-        secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
-      });
+      let payload;
+      try {
+        payload = this.jwtService.verify(token, {
+          secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+        });
+      } catch (err) {
+        if (err.name === 'TokenExpiredError') {
+          this.logger.warn(`Connection rejected: Token expired for socket ${client.id}`);
+          client.emit('auth_error', { message: 'Token expired' });
+        } else {
+          this.logger.warn(`Connection rejected: Invalid token for socket ${client.id}`);
+        }
+        client.disconnect();
+        return;
+      }
 
       // Get user from database
       const user = await this.prisma.user.findUnique({

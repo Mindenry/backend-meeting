@@ -10,11 +10,15 @@ import {
   UseGuards,
   Request,
 } from '@nestjs/common';
+// @ts-ignore - Optional Swagger decorators
+import { ApiTags, ApiBearerAuth } from '../common/decorators/swagger.decorators';
 import { WorkflowsService } from './workflows.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+@ApiTags('workflows')
 @Controller('workflows')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth('JWT-auth')
 export class WorkflowsController {
   constructor(private readonly workflowsService: WorkflowsService) {}
 

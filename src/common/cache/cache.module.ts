@@ -1,6 +1,7 @@
 import { Module, Global } from '@nestjs/common';
 import { CacheModule as NestCacheModule } from '@nestjs/cache-manager';
 import { CacheService } from './cache.service';
+import { CacheHelperService } from './cache-helper.service';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
 @Global()
@@ -26,21 +27,21 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
             // Fallback to in-memory if Redis store not available
             return {
               ttl: 3600,
-              max: 100,
+              max: 1000, // Increased max items
             };
           }
         } else {
           // Fallback to in-memory cache
           return {
             ttl: 3600, // Default TTL: 1 hour
-            max: 100, // Maximum number of items in cache
+            max: 1000, // Maximum number of items in cache (increased)
           };
         }
       },
       inject: [ConfigService],
     }),
   ],
-  providers: [CacheService],
-  exports: [CacheService],
+  providers: [CacheService, CacheHelperService],
+  exports: [CacheService, CacheHelperService],
 })
 export class CacheModule {}

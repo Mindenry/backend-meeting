@@ -85,6 +85,42 @@ export class DriveService {
     size: number;
     mimeType: string;
   }) {
+    // 5GB total storage limit check per organization
+    const MAX_STORAGE_BYTES = 5368709120; // 5 * 1024 * 1024 * 1024
+
+    // First, find the organization this team belongs to
+    const team = await this.prisma.team.findUnique({
+      where: { id: params.teamId },
+      select: { organizationId: true }
+    });
+
+    if (!team) {
+      throw new BadRequestException('Team not found');
+    }
+
+    // Calculate total storage used by all teams in this organization
+    const orgTeams = await this.prisma.team.findMany({
+      where: { organizationId: team.organizationId },
+      select: { id: true }
+    });
+    const orgTeamIds = orgTeams.map(t => t.id);
+
+    const usageResult = await this.prisma.driveFileVersion.aggregate({
+      where: {
+        entry: {
+          teamId: { in: orgTeamIds }
+        }
+      },
+      _sum: {
+        size: true
+      }
+    });
+
+    const currentUsedBytes = usageResult._sum.size || 0;
+    if (currentUsedBytes + params.size > MAX_STORAGE_BYTES) {
+      throw new BadRequestException('Organization storage limit exceeded (5GB maximum)');
+    }
+
     const normalizedPath = this.normalizePath(params.path || '/');
     const fileName = params.originalName;
 

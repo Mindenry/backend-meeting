@@ -1,18 +1,23 @@
 import {
+  Body,
   Controller,
   Get,
-  Post,
-  Body,
   Param,
-  UseGuards,
+  Post,
   Request,
+  UseGuards,
 } from '@nestjs/common';
+// @ts-ignore - Optional Swagger decorators
+import { ApiTags, ApiBearerAuth } from '../common/decorators/swagger.decorators';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AnnouncementsService } from './announcements.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RolesGuard, Roles } from '../auth/roles.guard';
 
-@Controller('api/announcements')
+@ApiTags('announcements')
+@Controller('announcements')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth('JWT-auth')
 export class AnnouncementsController {
   constructor(
     private readonly announcementsService: AnnouncementsService,
@@ -40,7 +45,13 @@ export class AnnouncementsController {
     return this.announcementsService.findOne(id, req.user.id);
   }
 
+  /**
+   * Create a new announcement.
+   * Only org_owner, admin, and manager can broadcast announcements.
+   */
   @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('org_owner', 'admin', 'manager')
   async create(@Body() body: any, @Request() req) {
     return this.announcementsService.create({
       ...body,

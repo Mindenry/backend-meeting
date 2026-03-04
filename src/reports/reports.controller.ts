@@ -1,10 +1,14 @@
 import { Controller, Get, Post, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+// @ts-ignore - Optional Swagger decorators
+import { ApiTags, ApiBearerAuth } from '../common/decorators/swagger.decorators';
 import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 
-@Controller('api/reports')
+@ApiTags('reports')
+@Controller('reports')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth('JWT-auth')
 export class ReportsController {
   constructor(
     private readonly reportsService: ReportsService,
@@ -46,33 +50,45 @@ export class ReportsController {
     
     const teamMetrics = await Promise.all(
       teams.map(async (team) => {
-        const teamReport = await this.reportsService.getTeamProductivityReport(
-          team.id,
-          startDate,
-          endDate,
-        );
-        return {
-          teamName: team.name,
-          tasksCompleted: teamReport.summary.tasks.completed,
-          meetingsAttended: teamReport.summary.meetings.completed,
-          hoursWorked: teamReport.members
-            .find((m) => m.user.id === req.user.id)
-            ?.timeTracking.totalHours || 0,
-        };
+        try {
+          const teamReport = await this.reportsService.getTeamProductivityReport(
+            team.id,
+            startDate,
+            endDate,
+          );
+          return {
+            teamName: team.name,
+            tasksCompleted: teamReport.summary?.tasks?.completed || 0,
+            meetingsAttended: teamReport.summary?.meetings?.completed || 0,
+            messagesSent: teamReport.members
+              ?.find((m) => m.user?.id === req.user.id)
+              ?.messagesSent || 0,
+          };
+        } catch (error) {
+          // If team report fails, return empty metrics
+          console.error(`Failed to get report for team ${team.id}:`, error);
+          return {
+            teamName: team.name,
+            tasksCompleted: 0,
+            meetingsAttended: 0,
+            messagesSent: 0,
+          };
+        }
       }),
     );
 
-    // Calculate productivity score (simple calculation)
-    const tasksCompleted = userReport.summary.tasks.completed;
-    const hoursWorked = userReport.summary.timeTracking.totalHours;
-    const productivityScore = hoursWorked > 0
-      ? Math.min(100, (tasksCompleted / hoursWorked) * 10 * 100)
-      : 0;
+    // Calculate productivity score (simple calculation based on completion rate rather than hours)
+    const tasksCompleted = userReport.summary?.tasks?.completed || 0;
+    const tasksTotal = userReport.summary?.tasks?.total || 0;
+    const messagesSent = userReport.summary?.messagesSent || 0;
+    const productivityScore = tasksTotal > 0
+      ? Math.min(100, (tasksCompleted / tasksTotal) * 100)
+      : (messagesSent > 0 ? 100 : 0);
 
     return {
-      tasksCompleted: userReport.summary.tasks.completed,
-      meetingsAttended: userReport.summary.meetings.attended,
-      hoursWorked: userReport.summary.timeTracking.totalHours,
+      tasksCompleted,
+      meetingsAttended: userReport.summary?.meetings?.attended || 0,
+      messagesSent,
       productivityScore,
       teamMetrics,
     };
@@ -129,17 +145,29 @@ export class ReportsController {
     @Query('organizationId') organizationId?: string,
     @Query('teamId') teamId?: string,
     @Query('assigneeId') assigneeId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
     return this.reportsService.getTaskReport({
       organizationId,
       teamId,
       assigneeId,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
     });
   }
 
   @Get('teams/:teamId/workload')
-  async getTeamWorkloadReport(@Param('teamId') teamId: string) {
-    return this.reportsService.getTeamWorkloadReport(teamId);
+  async getTeamWorkloadReport(
+    @Param('teamId') teamId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.getTeamWorkloadReport(
+      teamId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
   }
 
   @Get('performance')

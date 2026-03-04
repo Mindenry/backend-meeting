@@ -11,8 +11,16 @@ export class UsersService {
     private readonly eventsGateway: EventsGateway,
   ) { }
 
-  findAll() {
-    return this.prisma.user.findMany();
+  findAll(includeSystem = false) {
+    return this.prisma.user.findMany({
+      where: includeSystem
+        ? undefined
+        : {
+            role: {
+              not: 'system',
+            },
+          },
+    });
   }
 
   findOne(id: string) {
@@ -37,7 +45,7 @@ export class UsersService {
         password: data.password,
         role: data.role || 'employee',
         organizationId,
-      },
+      } as any, // Cast to any or appropriate type if schema is strict
     });
   }
 

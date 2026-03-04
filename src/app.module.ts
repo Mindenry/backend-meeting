@@ -33,6 +33,9 @@ import { TaskCommentsModule } from './task-comments/task-comments.module';
 import { DriveModule } from './drive/drive.module';
 import { SprintsModule } from './sprints/sprints.module';
 import { EpicsModule } from './epics/epics.module';
+import { ProjectsModule } from './projects/projects.module';
+import { ComponentsModule } from './components/components.module';
+import { VersionsModule } from './versions/versions.module';
 import { MeetingRemindersModule } from './meeting-reminders/meeting-reminders.module';
 import { HolidaysModule } from './holidays/holidays.module';
 import { StorageModule } from './storage/storage.module';
@@ -41,11 +44,17 @@ import { SearchModule } from './search/search.module';
 import { StandupsModule } from './standups/standups.module';
 import { WikiModule } from './wiki/wiki.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
+import { PermissionsModule } from './permissions/permissions.module';
 import { CacheModule } from './common/cache/cache.module';
 import { HealthModule } from './common/health/health.module';
+import { TaskStatusesModule } from './task-statuses/task-statuses.module';
+import { IssueLinksModule } from './issue-links/issue-links.module';
+import { TaskWatchersModule } from './task-watchers/task-watchers.module';
+import { TaskActivityModule } from './task-activity/task-activity.module';
 import { MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { LoggingMiddleware } from './common/middleware/logging.middleware';
 import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
+
 
 @Module({
   imports: [
@@ -53,20 +62,21 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
       isGlobal: true,
     }),
     CacheModule,
-    // Serve frontend static files (only if dist folder exists)
-    ...(require('fs').existsSync(join(process.cwd(), '..', 'team-connect-hub', 'dist'))
-      ? [
-          ServeStaticModule.forRoot({
-            rootPath: join(process.cwd(), '..', 'team-connect-hub', 'dist'),
-            exclude: ['/api*', '/socket.io*'],
-          }),
-        ]
-      : []),
-    // Serve uploads
-    ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), 'uploads'),
-      serveRoot: '/uploads',
-    }),
+    // Serve frontend static files and uploads
+    ServeStaticModule.forRoot(
+      {
+        rootPath: join(process.cwd(), 'uploads'),
+        serveRoot: '/uploads',
+      },
+      ...(require('fs').existsSync(join(process.cwd(), '..', 'team-connect-hub', 'dist'))
+        ? [
+            {
+              rootPath: join(process.cwd(), '..', 'team-connect-hub', 'dist'),
+              exclude: ['/api/{*path}', '/socket.io/{*path}', '/uploads/{*path}'],
+            },
+          ]
+        : [])
+    ),
     ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
@@ -87,6 +97,9 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     DriveModule,
     SprintsModule,
     EpicsModule,
+    ProjectsModule,
+    ComponentsModule,
+    VersionsModule,
     MeetingRemindersModule,
     HolidaysModule,
     NotificationsModule,
@@ -105,6 +118,11 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     StandupsModule,
     WikiModule,
     AnnouncementsModule,
+    PermissionsModule,
+    TaskStatusesModule,
+    IssueLinksModule,
+    TaskWatchersModule,
+    TaskActivityModule,
     CacheModule,
     HealthModule,
   ],

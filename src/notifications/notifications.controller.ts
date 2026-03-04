@@ -1,11 +1,15 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
+// @ts-ignore - Optional Swagger decorators
+import { ApiTags, ApiBearerAuth } from '../common/decorators/swagger.decorators';
 import { NotificationsService } from './notifications.service';
 import { NotificationPreferencesService } from './notification-preferences.service';
 import { NotificationDigestService } from './notification-digest.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+@ApiTags('notifications')
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth('JWT-auth')
 export class NotificationsController {
   constructor(
     private readonly notificationsService: NotificationsService,

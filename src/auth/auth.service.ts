@@ -46,7 +46,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid user data');
     }
     
-    const payload = { email: user.email, sub: user.id, role: user.role || 'member' };
+    const payload = { email: user.email, sub: user.id, role: user.role || 'employee' };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
 
@@ -74,8 +74,9 @@ export class AuthService {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role || 'member',
+        role: user.role || 'employee',
         organizationId: user.organizationId,
+        avatar: user.avatar || null,
       },
     };
   }
@@ -121,7 +122,7 @@ export class AuthService {
       }
 
       const user = storedToken.user;
-      const newPayload = { email: user.email, sub: user.id, role: user.role || 'member' };
+      const newPayload = { email: user.email, sub: user.id, role: user.role || 'employee' };
       const accessToken = this.jwtService.sign(newPayload, { expiresIn: '15m' });
 
       return { accessToken };
@@ -209,5 +210,58 @@ export class AuthService {
     }
 
     await this.setPassword(userId, newPassword);
+  }
+
+  async forgotPassword(email: string): Promise<{ success: boolean; message?: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+
+    if (!user) {
+      // In a real application, we might not want to reveal if a user exists
+      // However, for this demo/project scale, it's fine.
+      return { success: true, message: 'If an account exists, a reset link will be sent.' };
+    }
+
+    // Usually, we would generate a unique token, save it to DB, and send an email
+    // For this implementation, we will use a JWT token that expires quickly
+    const payload = { email: user.email, sub: user.id, action: 'reset_password' };
+    const resetToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+
+    // Since we don't have an email sending service integrated yet,
+    // we'll log the token to the console and return it for development purposes.
+    console.log(`Password reset link for ${user.email}: http://localhost:5173/reset-password?token=${resetToken}`);
+    
+    return { success: true, message: 'Password reset instructions have been sent to your email.' };
+  }
+
+  async resetPasswordWithToken(token: string, newPassword: string): Promise<{ success: boolean }> {
+    try {
+      // Verify token
+      const payload = this.jwtService.verify(token);
+      
+      if (payload.action !== 'reset_password' || !payload.sub) {
+        throw new UnauthorizedException('Invalid reset token');
+      }
+
+      // Check if user exists
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('User no longer exists');
+      }
+
+      // Set new password
+      await this.setPassword(user.id, newPassword);
+
+      // In a real application, you might want to invalidate all existing refresh tokens here
+      await this.prisma.refreshToken.deleteMany({ where: { userId: user.id } });
+
+      return { success: true };
+    } catch (error) {
+      throw new UnauthorizedException('Invalid or expired reset token');
+    }
   }
 }

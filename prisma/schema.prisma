@@ -2,6 +2,11 @@ generator client {
   provider = "prisma-client-js"
 }
 
+generator dbml {
+  provider = "prisma-dbml-generator"
+  output   = "../../tmp-dbml/dbml"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -16,33 +21,43 @@ model Organization {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  users    User[]
-  teams    Team[]
-  invites  Invite[]
-  holidays Holiday[]
+  users           User[]
+  teams           Team[]
+  invites         Invite[]
+  holidays        Holiday[]
+  rolePermissions RolePermission[]
 }
 
 model User {
   id          String   @id @default(uuid())
   email       String   @unique
   name        String
+  displayName String?  // Optional display name fallback
   password    String? // Hashed password (nullable for invited users)
-  role        String   @default("employee") // org_owner, admin, manager, employee, member
-  status      String   @default("online") // online, busy, away, offline
+  role        String   @default("employee") // org_owner, admin, manager, employee
+  status      String   @default("offline") // online, busy, away, offline
   currentRoom String? // virtual office room ID
   activity    String   @default("Available")
   avatar      String? // Avatar URL
   isActive    Boolean  @default(true)
+  department  String?  // Optional department
+  position    String?  // Optional job title
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
+  
+  managerId     String?
+  manager       User?    @relation("UserManager", fields: [managerId], references: [id])
+  directReports User[]   @relation("UserManager")
 
   teams                   TeamMember[]
   meetings                Meeting[]               @relation("HostedMeetings")
   meetingParticipants     MeetingParticipant[]
   tasks                   Task[]                  @relation("UserTasks")
+  reportedTasks           Task[]                  @relation("ReporterTasks")
+  taskWatchers            TaskWatcher[]
   messages                Message[]               @relation("SentMessages")
   notifications           Notification[]          @relation("UserNotifications")
   taskComments            TaskComment[]
@@ -56,6 +71,7 @@ model User {
   createdSprints          Sprint[]                @relation("SprintCreator")
   createdEpics            Epic[]                  @relation("EpicCreator")
   taskAttachments         TaskAttachment[]
+  taskTemplates           TaskTemplate[]
   refreshTokens           RefreshToken[]
   reactions               MessageReaction[]
   createdDocuments        Document[]              @relation("CreatedDocuments")
@@ -74,9 +90,11 @@ model User {
   wikiArticles            WikiArticle[]           @relation("WikiCreator")
   wikiVersions            WikiArticleVersion[]    @relation("WikiVersionCreator")
   wikiComments            WikiComment[]           @relation("WikiCommentCreator")
-  wikiPermissions         WikiPermission[]        @relation("WikiPermissionUser")
   createdAnnouncements    Announcement[]          @relation("AnnouncementCreator")
   announcementReads       AnnouncementRead[]      @relation("AnnouncementReads")
+  // Direct messages
+  sentDirectMessages      DirectMessage[]         @relation("SentDirectMessages")
+  receivedDirectMessages  DirectMessage[]         @relation("ReceivedDirectMessages")
 }
 
 model Team {
@@ -97,14 +115,16 @@ model Team {
   workHours       WorkHours[]
   sprints         Sprint[]
   epics           Epic[]
+  projects        Project[]
+  components      Component[]
+  versions        Version[]
   documents       Document[]
   documentFolders DocumentFolder[]
   workflows       Workflow[]
-  teamAnalytics   TeamAnalytics[]
   standupEntries  StandupEntry[]
+  workflowStatuses TaskWorkflowStatus[]
   // New features
   wikiArticles    WikiArticle[]
-  wikiPermissions WikiPermission[] @relation("WikiPermissionTeam")
 }
 
 model TeamMember {
@@ -119,6 +139,8 @@ model TeamMember {
   team Team @relation(fields: [teamId], references: [id])
 
   @@unique([userId, teamId])
+  @@index([userId])
+  @@index([teamId])
 }
 
 model Meeting {
@@ -162,6 +184,11 @@ model Meeting {
   minutes      MeetingMinutes[]
   participants MeetingParticipant[]
   reminders    MeetingReminder[]
+
+  @@index([hostId, startTime])
+  @@index([teamId, startTime])
+  @@index([status, startTime])
+  @@index([startTime])
 }
 
 model Task {
@@ -170,30 +197,63 @@ model Task {
   description String?
   priority    String    @default("medium") // low, medium, high, urgent
   status      String    @default("todo") // todo, in_progress, review, done
+  issueType   String    @default("task") // task, bug, story, epic, subtask
+  resolution  String? // done, wont_fix, duplicate, cancelled
   dueDate     DateTime?
   tags        String[]
   storyPoints Int? // Story points for estimation (e.g., 1, 2, 3, 5, 8, 13)
   estimate    Float? // Estimated hours
+  isRecurring Boolean   @default(false)
+  recurringPattern String? // daily, weekly, monthly
+  recurringInterval Int?    @default(1)
+  recurringEndDate DateTime?
+  templateId  String?
   position    Int       @default(0) // Position in kanban column for sorting
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   assigneeId String?
+  reporterId String? // User who created/reported the task
   teamId     String?
   meetingId  String?
   sprintId   String?
   epicId     String?
+  projectId  String?
+  componentId  String?
+  versionId    String?
+  parentTaskId String?
 
   assignee    User?             @relation("UserTasks", fields: [assigneeId], references: [id])
+  reporter    User?             @relation("ReporterTasks", fields: [reporterId], references: [id])
   team        Team?             @relation(fields: [teamId], references: [id])
   meeting     Meeting?          @relation(fields: [meetingId], references: [id])
   sprint      Sprint?           @relation(fields: [sprintId], references: [id])
   epic        Epic?             @relation(fields: [epicId], references: [id])
+  project     Project?          @relation(fields: [projectId], references: [id])
+  component   Component?        @relation(fields: [componentId], references: [id])
+  version     Version?          @relation(fields: [versionId], references: [id])
+  parentTask  Task?             @relation("SubTasks", fields: [parentTaskId], references: [id])
+  childTasks  Task[]            @relation("SubTasks")
   comments    TaskComment[]
   activityLog TaskActivityLog[]
   subtasks    Subtask[]
   timeEntries TimeEntry[]
   attachments TaskAttachment[]
+  watchers    TaskWatcher[]
+  linkedIssues IssueLink[]      @relation("SourceTask")
+  linkedFrom  IssueLink[]       @relation("TargetTask")
+
+  @@index([assigneeId, status])
+  @@index([teamId, status])
+  @@index([status, updatedAt])
+  @@index([dueDate])
+  @@index([sprintId])
+  @@index([epicId])
+  @@index([projectId])
+  @@index([componentId])
+  @@index([versionId])
+  @@index([issueType])
+  @@index([parentTaskId])
 }
 
 model Channel {
@@ -237,6 +297,30 @@ model Message {
   threadMessage Thread?       @relation("ThreadMessage")
 
   reactions MessageReaction[]
+
+  @@index([channelId, createdAt])
+  @@index([senderId, createdAt])
+}
+
+/// Direct one-to-one messages between users (DM)
+model DirectMessage {
+  id          String   @id @default(uuid())
+  text        String
+  isPinned    Boolean  @default(false)
+  isSystem    Boolean  @default(false)
+  attachments Json?
+  mentions    String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  senderId   String
+  receiverId String
+
+  sender   User @relation("SentDirectMessages", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedDirectMessages", fields: [receiverId], references: [id])
+
+  @@index([senderId, receiverId, createdAt])
+  @@index([receiverId, senderId, createdAt])
 }
 
 // New models for additional features
@@ -247,6 +331,7 @@ model Invite {
   token     String    @unique
   role      String    @default("employee")
   teamId    String? // Optional initial team
+  teamRole  String? // Optional initial role in the team
   invitedBy String // User ID who sent the invite
   expiresAt DateTime
   usedAt    DateTime?
@@ -920,39 +1005,7 @@ model WorkflowRun {
 // แก้ปัญหา: ไม่รู้ productivity, Meeting effectiveness, Team health
 // ใช้งานจริง: Dashboard, Reports, Insights สำหรับ manager
 
-model TeamAnalytics {
-  id                String   @id @default(uuid())
-  date              DateTime @default(now())
-  metrics           Json // { meetings: number, tasksCompleted: number, codeCommits: number, etc. }
-  productivityScore Float? // 0-100
-  meetingHours      Float?
-  activeMembers     Int?
-  createdAt         DateTime @default(now())
 
-  teamId String
-  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-
-  @@unique([teamId, date])
-  @@index([teamId])
-  @@index([date])
-}
-
-model ProductivityMetrics {
-  id               String   @id @default(uuid())
-  userId           String
-  date             DateTime @default(now())
-  tasksCompleted   Int      @default(0)
-  meetingsAttended Int      @default(0)
-  codeCommits      Int      @default(0)
-  messagesSent     Int      @default(0)
-  hoursWorked      Float    @default(0)
-  focusTime        Float? // Hours in focus mode
-  createdAt        DateTime @default(now())
-
-  @@unique([userId, date])
-  @@index([userId])
-  @@index([date])
-}
 
 // ============================================
 // Knowledge Base / Wiki
@@ -975,7 +1028,6 @@ model WikiArticle {
   creator     User                 @relation("WikiCreator", fields: [createdBy], references: [id])
   versions    WikiArticleVersion[]
   comments    WikiComment[]
-  permissions WikiPermission[]
 
   @@index([teamId])
   @@index([createdBy])
@@ -1016,22 +1068,7 @@ model WikiComment {
   @@index([createdBy])
 }
 
-model WikiPermission {
-  id         String   @id @default(uuid())
-  articleId  String
-  userId     String?
-  teamId     String?
-  permission String   @default("view") // view, edit, delete
-  createdAt  DateTime @default(now())
 
-  article WikiArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
-  user    User?       @relation("WikiPermissionUser", fields: [userId], references: [id], onDelete: Cascade)
-  team    Team?       @relation("WikiPermissionTeam", fields: [teamId], references: [id], onDelete: Cascade)
-
-  @@unique([articleId, userId])
-  @@unique([articleId, teamId])
-  @@index([articleId])
-}
 
 // ============================================
 // Announcements
@@ -1070,4 +1107,156 @@ model AnnouncementRead {
 
   @@unique([announcementId, userId])
   @@index([userId])
+}
+
+// ============================================
+// Project Management (Jira-like)
+// ============================================
+model Project {
+  id          String   @id @default(uuid())
+  key         String   // Project key (e.g., "ABC", "PROJ")
+  name        String
+  description String?
+  color       String? // Hex color for visual identification
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id])
+  tasks  Task[]
+
+  @@unique([teamId, key])
+  @@index([teamId])
+}
+
+model Component {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id])
+  tasks  Task[]
+
+  @@unique([teamId, name])
+  @@index([teamId])
+}
+
+model Version {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  released    Boolean   @default(false)
+  releaseDate DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id])
+  tasks  Task[]
+
+  @@index([teamId])
+  @@index([released])
+}
+
+// ============================================
+// Task Watchers & Issue Linking
+// ============================================
+
+
+model TaskTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  title       String
+  content     String?
+  priority    String   @default("medium")
+  issueType   String   @default("task")
+  tags        String[]
+  storyPoints Int?
+  estimate    Float?
+  teamId      String?
+  projectId   String?
+  componentId String?
+  versionId   String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([createdById])
+}
+
+model TaskWatcher {
+  id        String   @id @default(uuid())
+  taskId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@index([taskId])
+  @@index([userId])
+}
+
+model IssueLink {
+  id        String   @id @default(uuid())
+  type      String   // blocks, relates, duplicates, clones
+  sourceId  String   // Source task ID
+  targetId  String   // Target task ID
+  createdAt DateTime @default(now())
+
+  source Task @relation("SourceTask", fields: [sourceId], references: [id], onDelete: Cascade)
+  target Task @relation("TargetTask", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, targetId, type])
+  @@index([sourceId])
+  @@index([targetId])
+}
+
+// ============================================
+// Role Permissions
+// ============================================
+// Granular permission management per role per organization
+
+model RolePermission {
+  id             String   @id @default(uuid())
+  organizationId String
+  role           String   // org_owner, admin, manager, employee, member
+  resource       String   // users, teams, meetings, tasks, channels, reports, drive, settings, audit, invites, announcements
+  action         String   // view, create, edit, delete, manage
+  allowed        Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, role, resource, action])
+  @@index([organizationId, role])
+}
+
+// ============================================
+// Configurable Workflow Statuses
+// ============================================
+model TaskWorkflowStatus {
+  id       String @id @default(uuid())
+  name     String // Display name (e.g., "To Do")
+  key      String // Machine key (e.g., "todo") — matches Task.status values
+  color    String @default("#94a3b8") // Hex color for UI
+  category String @default("todo") // todo | doing | done
+  position Int    @default(0) // Sort order
+  teamId   String? // null = global default
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team Team? @relation(fields: [teamId], references: [id])
+
+  @@unique([teamId, key])
+  @@index([teamId, position])
 }

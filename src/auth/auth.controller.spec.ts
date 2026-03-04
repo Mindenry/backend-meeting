@@ -7,11 +7,9 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 
 describe('AuthController', () => {
   let controller: AuthController;
-  let authService: AuthService;
 
   const mockAuthService = {
     login: jest.fn(),
-    register: jest.fn(),
     refreshToken: jest.fn(),
     logout: jest.fn(),
     validateUser: jest.fn(),
@@ -26,8 +24,6 @@ describe('AuthController', () => {
   const mockPrismaService = {
     user: {
       findUnique: jest.fn(),
-    },
-    user: {
       create: jest.fn(),
     },
     teamMember: {
@@ -62,7 +58,6 @@ describe('AuthController', () => {
       .compile();
 
     controller = module.get<AuthController>(AuthController);
-    authService = module.get<AuthService>(AuthService);
   });
 
   afterEach(() => {
@@ -83,7 +78,7 @@ describe('AuthController', () => {
           id: '1',
           email: 'test@example.com',
           name: 'Test User',
-          role: 'employee',
+          role: 'member',
           organizationId: 'org1',
         },
       };
@@ -93,7 +88,8 @@ describe('AuthController', () => {
         id: '1',
       });
 
-      const result = await controller.login(loginDto);
+      const mockReq = {};
+      const result = await controller.login(loginDto, mockReq);
 
       expect(result).toHaveProperty('accessToken');
       expect(result).toHaveProperty('refreshToken');
@@ -105,30 +101,6 @@ describe('AuthController', () => {
     });
   });
 
-  describe('register', () => {
-    it('should register a new user', async () => {
-      const registerDto = {
-        email: 'test@example.com',
-        password: 'password123',
-        name: 'Test User',
-      };
-
-      const mockUser = {
-        id: '1',
-        email: 'test@example.com',
-        name: 'Test User',
-      };
-
-      mockAuthService.register.mockResolvedValue(mockUser);
-
-      const result = await controller.register(registerDto);
-
-      expect(result).toBeDefined();
-      expect(mockAuthService.register).toHaveBeenCalledWith(
-        registerDto.email,
-        registerDto.password,
-        registerDto.name,
-      );
-    });
-  });
+  // Registration endpoint has been removed from AuthController;
+  // corresponding tests are no longer applicable.
 });

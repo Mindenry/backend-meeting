@@ -6,10 +6,13 @@ import {
   Param,
   Patch,
   Delete,
+  UseGuards,
 } from '@nestjs/common';
 import { TaskCommentsService } from './task-comments.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('tasks/:taskId/comments')
+@UseGuards(JwtAuthGuard)
 export class TaskCommentsController {
   constructor(private readonly commentsService: TaskCommentsService) {}
 

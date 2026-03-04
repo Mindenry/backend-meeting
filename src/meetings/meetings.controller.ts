@@ -8,14 +8,29 @@ import {
   Post,
   Query,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { MeetingsService } from './meetings.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CreateMeetingDto } from './dto/create-meeting.dto';
+import { UpdateMeetingDto } from './dto/update-meeting.dto';
 
+// @ts-ignore - Optional Swagger decorators
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '../common/decorators/swagger.decorators';
+
+@ApiTags('meetings')
 @Controller('meetings')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth('JWT-auth')
 export class MeetingsController {
   constructor(private readonly meetingsService: MeetingsService) {}
+
+  @Get(':id/livekit-token')
+  @ApiOperation({ summary: 'Get LiveKit token' })
+  @ApiResponse({ status: 200, description: 'LiveKit token generated successfully' })
+  getLiveKitToken(@Param('id') id: string, @Request() req) {
+    return this.meetingsService.generateLivekitToken(id, req.user.id, req.user.name);
+  }
 
   @Get()
   findAll(
@@ -31,49 +46,22 @@ export class MeetingsController {
   }
 
   @Post()
-  create(
-    @Body()
-    body: {
-      title: string;
-      description?: string;
-      startTime: string;
-      endTime: string;
-      password?: string;
-      waitingRoom?: boolean;
-      allowScreenShare?: boolean;
-      status?: string;
-      teamId?: string | null;
-      hostId: string;
-      isRecurring?: boolean;
-      recurringPattern?: string;
-      recurringDays?: number[];
-      recurringEndDate?: string;
-    },
-  ) {
+  @ApiOperation({ summary: 'Create a new meeting', description: 'Create a new meeting with optional recurring settings' })
+  @ApiResponse({ status: 201, description: 'Meeting created successfully' })
+  create(@Body() createMeetingDto: CreateMeetingDto) {
     return this.meetingsService.create({
-      ...body,
-      startTime: new Date(body.startTime),
-      endTime: new Date(body.endTime),
-      recurringEndDate: body.recurringEndDate ? new Date(body.recurringEndDate) : undefined,
+      ...createMeetingDto,
+      startTime: new Date(createMeetingDto.startTime),
+      endTime: new Date(createMeetingDto.endTime),
+      recurringEndDate: createMeetingDto.recurringEndDate ? new Date(createMeetingDto.recurringEndDate) : undefined,
     });
   }
 
   @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Body()
-    body: Partial<{
-      title: string;
-      description?: string;
-      startTime: string;
-      endTime: string;
-      waitingRoom: boolean;
-      allowScreenShare: boolean;
-      status: string;
-      teamId?: string | null;
-    }>,
-  ) {
-    const { startTime, endTime, ...rest } = body;
+  @ApiOperation({ summary: 'Update a meeting', description: 'Update meeting properties. Only provided fields will be updated.' })
+  @ApiResponse({ status: 200, description: 'Meeting updated successfully' })
+  update(@Param('id') id: string, @Body() updateMeetingDto: UpdateMeetingDto) {
+    const { startTime, endTime, ...rest } = updateMeetingDto;
     return this.meetingsService.update(id, {
       ...rest,
       startTime: startTime ? new Date(startTime) : undefined,

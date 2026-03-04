@@ -16,6 +16,7 @@ export class InvitesService {
     invitedBy: string;
     role?: string;
     teamId?: string;
+    teamRole?: string;
     expiresInDays?: number;
   }) {
     // Check if user already exists
@@ -53,6 +54,7 @@ export class InvitesService {
         invitedBy: data.invitedBy,
         role: data.role || 'employee',
         teamId: data.teamId,
+        teamRole: data.teamRole,
         expiresAt,
       },
     });

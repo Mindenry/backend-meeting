@@ -1,7 +1,9 @@
 import { Controller, Post, UseGuards } from '@nestjs/common';
 import { MeetingRemindersService } from './meeting-reminders.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('meeting-reminders')
+@UseGuards(JwtAuthGuard)
 export class MeetingRemindersController {
   constructor(private readonly remindersService: MeetingRemindersService) {}
 

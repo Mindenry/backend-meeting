@@ -1,20 +1,33 @@
-import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class ChannelsService {
+    private readonly logger = new Logger(ChannelsService.name);
+
     constructor(
         private readonly prisma: PrismaService,
         @Inject(forwardRef(() => EventsGateway))
         private readonly eventsGateway: EventsGateway,
     ) { }
 
-    findAll(params?: { teamId?: string }) {
-        const { teamId } = params || {};
+    findAll(params?: { teamId?: string; includeMeeting?: boolean }) {
+        const { teamId, includeMeeting = false } = params || {};
         return this.prisma.channel.findMany({
             where: {
                 teamId: teamId || undefined,
+                ...(includeMeeting
+                    ? {}
+                    : {
+                        NOT: {
+                            OR: [
+                                { type: 'meeting' },
+                                { name: { startsWith: 'meeting-' } },
+                            ],
+                        },
+                    }),
             },
             include: {
                 team: true,
@@ -42,7 +55,6 @@ export class ChannelsService {
             },
         });
         if (!channel) throw new NotFoundException('Channel not found');
-        // Reverse messages so oldest first
         channel.messages = channel.messages.reverse();
         return channel;
     }
@@ -79,5 +91,35 @@ export class ChannelsService {
         await this.prisma.channel.delete({ where: { id } });
         this.eventsGateway.emitChannelDeleted(id);
         return { success: true };
+    }
+
+    @Cron(CronExpression.EVERY_DAY_AT_1AM)
+    async cleanupMeetingChatHistory() {
+        const retentionDays = Number(process.env.MEETING_CHAT_RETENTION_DAYS || 14);
+        const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+
+        const meetingChannels = await this.prisma.channel.findMany({
+            where: {
+                OR: [
+                    { type: 'meeting' },
+                    { name: { startsWith: 'meeting-' } },
+                ],
+            },
+            select: { id: true },
+        });
+
+        if (meetingChannels.length === 0) return;
+
+        const channelIds = meetingChannels.map((c) => c.id);
+        const deleted = await this.prisma.message.deleteMany({
+            where: {
+                channelId: { in: channelIds },
+                createdAt: { lt: cutoff },
+            },
+        });
+
+        if (deleted.count > 0) {
+            this.logger.log(`Cleaned ${deleted.count} meeting chat messages older than ${retentionDays} days`);
+        }
     }
 }

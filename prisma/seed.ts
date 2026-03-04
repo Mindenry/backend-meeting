@@ -23,29 +23,26 @@ async function main() {
 
   // Clear existing data (in correct order to respect foreign keys)
   console.log('🧹 Clearing existing data...');
-  // Data from Incoming
-  await prisma.messageRead.deleteMany();
-  await prisma.message.deleteMany();
-  await prisma.channel.deleteMany();
-  await prisma.taskComment.deleteMany();
-  await prisma.taskActivityLog.deleteMany();
-  await prisma.task.deleteMany();
-  await prisma.notification.deleteMany();
-  await prisma.meetingParticipant.deleteMany();
-  await prisma.meeting.deleteMany();
-  await prisma.invite.deleteMany();
-  await prisma.auditLog.deleteMany();
-  await prisma.teamMember.deleteMany();
-  await prisma.team.deleteMany();
-
-  // Data from HEAD
-  await prisma.refreshToken.deleteMany();
-  // Tables in both or already covered above:
-  // await prisma.auditLog.deleteMany(); // Covered
-  // await prisma.notification.deleteMany(); // Covered
-
-  await prisma.user.deleteMany();
-  await prisma.organization.deleteMany();
+  const modelsToWipe = [
+    'directMessage', 'messageReaction', 'thread', 'notificationPreference',
+    'notificationDigest', 'refreshToken', 'documentFolder', 'document',
+    'documentVersion', 'documentPermission', 'meetingRecording',
+    'meetingMinutes', 'reminderRecipient', 'reminder', 'standupEntry',
+    'driveFileVersion', 'driveEntry', 'subtask', 'taskAttachment',
+    'meetingReminder', 'workflowRun', 'workflow', 'wikiArticleVersion',
+    'wikiComment', 'taskTemplate', 'taskWatcher', 'issueLink',
+    'rolePermission', 'taskWorkflowStatus', 'epic', 'version', 'component',
+    'sprint', 'project', 'wikiArticle', 'holiday', 'workHours', 'timeEntry',
+    'meetingParticipant', 'auditLog', 'notification', 'messageRead',
+    'taskActivityLog', 'taskComment', 'invite', 'message', 'channel',
+    'task', 'meeting', 'announcementRead', 'announcement', 'teamMember',
+    'team', 'user', 'organization'
+  ];
+  for (const model of modelsToWipe) {
+    if ((prisma as any)[model]) {
+      await (prisma as any)[model].deleteMany();
+    }
+  }
 
   // Hash password helper
   const hashPassword = async (password: string): Promise<string> => {
@@ -1333,6 +1330,461 @@ Contact support if you have urgent matters.`,
     }),
   ]);
   console.log(`✅ Created ${workHours.length} work hours`);
+
+  
+  // --- MISSING TABLE SEEDS ADDED AUTOMATICALLY ---
+  console.log('📦 Creating missing mock data...');
+  
+  // 21. Direct Messages
+  const directMessages = await prisma.directMessage.create({
+    data: {
+      text: 'Hey, how is the project going?',
+      senderId: users[0].id,
+      receiverId: users[1].id,
+    }
+  });
+  
+  // 22. Threads
+  const threads = await prisma.thread.create({
+    data: {
+      messageId: messages[0].id,
+      channelId: channels[0].id,
+    }
+  });
+  
+  // 23. Message Reactions
+  await prisma.messageReaction.create({
+    data: {
+      emoji: '👍',
+      messageId: messages[0].id,
+      userId: users[0].id,
+    }
+  });
+
+  // 24. Notification Preferences
+  await prisma.notificationPreference.create({
+    data: {
+      userId: users[0].id,
+      desktopEnabled: true,
+      soundEnabled: true,
+      badgeEnabled: true,
+      mentionDelivery: 'realtime',
+    }
+  });
+  
+  // 25. Notification Digest
+  await prisma.notificationDigest.create({
+    data: {
+      userId: users[0].id,
+      digestType: 'daily',
+      periodStart: new Date(today.getTime() - 24 * 60 * 60 * 1000),
+      periodEnd: new Date(),
+      byType: {},
+      highlights: {},
+    }
+  });
+
+  // 26. Document Folder
+  const docFolder = await prisma.documentFolder.create({
+    data: {
+      name: 'Project Specs',
+      teamId: engineeringTeam.id,
+      createdBy: users[0].id,
+    }
+  });
+
+  // 27. Documents
+  const document = await prisma.document.create({
+    data: {
+      name: 'Q1 Goals',
+      description: 'We need to finish the new UI.',
+      fileUrl: 'https://example.com/doc',
+      fileSize: 1024,
+      mimeType: 'text/markdown',
+      folderId: docFolder.id,
+      createdBy: users[0].id,
+      teamId: engineeringTeam.id,
+    }
+  });
+
+  // 28. Document Versions
+  await prisma.documentVersion.create({
+    data: {
+      documentId: document.id,
+      version: 1,
+      fileUrl: 'https://example.com/doc',
+      fileSize: 1024,
+      mimeType: 'text/markdown',
+      createdBy: users[0].id,
+    }
+  });
+
+  // 29. Document Permissions
+  await prisma.documentPermission.create({
+    data: {
+      documentId: document.id,
+      userId: users[1].id,
+      permission: 'write',
+    }
+  });
+
+  // 30. Meeting Recordings & Minutes
+  await prisma.meetingRecording.create({
+    data: {
+      meetingId: meetings[3].id,
+      fileUrl: 'https://example.com/recording.mp4',
+      duration: 3600,
+      fileSize: 2048,
+      createdBy: users[0].id,
+    }
+  });
+  
+  await prisma.meetingMinutes.create({
+    data: {
+      title: 'Standup Minutes',
+      meetingId: meetings[3].id,
+      content: 'We discussed X, Y, Z.',
+      createdBy: users[0].id,
+    }
+  });
+
+  // 31. Reminders
+  const reminder = await prisma.reminder.create({
+    data: {
+      title: 'Check server logs',
+      type: 'custom',
+      remindAt: new Date(today.getTime() + 24 * 60 * 60 * 1000),
+      createdBy: users[0].id,
+    }
+  });
+
+  await prisma.reminderRecipient.create({
+    data: {
+      reminderId: reminder.id,
+      userId: users[1].id,
+    }
+  });
+
+  // 32. Standup Entries
+  await prisma.standupEntry.create({
+    data: {
+      userId: users[0].id,
+      teamId: engineeringTeam.id,
+      date: today,
+      rawText: 'Yesterday: stuff. Today: things. Blockers: none.',
+      yesterday: ['Worked on DB stuff'],
+      today: ['Seeding mock data'],
+      blockers: ['None'],
+    }
+  });
+
+  // 33. Drive Entries & Versions
+  const driveEntry = await prisma.driveEntry.create({
+    data: {
+      name: 'Logo.png',
+      isFolder: false,
+      teamId: engineeringTeam.id,
+      createdById: users[0].id,
+    }
+  });
+
+  await prisma.driveFileVersion.create({
+    data: {
+      entryId: driveEntry.id,
+      version: 1,
+      storageKey: 'logo.png',
+      size: 1024,
+      mimeType: 'image/png',
+      createdById: users[0].id,
+    }
+  });
+
+  // 34. Task Additions (Subtasks, Attachments, IssueLinks)
+  await prisma.subtask.create({
+    data: {
+      taskId: tasks[0].id,
+      title: 'Setup DB',
+      isCompleted: false,
+    }
+  });
+
+  await prisma.taskAttachment.create({
+    data: {
+      taskId: tasks[0].id,
+      name: 'spec.pdf',
+      url: 'https://example.com/spec.pdf',
+      size: 2048,
+      userId: users[0].id,
+    }
+  });
+
+  if (tasks.length > 1) {
+    await prisma.issueLink.create({
+      data: {
+        sourceId: tasks[0].id,
+        targetId: tasks[1].id,
+        type: 'blocks',
+      }
+    });
+  }
+
+  // 35. Meeting Reminders
+  await prisma.meetingReminder.create({
+    data: {
+      meetingId: meetings[0].id,
+      userId: users[0].id,
+      minutesBefore: 15,
+    }
+  });
+
+  // 36. Workflows
+  const workflow = await prisma.workflow.create({
+    data: {
+      name: 'Auto-assign bugs',
+      trigger: 'task_created',
+      conditions: { type: 'bug' },
+      actions: { assignTo: users[0].id },
+      teamId: engineeringTeam.id,
+      createdBy: users[0].id,
+    }
+  });
+
+  await prisma.workflowRun.create({
+    data: {
+      workflowId: workflow.id,
+      status: 'success',
+      startedAt: new Date(),
+      completedAt: new Date(),
+      userId: users[0].id,
+    }
+  });
+
+  // 37. Wiki Additions
+  await prisma.wikiArticleVersion.create({
+    data: {
+      articleId: wikiArticles[0].id,
+      version: 1,
+      title: wikiArticles[0].id,
+      content: wikiArticles[0].content,
+      createdBy: users[0].id,
+    }
+  });
+
+  await prisma.wikiComment.create({
+    data: {
+      articleId: wikiArticles[0].id,
+      content: 'Looks good!',
+      createdBy: users[0].id,
+    }
+  });
+
+  // 38. Task Templates
+  await prisma.taskTemplate.create({
+    data: {
+      name: 'Standard Bug',
+      title: 'Bug: ',
+      description: 'Describe the bug here.',
+      teamId: engineeringTeam.id,
+      createdById: users[0].id,
+    }
+  });
+
+  await prisma.taskWatcher.create({
+    data: {
+      taskId: tasks[0].id,
+      userId: users[0].id,
+    }
+  });
+
+  // 39. Roles & Priorities
+  await prisma.rolePermission.create({
+    data: {
+      organizationId: organization.id,
+      role: 'admin',
+      resource: 'users',
+      action: 'create',
+    }
+  });
+
+  await prisma.taskWorkflowStatus.create({
+    data: {
+      name: 'To Do',
+      key: 'todo',
+      category: 'todo',
+      position: 1,
+      teamId: engineeringTeam.id,
+    }
+  });
+
+  // 40. Refresh Token
+  await prisma.refreshToken.create({
+    data: {
+      userId: users[0].id,
+      token: 'sample_refresh_token_12345',
+      expiresAt: new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
+    }
+  });
+
+  // 41. Agile/Project Management Additions
+  const project = await prisma.project.create({
+    data: {
+      name: 'Alpha Project',
+      key: 'ALPHA',
+      description: 'The first Alpha phase project',
+      teamId: engineeringTeam.id,
+    }
+  });
+
+  const sprint = await prisma.sprint.create({
+    data: {
+      name: 'Sprint 1',
+      goal: 'Complete auth flow',
+      startDate: new Date(),
+      endDate: new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000),
+      teamId: engineeringTeam.id,
+      createdById: users[0].id,
+      status: 'active'
+    }
+  });
+
+  const epic = await prisma.epic.create({
+    data: {
+      name: 'User Authentication',
+      description: 'Everything related to login and signup',
+      status: 'active',
+      teamId: engineeringTeam.id,
+      createdById: users[0].id,
+    }
+  });
+
+  const component = await prisma.component.create({
+    data: {
+      name: 'Frontend Auth API',
+      description: 'React components for Auth',
+      teamId: engineeringTeam.id,
+    }
+  });
+
+  const version = await prisma.version.create({
+    data: {
+      name: 'v1.0.0',
+      description: 'First public release',
+      teamId: engineeringTeam.id,
+    }
+  });
+
+  const holiday = await prisma.holiday.create({
+    data: {
+      name: 'New Year',
+      nameEn: 'New Year',
+      date: new Date('2026-01-01'),
+      organizationId: organization.id,
+      type: 'official',
+      country: 'TH',
+    }
+  });
+
+  console.log('✅ Created missing dependencies');
+
+  
+  // --- FILLING OPTIONAL (NULL) FIELDS FOR COMPLETENESS ---
+  console.log('🔄 Filling optional fields to remove nulls...');
+  
+  // 1. Update Users
+  for (let i = 0; i < users.length; i++) {
+    await prisma.user.update({
+      where: { id: users[i].id },
+      data: {
+        displayName: users[i].name.split(' ')[0] + ' (Dev)',
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(users[i].name)}&background=random`,
+        department: 'Engineering',
+        position: 'Software Engineer',
+      }
+    });
+  }
+
+  // 2. Update Meetings
+  for (const m of meetings) {
+    await prisma.meeting.update({
+      where: { id: m.id },
+      data: {
+        actualStartTime: m.startTime,
+        actualEndTime: m.endTime || new Date(m.startTime.getTime() + 60 * 60 * 1000),
+        summary: 'Discussed project updates and blockers.',
+        aiSummary: 'The team aligned on the Q1 goals. No major blockers identified.',
+        transcript: 'Speaker 1: Hello. Speaker 2: Hi everyone. ...',
+        teamId: engineeringTeam.id,
+      }
+    });
+  }
+
+  // 3. Update Tasks
+  for (let i = 0; i < tasks.length; i++) {
+    await prisma.task.update({
+      where: { id: tasks[i].id },
+      data: {
+        resolution: tasks[i].status === 'done' ? 'Done' : null,
+        storyPoints: Math.floor(Math.random() * 8) + 1,
+        estimate: Math.floor(Math.random() * 10) + 2,
+        reporterId: users[0].id,
+        sprintId: sprint.id,
+        epicId: epic.id,
+        projectId: project.id,
+        componentId: component.id,
+        versionId: version.id,
+      }
+    });
+  }
+
+  // 4. Update Messages & DMs
+  for (const msg of messages) {
+    if (Math.random() > 0.5) {
+      await prisma.message.update({
+        where: { id: msg.id },
+        data: {
+          attachments: [{ name: 'screenshot.png', url: 'https://example.com/screenshot.png' }]
+        }
+      });
+    }
+  }
+
+  // 5. Update other entities loosely
+  await prisma.auditLog.updateMany({
+    data: {
+      userName: 'System Admin',
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+      ipAddress: '192.168.1.1'
+    }
+  });
+
+  await prisma.documentFolder.updateMany({
+    data: { description: 'Main folder for project documentation.' }
+  });
+
+  await prisma.meetingMinutes.updateMany({
+    data: {
+      actionItems: ['Fix login bug', 'Update schema'],
+      decisions: ['Use PostgreSQL', 'Deploy to AWS']
+    }
+  });
+
+  await prisma.sprint.updateMany({
+    data: { description: 'First sprint of the new project phase.' }
+  });
+
+  await prisma.epic.updateMany({
+    data: { color: '#FF5733' }
+  });
+
+  await prisma.project.updateMany({
+    data: { color: '#3366FF' }
+  });
+
+  await prisma.version.updateMany({
+    data: { releaseDate: new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000) }
+  });
+
+  console.log('✅ Filled missing fields');
 
   console.log('\n🎉 Seed completed successfully!');
   console.log('\n📊 Summary:');

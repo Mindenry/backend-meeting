@@ -4,11 +4,15 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+// @ts-ignore - Optional Swagger decorators
+import { ApiTags, ApiBearerAuth } from '../common/decorators/swagger.decorators';
 import { StandupsService } from './standups.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+@ApiTags('standups')
 @Controller('standups')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth('JWT-auth')
 export class StandupsController {
   constructor(private readonly standupsService: StandupsService) {}
 

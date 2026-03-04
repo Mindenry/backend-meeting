@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { StandupsService } from '../standups/standups.service';
+import { WorkflowsService } from '../workflows/workflows.service';
 
 @Injectable()
 export class MessagesService {
@@ -12,6 +13,8 @@ export class MessagesService {
         private readonly eventsGateway: EventsGateway,
         private readonly notificationsService: NotificationsService,
         private readonly standupsService: StandupsService,
+        @Inject(forwardRef(() => WorkflowsService))
+        private readonly workflowsService: WorkflowsService,
     ) { }
 
     async findByChannel(channelId: string, params?: { limit?: number; before?: string; userId?: string }) {
@@ -190,6 +193,120 @@ export class MessagesService {
         return totalMessages - readMessages;
     }
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // DIRECT MESSAGES (DM)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  async createDirectMessage(data: {
+    id: string;
+    text: string;
+    senderId: string;
+    receiverId: string;
+    createdAt?: string;
+    attachments?: Array<{ url: string; name: string; type: string }>;
+    mentions?: string[];
+  }) {
+    // Persist DM using existing client-generated ID so frontend can reconcile
+    const created = await this.prisma.directMessage.create({
+      data: {
+        id: data.id,
+        text: data.text,
+        senderId: data.senderId,
+        receiverId: data.receiverId,
+        attachments: data.attachments ? (data.attachments as any) : null,
+        mentions: data.mentions || [],
+        ...(data.createdAt
+          ? { createdAt: new Date(data.createdAt) }
+          : {}),
+      },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        receiver: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    // Create notification for receiver so it appears in Notifications page
+    try {
+      await this.notificationsService.notifyDirectMessage(
+        data.receiverId,
+        data.senderId,
+        data.text,
+        created.id,
+      );
+    } catch (err) {
+      console.error('Failed to create direct message notification:', err);
+    }
+
+    return created;
+  }
+
+  async getDirectMessages(
+    userId: string,
+    otherUserId: string,
+    params?: { limit?: number; before?: string },
+  ) {
+    if (!userId || !otherUserId) {
+      throw new Error('Both userId and otherUserId are required');
+    }
+
+    const { limit = 100, before } = params || {};
+
+    // Query messages where current user is either sender or receiver
+    // and the other user is the opposite party
+    const where: any = {
+      OR: [
+        { senderId: userId, receiverId: otherUserId },
+        { senderId: otherUserId, receiverId: userId },
+      ],
+    };
+
+    if (before) {
+      where.createdAt = { lt: new Date(before) };
+    }
+
+    console.log(`[DM] Querying messages between ${userId} and ${otherUserId}, limit: ${limit}`);
+
+    const messages = await this.prisma.directMessage.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+      include: {
+        sender: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+        receiver: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+      },
+    });
+
+    console.log(`[DM] Found ${messages.length} messages between ${userId} and ${otherUserId}`);
+
+    return messages;
+  }
+
     async create(data: {
         text: string;
         channelId: string;
@@ -255,6 +372,23 @@ export class MessagesService {
                     );
                 
                 await Promise.allSettled(notifications);
+
+                // Trigger workflow for message_mentioned
+                try {
+                    await this.workflowsService.triggerWorkflow('message_mentioned', {
+                        messageId: message.id,
+                        channelId: channel.id,
+                        channelName: channel.name,
+                        teamId: channel.teamId,
+                        senderId: message.senderId,
+                        senderName: message.sender.name,
+                        text: data.text,
+                        mentions: data.mentions,
+                        createdAt: message.createdAt,
+                    });
+                } catch (err) {
+                    console.error('Failed to trigger workflow:', err);
+                }
             } catch (err) {
                 console.error('Failed to create mention notifications:', err);
             }

@@ -10,17 +10,33 @@ import {
   Request,
   Patch,
 } from '@nestjs/common';
+// @ts-ignore - Optional Swagger decorators
+import { ApiTags, ApiBearerAuth } from '../common/decorators/swagger.decorators';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { WikiService } from './wiki.service';
+import { PrismaService } from '../prisma/prisma.service';
 
-@Controller('api/wiki')
+@ApiTags('wiki')
+@Controller('wiki')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth('JWT-auth')
 export class WikiController {
-  constructor(private readonly wikiService: WikiService) {}
+  constructor(
+    private readonly wikiService: WikiService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Get('articles')
   async findAll(@Request() req) {
-    return this.wikiService.findAll(req.user.id, req.user.teamId);
+    // Get user's teams from database
+    const memberships = await this.prisma.teamMember.findMany({
+      where: { userId: req.user.id },
+      include: { team: true },
+    });
+    const teamIds = memberships.map((m) => m.team.id);
+    
+    // Pass all team IDs to the service
+    return this.wikiService.findAll(req.user.id, teamIds);
   }
 
   @Get('articles/:id')

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { WorkflowsService } from './workflows.service';
 import { WorkflowsController } from './workflows.controller';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -11,10 +11,10 @@ import { CommonModule } from '../common/common.module';
 @Module({
   imports: [
     PrismaModule,
-    EventsModule,
+    forwardRef(() => EventsModule),
     NotificationsModule,
-    TasksModule,
-    MeetingsModule,
+    forwardRef(() => TasksModule),
+    forwardRef(() => MeetingsModule),
     CommonModule,
   ],
   providers: [WorkflowsService],

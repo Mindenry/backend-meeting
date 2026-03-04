@@ -4,7 +4,10 @@ import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { setupSwagger } from './config/swagger.config';
 import * as express from 'express';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -17,6 +20,7 @@ async function bootstrap() {
 
   // Global interceptors
   app.useGlobalInterceptors(
+    new LoggingInterceptor(),
     new TransformInterceptor(),
     new TimeoutInterceptor(),
   );
@@ -109,10 +113,18 @@ async function bootstrap() {
 
   // Security headers
   app.use((req, res, next) => {
-    // Prevent clickjacking (allow iframe for ngrok testing)
-    const isNgrok = req.headers.host?.includes('ngrok') || req.headers.origin?.includes('ngrok');
-    res.setHeader('X-Frame-Options', isNgrok ? 'SAMEORIGIN' : 'DENY');
-    
+    const nodeEnv = process.env.NODE_ENV || 'development';
+
+    // Detect ngrok domain for relaxed CSP
+    const isNgrok =
+      req.headers.host?.includes('ngrok') || req.headers.origin?.includes('ngrok');
+
+    // NOTE:
+    // เดิมมีการตั้งค่า X-Frame-Options เป็น DENY/SAMEORIGIN ซึ่งทำให้ embed หน้า backend (เช่น PDF, Shared Drive)
+    // ผ่าน iframe จาก frontend (port 8080) ไม่ได้ และเกิด error "Refused to display ... X-Frame-Options 'DENY'".
+    // เพื่อให้ preview PDF/ไฟล์แนบใน Tasks และ Shared Drive ใช้งานได้ในทุกสภาพแวดล้อม
+    // เราจึงถอด X-Frame-Options ออก และใช้ Content-Security-Policy + auth แทนการกัน clickjacking
+
     // Prevent MIME type sniffing
     res.setHeader('X-Content-Type-Options', 'nosniff');
     
@@ -122,7 +134,7 @@ async function bootstrap() {
     // Content Security Policy (relaxed for ngrok)
     const cspDirectives = isNgrok
       ? "default-src 'self' https://*.ngrok-free.app https://*.ngrok.io https://*.ngrok.app; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.ngrok-free.app https://*.ngrok.io https://*.ngrok.app ws://*.ngrok-free.app wss://*.ngrok-free.app ws://*.ngrok.io wss://*.ngrok.io;"
-      : "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';";
+      : "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:7880 wss://localhost:7880 ws: wss:;";
     res.setHeader('Content-Security-Policy', cspDirectives);
     
     // Referrer Policy
@@ -140,14 +152,50 @@ async function bootstrap() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+  // Add LiveKit proxy here
+  const livekitProxy = createProxyMiddleware({
+    target: 'http://localhost:7880',
+    changeOrigin: true,
+    ws: true,
+  });
+  app.use('/rtc', livekitProxy);
+
+  app.use('/twirp', createProxyMiddleware({
+    target: 'http://localhost:7880',
+    changeOrigin: true,
+  }));
+
   // Set global prefix for API routes (but exclude WebSocket)
   app.setGlobalPrefix('api', {
     exclude: ['socket.io'],
   });
 
+  // Setup Swagger (only in development or if enabled)
+  if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_SWAGGER === 'true') {
+    try {
+      setupSwagger(app);
+      logger.log(`📚 Swagger documentation available at: http://localhost:${process.env.PORT ?? 3000}/api/docs`);
+    } catch (error) {
+      logger.warn('Swagger setup failed (packages may not be installed):', error.message);
+      logger.warn('To enable Swagger, run: npm install @nestjs/swagger swagger-ui-express --legacy-peer-deps');
+    }
+  }
+
+  // Enable graceful shutdown hooks (Prisma disconnect, socket cleanup, etc.)
+  app.enableShutdownHooks();
+
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
-  
+
+  // Manually wire up WebSocket upgrade for LiveKit proxy
+  // NestJS's app.use() doesn't auto-handle HTTP upgrade events
+  const httpServer = app.getHttpServer();
+  httpServer.on('upgrade', (req, socket, head) => {
+    if (req.url?.startsWith('/rtc')) {
+      (livekitProxy as any).upgrade(req, socket, head);
+    }
+  });
+
   logger.log(`🚀 Application is running on: http://localhost:${port}`);
   logger.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   

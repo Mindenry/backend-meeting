@@ -230,10 +230,21 @@ export class NotificationsService {
   }
 
   async markAllAsRead(userId: string) {
-    return this.prisma.notification.updateMany({
+    const result = await this.prisma.notification.updateMany({
       where: { userId, read: false },
       data: { read: true },
     });
+
+    // Update unread count via WebSocket
+    if (this.notificationsGateway) {
+      const unreadCount = await this.getUnreadCount(userId);
+      await this.notificationsGateway.sendNotificationToUser(userId, {
+        type: 'unread-count-update',
+        count: unreadCount,
+      });
+    }
+
+    return result;
   }
 
   async getUnreadCount(userId: string) {
@@ -249,7 +260,19 @@ export class NotificationsService {
     if (!notification) {
       throw new NotFoundException('Notification not found');
     }
-    return this.prisma.notification.delete({ where: { id } });
+
+    const deleted = await this.prisma.notification.delete({ where: { id } });
+
+    // Update unread count via WebSocket after deletion
+    if (this.notificationsGateway) {
+      const unreadCount = await this.getUnreadCount(userId);
+      await this.notificationsGateway.sendNotificationToUser(userId, {
+        type: 'unread-count-update',
+        count: unreadCount,
+      });
+    }
+
+    return deleted;
   }
 
   async delete(notificationId: string, userId: string) {
@@ -300,6 +323,70 @@ export class NotificationsService {
       link: `/meeting-lobby/${meetingId}`,
       relatedId: meetingId,
       relatedType: 'meeting',
+    });
+  }
+
+  /**
+   * Notify user about a new direct message (DM)
+   */
+  async notifyDirectMessage(
+    receiverId: string,
+    senderId: string,
+    text: string,
+    directMessageId: string,
+  ) {
+    const sender = await this.prisma.user.findUnique({
+      where: { id: senderId },
+      select: { name: true },
+    });
+
+    const preview =
+      (text || '').length > 120 ? `${text.slice(0, 120)}...` : text || 'New message';
+    // Conversation key (so multiple DMs from the same conversation stack into one notification)
+    const conversationId = [receiverId, senderId].sort().join(':');
+
+    // Base payload for DM notification
+    const baseData = {
+      type: 'message',
+      title: `${sender?.name || 'Someone'} sent you a message`,
+      message: preview,
+      link: `/chat`, // Chat page will handle selecting the DM conversation
+      relatedId: conversationId,
+      relatedType: 'direct_message_conversation',
+    };
+
+    // Try to find an existing unread notification for this conversation
+    const existing = await this.prisma.notification.findFirst({
+      where: {
+        userId: receiverId,
+        type: baseData.type,
+        relatedType: baseData.relatedType,
+        relatedId: baseData.relatedId,
+        read: false,
+      },
+    });
+
+    if (existing) {
+      // Update existing notification (stack), keep it as a single unread entry
+      const updated = await this.prisma.notification.update({
+        where: { id: existing.id },
+        data: {
+          message: baseData.message,
+          title: baseData.title,
+          link: baseData.link,
+          // groupedId will be recalculated on next read if needed; we keep it as is
+        },
+      });
+      return updated;
+    }
+
+    // No existing unread notification for this conversation → create a new one
+    return this.create({
+      userId: receiverId,
+      ...baseData,
+      // Store last DM id as relatedId in case needed elsewhere
+      relatedId: conversationId,
+      relatedType: 'direct_message_conversation',
     });
   }
 }

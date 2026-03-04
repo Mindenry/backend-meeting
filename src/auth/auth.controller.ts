@@ -9,17 +9,24 @@ import {
   Param,
   Delete,
   Logger,
+  BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { InvitesService } from '../invites/invites.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { LoginDto } from '../common/dto/login.dto';
-import { RegisterDto } from '../common/dto/register.dto';
 import { RefreshTokenDto } from '../common/dto/refresh-token.dto';
 import { SetPasswordDto } from '../common/dto/set-password.dto';
 import { ResetPasswordDto } from '../common/dto/reset-password.dto';
+import { ForgotPasswordDto, ResetPasswordTokenDto } from '../common/dto/forgot-password.dto';
+import { AuditService } from '../common/audit.service';
 
+// @ts-ignore - Optional Swagger decorators
+import { ApiTags, ApiOperation, ApiResponse } from '../common/decorators/swagger.decorators';
+
+@ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
@@ -28,10 +35,14 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly invitesService: InvitesService,
     private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
   ) {}
 
   @Post('login')
-  async login(@Body() loginDto: LoginDto) {
+  @ApiOperation({ summary: 'User login', description: 'Authenticate user and receive access token and refresh token' })
+  @ApiResponse({ status: 200, description: 'Login successful' })
+  @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  async login(@Body() loginDto: LoginDto, @Request() req) {
     try {
       this.logger.debug(`Login attempt for email: ${loginDto.email}`);
       
@@ -60,6 +71,33 @@ export class AuthController {
       }
 
       this.logger.log(`Login successful for user: ${result.user.id}`);
+
+      // Derive client IP (prefer X-Forwarded-For when behind proxies like ngrok)
+      const forwardedFor = req?.headers?.['x-forwarded-for'] as string | string[] | undefined;
+      const clientIp = forwardedFor
+        ? (Array.isArray(forwardedFor)
+            ? forwardedFor[0]
+            : forwardedFor.split(',')[0]
+          ).trim()
+        : req?.ip || null;
+
+      // Audit log for successful login
+      try {
+        await this.auditService.log({
+          action: 'login',
+          entity: 'user',
+          entityId: result.user.id,
+          userId: result.user.id,
+          userName: result.user.name,
+          details: {
+            email: result.user.email,
+          },
+          ipAddress: clientIp,
+          userAgent: req?.headers?.['user-agent'],
+        });
+      } catch (e) {
+        this.logger.error('Failed to write login audit log', e as any);
+      }
       
       // Log full response for debugging
       this.logger.debug('Login response:', JSON.stringify({
@@ -82,20 +120,46 @@ export class AuthController {
   }
 
 
-  @Post('register')
-  async register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto.email, registerDto.password, registerDto.name);
-  }
-
   @Post('refresh')
+  @ApiOperation({ summary: 'Refresh access token', description: 'Get a new access token using refresh token' })
+  @ApiResponse({ status: 200, description: 'Token refreshed successfully' })
+  @ApiResponse({ status: 401, description: 'Invalid refresh token' })
   async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
     return this.authService.refreshToken(refreshTokenDto.refreshToken);
   }
 
   @Post('logout')
   @UseGuards(JwtAuthGuard)
-  async logout(@Body() refreshTokenDto: RefreshTokenDto) {
-    return this.authService.logout(refreshTokenDto.refreshToken);
+  async logout(@Body() refreshTokenDto: RefreshTokenDto, @Request() req) {
+    const result = await this.authService.logout(refreshTokenDto.refreshToken);
+
+    // Best-effort audit log for logout
+    try {
+      const userId = req?.user?.id;
+      const forwardedFor = req?.headers?.['x-forwarded-for'] as string | string[] | undefined;
+      const clientIp = forwardedFor
+        ? (Array.isArray(forwardedFor)
+            ? forwardedFor[0]
+            : forwardedFor.split(',')[0]
+          ).trim()
+        : req?.ip || null;
+      await this.auditService.log({
+        action: 'logout',
+        entity: 'user',
+        entityId: userId || 'unknown',
+        userId: userId ?? undefined,
+        userName: req?.user?.name,
+        details: {
+          email: req?.user?.email,
+        },
+        ipAddress: clientIp,
+        userAgent: req?.headers?.['user-agent'],
+      });
+    } catch (e) {
+      this.logger.error('Failed to write logout audit log', e as any);
+    }
+
+    return result;
   }
 
   @Get('me')
@@ -115,6 +179,10 @@ export class AuthController {
       name: string;
       password: string;
       teamId?: string;
+      firstName?: string;
+      lastName?: string;
+      department?: string;
+      position?: string;
     },
   ) {
     const invite = await this.invitesService.validateInvite(body.token);
@@ -140,32 +208,65 @@ export class AuthController {
       },
     });
 
-    // Add to team if specified
-    if (body.teamId) {
-      await this.prisma.teamMember.create({
-        data: {
-          userId: user.id,
-          teamId: body.teamId,
-          role: 'member',
+    // Mark invite as used
+    await this.invitesService.markAsUsed(body.token);
+
+    // Auto-add to team (priority: body.teamId > invite.teamId)
+    const loginResult = await this.authService.login(invite.email, body.password);
+    const userId = loginResult.user.id;
+    const teamId = body.teamId || invite.teamId;
+
+    if (teamId) {
+      await this.prisma.teamMember.upsert({
+        where: {
+          userId_teamId: {
+            userId,
+            teamId,
+          },
+        },
+        update: {
+          role: invite.teamRole || 'member',
+        },
+        create: {
+          userId,
+          teamId,
+          role: invite.teamRole || 'member',
         },
       });
     }
 
-    // Mark invite as used
-    await this.invitesService.markAsUsed(body.token);
+    // Update the user with the work-related fields directly
+    try {
+      // Derive name parts
+      const explicitFirst = body.firstName?.trim();
+      const explicitLast = body.lastName?.trim();
+      const [fallbackFirst, ...rest] = (body.name || '').trim().split(' ');
+      const firstName = explicitFirst || fallbackFirst || 'New';
+      const lastName = explicitLast || rest.join(' ') || 'Member';
+      const displayName = `${firstName} ${lastName}`.trim();
 
-    // Auto-login after accept
-    // We can just return the user for now, or generate tokens. 
-    // To match Remote, we return user.
-    return {
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        organizationId: user.organizationId,
-      },
-    };
+      // Department & Position
+      const department = body.department?.trim() || 'General';
+
+      // Position: from form if provided, otherwise default to 'Employee'
+      // Do NOT derive from org role — that causes confusion when viewing team members
+      const position = body.position?.trim() || 'Employee';
+
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          displayName,
+          department,
+          position,
+          managerId: invite.invitedBy, // Manager = ผู้ที่ส่งคำเชิญ
+        },
+      });
+    } catch (e) {
+      this.logger.error('Failed to update user profile on invite accept', e as any);
+    }
+
+    // Return same structure as login (accessToken, refreshToken, user)
+    return loginResult;
   }
 
   @Post('set-password')
@@ -184,6 +285,20 @@ export class AuthController {
     return { success: true };
   }
 
+  @Post('forgot-password')
+  @ApiOperation({ summary: 'Request password reset', description: 'Sends a password reset link to user email.' })
+  @ApiResponse({ status: 200, description: 'Reset instructions sent.' })
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(forgotPasswordDto.email);
+  }
+
+  @Post('reset-password-token')
+  @ApiOperation({ summary: 'Reset password with token', description: 'Sets a new password using reset token.' })
+  @ApiResponse({ status: 200, description: 'Password reset successfully.' })
+  async resetPasswordWithToken(@Body() resetDto: ResetPasswordTokenDto) {
+    return this.authService.resetPasswordWithToken(resetDto.token, resetDto.newPassword);
+  }
+
   @Get('invite/:token')
   async getInvite(@Param('token') token: string) {
     const invite = await this.invitesService.getInviteByToken(token);
@@ -196,6 +311,50 @@ export class AuthController {
     });
 
     return {
+      email: invite.email,
+      organization: org?.name,
+      role: invite.role,
+      teamId: invite.teamId,
+    };
+  }
+
+  /**
+   * Look up an active invite by email.
+   * This is used by the self-service invite setup flow where users enter
+   * their email instead of following a tokenized link.
+   */
+  @Post('invite/lookup')
+  async lookupInviteByEmail(
+    @Body()
+    body: {
+      email: string;
+    },
+  ) {
+    const rawEmail = body?.email?.trim();
+    if (!rawEmail) {
+      throw new BadRequestException('Email is required');
+    }
+
+    const email = rawEmail.toLowerCase();
+
+    const invite = await this.prisma.invite.findFirst({
+      where: {
+        email,
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!invite) {
+      throw new NotFoundException('No active invite for this email');
+    }
+
+    const org = await this.prisma.organization.findUnique({
+      where: { id: invite.organizationId },
+    });
+
+    return {
+      token: invite.token,
       email: invite.email,
       organization: org?.name,
       role: invite.role,
