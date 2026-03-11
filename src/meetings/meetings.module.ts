@@ -8,11 +8,15 @@ import { CommonModule } from '../common/common.module';
 import { WorkflowsModule } from '../workflows/workflows.module';
 
 @Module({
-  imports: [forwardRef(() => EventsModule), NotificationsModule, PrismaModule, CommonModule, forwardRef(() => WorkflowsModule)],
+  imports: [
+    forwardRef(() => EventsModule),
+    NotificationsModule,
+    PrismaModule,
+    CommonModule,
+    forwardRef(() => WorkflowsModule),
+  ],
   providers: [MeetingsService],
   controllers: [MeetingsController],
   exports: [MeetingsService],
 })
 export class MeetingsModule {}
-
-

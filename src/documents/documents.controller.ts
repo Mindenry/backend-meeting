@@ -93,7 +93,13 @@ export class DocumentsController {
   @Patch(':id')
   updateDocument(
     @Param('id') id: string,
-    @Body() body: { name?: string; description?: string; folderId?: string; userId: string },
+    @Body()
+    body: {
+      name?: string;
+      description?: string;
+      folderId?: string;
+      userId: string;
+    },
   ) {
     const { userId, ...data } = body;
     return this.documentsService.updateDocument(id, data, userId);
@@ -115,10 +121,7 @@ export class DocumentsController {
   }
 
   @Patch(':id/archive')
-  archiveDocument(
-    @Param('id') id: string,
-    @Body() body: { userId: string },
-  ) {
+  archiveDocument(@Param('id') id: string, @Body() body: { userId: string }) {
     return this.documentsService.archiveDocument(id, body.userId);
   }
 
@@ -147,6 +150,10 @@ export class DocumentsController {
     @Param('userId') userId: string,
     @Body() body: { removedBy: string },
   ) {
-    return this.documentsService.removePermission(documentId, userId, body.removedBy);
+    return this.documentsService.removePermission(
+      documentId,
+      userId,
+      body.removedBy,
+    );
   }
 }

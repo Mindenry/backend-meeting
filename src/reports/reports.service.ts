@@ -3,9 +3,13 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
-  async getTeamProductivityReport(teamId: string, startDate: Date, endDate: Date) {
+  async getTeamProductivityReport(
+    teamId: string,
+    startDate: Date,
+    endDate: Date,
+  ) {
     // Check if team exists
     const team = await this.prisma.team.findUnique({ where: { id: teamId } });
     if (!team) {
@@ -59,8 +63,8 @@ export class ReportsService {
       where: { teamId },
       select: { id: true },
     });
-    const channelIds = teamChannels.map(c => c.id);
-    
+    const channelIds = teamChannels.map((c) => c.id);
+
     const messages = await this.prisma.message.findMany({
       where: {
         channelId: { in: channelIds },
@@ -74,44 +78,54 @@ export class ReportsService {
     // Calculate statistics
     const taskStats = {
       total: tasks.length,
-      byStatus: tasks.reduce((acc, task) => {
-        acc[task.status] = (acc[task.status] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>),
-      byPriority: tasks.reduce((acc, task) => {
-        acc[task.priority] = (acc[task.priority] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>),
-      completed: tasks.filter(t => t.status === 'done').length,
-      inProgress: tasks.filter(t => t.status === 'in_progress').length,
+      byStatus: tasks.reduce(
+        (acc, task) => {
+          acc[task.status] = (acc[task.status] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      ),
+      byPriority: tasks.reduce(
+        (acc, task) => {
+          acc[task.priority] = (acc[task.priority] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      ),
+      completed: tasks.filter((t) => t.status === 'done').length,
+      inProgress: tasks.filter((t) => t.status === 'in_progress').length,
     };
 
     const meetingStats = {
       total: meetings.length,
-      completed: meetings.filter(m => m.status === 'ended').length,
-      scheduled: meetings.filter(m => m.status === 'scheduled').length,
+      completed: meetings.filter((m) => m.status === 'ended').length,
+      scheduled: meetings.filter((m) => m.status === 'scheduled').length,
       totalDuration: meetings.reduce((sum, m) => {
-        const endTime = m.endTime ? new Date(m.endTime).getTime() : new Date(m.startTime).getTime();
+        const endTime = m.endTime
+          ? new Date(m.endTime).getTime()
+          : new Date(m.startTime).getTime();
         const duration = endTime - new Date(m.startTime).getTime();
         return sum + duration;
       }, 0),
-      withRecordings: meetings.filter(m => m.recordings.length > 0).length,
-      withMinutes: meetings.filter(m => m.minutes.length > 0).length,
+      withRecordings: meetings.filter((m) => m.recordings.length > 0).length,
+      withMinutes: meetings.filter((m) => m.minutes.length > 0).length,
     };
 
     const memberStats = await Promise.all(
-      teamMembers.map(async member => {
-        const memberTasks = tasks.filter(t => t.assigneeId === member.userId);
+      teamMembers.map(async (member) => {
+        const memberTasks = tasks.filter((t) => t.assigneeId === member.userId);
         return {
           user: member.user,
           tasks: {
             total: memberTasks.length,
-            completed: memberTasks.filter(t => t.status === 'done').length,
-            inProgress: memberTasks.filter(t => t.status === 'in_progress').length,
+            completed: memberTasks.filter((t) => t.status === 'done').length,
+            inProgress: memberTasks.filter((t) => t.status === 'in_progress')
+              .length,
           },
-          messagesSent: messages.filter(m => m.senderId === member.userId).length,
-          meetingsAttended: meetings.filter(m =>
-            m.participants.some(p => p.userId === member.userId),
+          messagesSent: messages.filter((m) => m.senderId === member.userId)
+            .length,
+          meetingsAttended: meetings.filter((m) =>
+            m.participants.some((p) => p.userId === member.userId),
           ).length,
         };
       }),
@@ -191,7 +205,8 @@ export class ReportsService {
     const totalMeetings = meetings.length;
     const totalDuration = meetings.reduce((sum, m) => {
       if (m.actualStartTime && m.actualEndTime) {
-        const duration = m.actualEndTime.getTime() - m.actualStartTime.getTime();
+        const duration =
+          m.actualEndTime.getTime() - m.actualStartTime.getTime();
         return sum + duration;
       }
       return sum;
@@ -201,22 +216,30 @@ export class ReportsService {
       return sum + m.participants.length;
     }, 0);
 
-    const avgParticipants = totalMeetings > 0 ? totalParticipants / totalMeetings : 0;
-    const avgDuration = totalMeetings > 0 ? totalDuration / totalMeetings / 1000 / 60 : 0; // in minutes
+    const avgParticipants =
+      totalMeetings > 0 ? totalParticipants / totalMeetings : 0;
+    const avgDuration =
+      totalMeetings > 0 ? totalDuration / totalMeetings / 1000 / 60 : 0; // in minutes
 
     // Meetings by team
-    const meetingsByTeam = meetings.reduce((acc, m) => {
-      const teamName = m.team?.name || 'No Team';
-      acc[teamName] = (acc[teamName] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const meetingsByTeam = meetings.reduce(
+      (acc, m) => {
+        const teamName = m.team?.name || 'No Team';
+        acc[teamName] = (acc[teamName] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     // Most active hosts
-    const hostStats = meetings.reduce((acc, m) => {
-      const hostName = m.host.name;
-      acc[hostName] = (acc[hostName] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const hostStats = meetings.reduce(
+      (acc, m) => {
+        const hostName = m.host.name;
+        acc[hostName] = (acc[hostName] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     return {
       summary: {
@@ -233,9 +256,12 @@ export class ReportsService {
         title: m.title,
         startTime: m.actualStartTime,
         endTime: m.actualEndTime,
-        duration: m.actualStartTime && m.actualEndTime
-          ? (m.actualEndTime.getTime() - m.actualStartTime.getTime()) / 1000 / 60
-          : 0,
+        duration:
+          m.actualStartTime && m.actualEndTime
+            ? (m.actualEndTime.getTime() - m.actualStartTime.getTime()) /
+              1000 /
+              60
+            : 0,
         host: m.host.name,
         team: m.team?.name,
         participants: m.participants.length,
@@ -310,8 +336,8 @@ export class ReportsService {
       summary: {
         tasks: {
           total: tasks.length,
-          completed: tasks.filter(t => t.status === 'done').length,
-          inProgress: tasks.filter(t => t.status === 'in_progress').length,
+          completed: tasks.filter((t) => t.status === 'done').length,
+          inProgress: tasks.filter((t) => t.status === 'in_progress').length,
         },
         messagesSent: messages.length,
         meetings: {
@@ -326,7 +352,7 @@ export class ReportsService {
       details: {
         tasks,
         timeEntries,
-        meetings: meetings.map(m => m.meeting),
+        meetings: meetings.map((m) => m.meeting),
         messages,
       },
     };
@@ -382,32 +408,44 @@ export class ReportsService {
 
     // Statistics
     const totalTasks = tasks.length;
-    const tasksByStatus = tasks.reduce((acc, t) => {
-      acc[t.status] = (acc[t.status] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const tasksByStatus = tasks.reduce(
+      (acc, t) => {
+        acc[t.status] = (acc[t.status] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
-    const tasksByPriority = tasks.reduce((acc, t) => {
-      acc[t.priority] = (acc[t.priority] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const tasksByPriority = tasks.reduce(
+      (acc, t) => {
+        acc[t.priority] = (acc[t.priority] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     const overdueTasks = tasks.filter((t) => {
       if (!t.dueDate) return false;
       return new Date(t.dueDate) < new Date() && t.status !== 'done';
     });
 
-    const tasksByAssignee = tasks.reduce((acc, t) => {
-      const assigneeName = t.assignee?.name || 'Unassigned';
-      acc[assigneeName] = (acc[assigneeName] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const tasksByAssignee = tasks.reduce(
+      (acc, t) => {
+        const assigneeName = t.assignee?.name || 'Unassigned';
+        acc[assigneeName] = (acc[assigneeName] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
-    const tasksByTeam = tasks.reduce((acc, t) => {
-      const teamName = t.team?.name || 'No Team';
-      acc[teamName] = (acc[teamName] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const tasksByTeam = tasks.reduce(
+      (acc, t) => {
+        const teamName = t.team?.name || 'No Team';
+        acc[teamName] = (acc[teamName] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     return {
       summary: {
@@ -431,7 +469,11 @@ export class ReportsService {
     };
   }
 
-  async getTeamWorkloadReport(teamId: string, startDate?: Date, endDate?: Date) {
+  async getTeamWorkloadReport(
+    teamId: string,
+    startDate?: Date,
+    endDate?: Date,
+  ) {
     const team = await this.prisma.team.findUnique({
       where: { id: teamId },
       include: {
@@ -479,7 +521,9 @@ export class ReportsService {
     const workload = team.members.map((member) => {
       const userTasks = tasks.filter((t) => t.assigneeId === member.userId);
       const completed = userTasks.filter((t) => t.status === 'done').length;
-      const inProgress = userTasks.filter((t) => t.status === 'in_progress').length;
+      const inProgress = userTasks.filter(
+        (t) => t.status === 'in_progress',
+      ).length;
       const todo = userTasks.filter((t) => t.status === 'todo').length;
       const overdue = userTasks.filter((t) => {
         if (!t.dueDate) return false;
@@ -505,7 +549,6 @@ export class ReportsService {
       workload,
     };
   }
-
 
   async getPerformanceDashboard(params: {
     organizationId?: string;
@@ -542,16 +585,16 @@ export class ReportsService {
     });
 
     // Filter users by team if specified
-    let teamUserIds = users.map(u => u.id);
+    let teamUserIds = users.map((u) => u.id);
     if (teamId) {
       const teamMembers = await this.prisma.teamMember.findMany({
         where: { teamId },
         select: { userId: true },
       });
-      teamUserIds = teamMembers.map(tm => tm.userId);
+      teamUserIds = teamMembers.map((tm) => tm.userId);
     }
 
-    const filteredUsers = users.filter(u => teamUserIds.includes(u.id));
+    const filteredUsers = users.filter((u) => teamUserIds.includes(u.id));
 
     // 1. Task completion rate per person
     const taskCompletionRates = await Promise.all(
@@ -575,7 +618,8 @@ export class ReportsService {
           },
         });
 
-        const completionRate = allTasks > 0 ? (completedTasks / allTasks) * 100 : 0;
+        const completionRate =
+          allTasks > 0 ? (completedTasks / allTasks) * 100 : 0;
 
         return {
           userId: user.id,
@@ -584,7 +628,7 @@ export class ReportsService {
           completedTasks,
           completionRate: Math.round(completionRate * 10) / 10,
         };
-      })
+      }),
     );
 
     // 2. Meeting attendance rate
@@ -607,7 +651,7 @@ export class ReportsService {
           select: { id: true },
         });
 
-        const meetingIds = allMeetings.map(m => m.id);
+        const meetingIds = allMeetings.map((m) => m.id);
         const attendedMeetings = await this.prisma.meetingParticipant.count({
           where: {
             userId: user.id,
@@ -616,9 +660,10 @@ export class ReportsService {
           },
         });
 
-        const attendanceRate = meetingIds.length > 0
-          ? (attendedMeetings / meetingIds.length) * 100
-          : 0;
+        const attendanceRate =
+          meetingIds.length > 0
+            ? (attendedMeetings / meetingIds.length) * 100
+            : 0;
 
         return {
           userId: user.id,
@@ -627,7 +672,7 @@ export class ReportsService {
           attendedMeetings,
           attendanceRate: Math.round(attendanceRate * 10) / 10,
         };
-      })
+      }),
     );
 
     // 3. Response time in chat (average time to read messages)
@@ -644,7 +689,7 @@ export class ReportsService {
           select: { id: true },
         });
 
-        const channelIds = channels.map(c => c.id);
+        const channelIds = channels.map((c) => c.id);
 
         // Get messages that mention the user or are in their channels
         const messages = await this.prisma.message.findMany({
@@ -668,16 +713,20 @@ export class ReportsService {
         for (const message of messages) {
           const read = message.reads[0];
           if (read) {
-            const responseTime = read.readAt.getTime() - message.createdAt.getTime();
-            if (responseTime > 0 && responseTime < 7 * 24 * 60 * 60 * 1000) { // Less than 7 days
+            const responseTime =
+              read.readAt.getTime() - message.createdAt.getTime();
+            if (responseTime > 0 && responseTime < 7 * 24 * 60 * 60 * 1000) {
+              // Less than 7 days
               responseTimes.push(responseTime);
             }
           }
         }
 
-        const avgResponseTime = responseTimes.length > 0
-          ? responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length
-          : null;
+        const avgResponseTime =
+          responseTimes.length > 0
+            ? responseTimes.reduce((sum, time) => sum + time, 0) /
+              responseTimes.length
+            : null;
 
         return {
           userId: user.id,
@@ -685,13 +734,13 @@ export class ReportsService {
           totalMessages: messages.length,
           respondedMessages: responseTimes.length,
           avgResponseTimeMinutes: avgResponseTime
-            ? Math.round(avgResponseTime / 1000 / 60 * 10) / 10
+            ? Math.round((avgResponseTime / 1000 / 60) * 10) / 10
             : null,
           avgResponseTimeHours: avgResponseTime
             ? Math.round((avgResponseTime / 1000 / 60 / 60) * 10) / 10
             : null,
         };
-      })
+      }),
     );
 
     // 4. Collaboration Activity (Total Interactions)
@@ -710,42 +759,68 @@ export class ReportsService {
         });
 
         // Meetings attended
-        const meetingIds = (await this.prisma.meeting.findMany({
-          where: teamId ? { teamId, status: 'ended', actualStartTime: { gte: defaultStartDate, lte: defaultEndDate } } : { status: 'ended', actualStartTime: { gte: defaultStartDate, lte: defaultEndDate } },
-          select: { id: true },
-        })).map(m => m.id);
+        const meetingIds = (
+          await this.prisma.meeting.findMany({
+            where: teamId
+              ? {
+                  teamId,
+                  status: 'ended',
+                  actualStartTime: {
+                    gte: defaultStartDate,
+                    lte: defaultEndDate,
+                  },
+                }
+              : {
+                  status: 'ended',
+                  actualStartTime: {
+                    gte: defaultStartDate,
+                    lte: defaultEndDate,
+                  },
+                },
+            select: { id: true },
+          })
+        ).map((m) => m.id);
 
-        const attendedMeetings = meetingIds.length > 0 ? await this.prisma.meetingParticipant.count({
-          where: {
-            userId: user.id,
-            meetingId: { in: meetingIds },
-            leftAt: { not: null },
-          },
-        }) : 0;
+        const attendedMeetings =
+          meetingIds.length > 0
+            ? await this.prisma.meetingParticipant.count({
+                where: {
+                  userId: user.id,
+                  meetingId: { in: meetingIds },
+                  leftAt: { not: null },
+                },
+              })
+            : 0;
 
         // Chat messages sent
         const channelsWhere: any = {};
         if (teamId) {
           channelsWhere.teamId = teamId;
         }
-        
-        const channelIds = (await this.prisma.channel.findMany({
-          where: channelsWhere,
-          select: { id: true },
-        })).map(c => c.id);
 
-        const messagesSent = channelIds.length > 0 ? await this.prisma.message.count({
-          where: {
-            senderId: user.id,
-            channelId: { in: channelIds },
-            createdAt: {
-              gte: defaultStartDate,
-              lte: defaultEndDate,
-            },
-          },
-        }) : 0;
+        const channelIds = (
+          await this.prisma.channel.findMany({
+            where: channelsWhere,
+            select: { id: true },
+          })
+        ).map((c) => c.id);
 
-        const totalInteractions = completedTasks + attendedMeetings + messagesSent;
+        const messagesSent =
+          channelIds.length > 0
+            ? await this.prisma.message.count({
+                where: {
+                  senderId: user.id,
+                  channelId: { in: channelIds },
+                  createdAt: {
+                    gte: defaultStartDate,
+                    lte: defaultEndDate,
+                  },
+                },
+              })
+            : 0;
+
+        const totalInteractions =
+          completedTasks + attendedMeetings + messagesSent;
 
         return {
           userId: user.id,
@@ -755,10 +830,8 @@ export class ReportsService {
           messagesSent,
           totalInteractions,
         };
-      })
+      }),
     );
-
-
 
     return {
       period: {
@@ -771,8 +844,6 @@ export class ReportsService {
       collaborationActivity,
     };
   }
-
-
 
   async createWorkHours(data: {
     userId: string;
@@ -812,7 +883,6 @@ export class ReportsService {
     });
   }
 
-
   async getMeetingAnalytics(meetingId: string) {
     const meeting = await this.prisma.meeting.findUnique({
       where: { id: meetingId },
@@ -834,7 +904,9 @@ export class ReportsService {
       throw new NotFoundException('Meeting not found');
     }
 
-    const endTime = meeting.endTime ? new Date(meeting.endTime).getTime() : new Date(meeting.startTime).getTime();
+    const endTime = meeting.endTime
+      ? new Date(meeting.endTime).getTime()
+      : new Date(meeting.startTime).getTime();
     const duration = endTime - new Date(meeting.startTime).getTime();
 
     return {
@@ -846,15 +918,21 @@ export class ReportsService {
         },
         participants: {
           total: meeting.participants.length,
-          averageDuration: meeting.participants.length > 0
-            ? meeting.participants.reduce((sum, p) => sum + (p.duration || 0), 0) /
-            meeting.participants.length
-            : 0,
+          averageDuration:
+            meeting.participants.length > 0
+              ? meeting.participants.reduce(
+                  (sum, p) => sum + (p.duration || 0),
+                  0,
+                ) / meeting.participants.length
+              : 0,
         },
         recordings: {
           count: meeting.recordings.length,
           totalSize: meeting.recordings.reduce((sum, r) => sum + r.fileSize, 0),
-          totalDuration: meeting.recordings.reduce((sum, r) => sum + r.duration, 0),
+          totalDuration: meeting.recordings.reduce(
+            (sum, r) => sum + r.duration,
+            0,
+          ),
         },
         followUp: {
           tasksCreated: meeting.tasks.length,

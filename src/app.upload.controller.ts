@@ -11,7 +11,10 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
-import { StorageService, UploadedFile as StorageUploadedFile } from './storage/storage.service';
+import {
+  StorageService,
+  UploadedFile as StorageUploadedFile,
+} from './storage/storage.service';
 import { AuditService } from './common/audit.service';
 
 @Controller('upload')
@@ -62,7 +65,10 @@ export class UploadController {
 
     // Log audit trail
     if (req?.user) {
-      const forwardedFor = req?.headers?.['x-forwarded-for'] as string | string[] | undefined;
+      const forwardedFor = req?.headers?.['x-forwarded-for'] as
+        | string
+        | string[]
+        | undefined;
       const clientIp = forwardedFor
         ? (Array.isArray(forwardedFor)
             ? forwardedFor[0]
@@ -97,4 +103,3 @@ export class UploadController {
     };
   }
 }
-

@@ -1,4 +1,14 @@
-import { IsString, IsOptional, IsEnum, IsArray, IsDateString, IsNumber, Min, Max, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsArray,
+  IsDateString,
+  IsNumber,
+  Min,
+  Max,
+  IsBoolean,
+} from 'class-validator';
 import { ApiPropertyOptional } from '../../common/decorators/swagger.decorators';
 
 export class UpdateTaskDto {

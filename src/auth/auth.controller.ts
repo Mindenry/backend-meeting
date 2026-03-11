@@ -20,11 +20,18 @@ import { LoginDto } from '../common/dto/login.dto';
 import { RefreshTokenDto } from '../common/dto/refresh-token.dto';
 import { SetPasswordDto } from '../common/dto/set-password.dto';
 import { ResetPasswordDto } from '../common/dto/reset-password.dto';
-import { ForgotPasswordDto, ResetPasswordTokenDto } from '../common/dto/forgot-password.dto';
+import {
+  ForgotPasswordDto,
+  ResetPasswordTokenDto,
+} from '../common/dto/forgot-password.dto';
 import { AuditService } from '../common/audit.service';
 
 // @ts-ignore - Optional Swagger decorators
-import { ApiTags, ApiOperation, ApiResponse } from '../common/decorators/swagger.decorators';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+} from '../common/decorators/swagger.decorators';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -39,41 +46,54 @@ export class AuthController {
   ) {}
 
   @Post('login')
-  @ApiOperation({ summary: 'User login', description: 'Authenticate user and receive access token and refresh token' })
+  @ApiOperation({
+    summary: 'User login',
+    description: 'Authenticate user and receive access token and refresh token',
+  })
   @ApiResponse({ status: 200, description: 'Login successful' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   async login(@Body() loginDto: LoginDto, @Request() req) {
     try {
       this.logger.debug(`Login attempt for email: ${loginDto.email}`);
-      
-      const result = await this.authService.login(loginDto.email, loginDto.password);
-      
-      this.logger.debug('Auth service login result:', { 
-        hasResult: !!result, 
+
+      const result = await this.authService.login(
+        loginDto.email,
+        loginDto.password,
+      );
+
+      this.logger.debug('Auth service login result:', {
+        hasResult: !!result,
         hasUser: !!result?.user,
-        userId: result?.user?.id 
+        userId: result?.user?.id,
       });
-      
+
       // Check if result and user exist
       if (!result) {
         this.logger.error('Login failed: No response from auth service');
         throw new Error('Login failed: No response from auth service');
       }
-      
+
       if (!result.user) {
-        this.logger.error('Login failed: User data missing in response', { result });
+        this.logger.error('Login failed: User data missing in response', {
+          result,
+        });
         throw new Error('Login failed: User data missing in response');
       }
-      
+
       if (!result.user.id) {
-        this.logger.error('Login failed: User ID missing', { user: result.user });
+        this.logger.error('Login failed: User ID missing', {
+          user: result.user,
+        });
         throw new Error('Login failed: User ID missing');
       }
 
       this.logger.log(`Login successful for user: ${result.user.id}`);
 
       // Derive client IP (prefer X-Forwarded-For when behind proxies like ngrok)
-      const forwardedFor = req?.headers?.['x-forwarded-for'] as string | string[] | undefined;
+      const forwardedFor = req?.headers?.['x-forwarded-for'] as
+        | string
+        | string[]
+        | undefined;
       const clientIp = forwardedFor
         ? (Array.isArray(forwardedFor)
             ? forwardedFor[0]
@@ -96,18 +116,21 @@ export class AuthController {
           userAgent: req?.headers?.['user-agent'],
         });
       } catch (e) {
-        this.logger.error('Failed to write login audit log', e as any);
+        this.logger.error('Failed to write login audit log', e);
       }
-      
+
       // Log full response for debugging
-      this.logger.debug('Login response:', JSON.stringify({
-        hasAccessToken: !!result.accessToken,
-        hasRefreshToken: !!result.refreshToken,
-        hasUser: !!result.user,
-        userId: result.user?.id,
-        userEmail: result.user?.email,
-      }));
-      
+      this.logger.debug(
+        'Login response:',
+        JSON.stringify({
+          hasAccessToken: !!result.accessToken,
+          hasRefreshToken: !!result.refreshToken,
+          hasUser: !!result.user,
+          userId: result.user?.id,
+          userEmail: result.user?.email,
+        }),
+      );
+
       return result;
     } catch (error) {
       this.logger.error('Login error:', error);
@@ -119,9 +142,11 @@ export class AuthController {
     }
   }
 
-
   @Post('refresh')
-  @ApiOperation({ summary: 'Refresh access token', description: 'Get a new access token using refresh token' })
+  @ApiOperation({
+    summary: 'Refresh access token',
+    description: 'Get a new access token using refresh token',
+  })
   @ApiResponse({ status: 200, description: 'Token refreshed successfully' })
   @ApiResponse({ status: 401, description: 'Invalid refresh token' })
   async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
@@ -136,7 +161,10 @@ export class AuthController {
     // Best-effort audit log for logout
     try {
       const userId = req?.user?.id;
-      const forwardedFor = req?.headers?.['x-forwarded-for'] as string | string[] | undefined;
+      const forwardedFor = req?.headers?.['x-forwarded-for'] as
+        | string
+        | string[]
+        | undefined;
       const clientIp = forwardedFor
         ? (Array.isArray(forwardedFor)
             ? forwardedFor[0]
@@ -156,7 +184,7 @@ export class AuthController {
         userAgent: req?.headers?.['user-agent'],
       });
     } catch (e) {
-      this.logger.error('Failed to write logout audit log', e as any);
+      this.logger.error('Failed to write logout audit log', e);
     }
 
     return result;
@@ -212,7 +240,10 @@ export class AuthController {
     await this.invitesService.markAsUsed(body.token);
 
     // Auto-add to team (priority: body.teamId > invite.teamId)
-    const loginResult = await this.authService.login(invite.email, body.password);
+    const loginResult = await this.authService.login(
+      invite.email,
+      body.password,
+    );
     const userId = loginResult.user.id;
     const teamId = body.teamId || invite.teamId;
 
@@ -262,7 +293,7 @@ export class AuthController {
         },
       });
     } catch (e) {
-      this.logger.error('Failed to update user profile on invite accept', e as any);
+      this.logger.error('Failed to update user profile on invite accept', e);
     }
 
     // Return same structure as login (accessToken, refreshToken, user)
@@ -271,7 +302,10 @@ export class AuthController {
 
   @Post('set-password')
   async setPassword(@Body() setPasswordDto: SetPasswordDto) {
-    await this.authService.setPassword(setPasswordDto.userId, setPasswordDto.password);
+    await this.authService.setPassword(
+      setPasswordDto.userId,
+      setPasswordDto.password,
+    );
     return { success: true };
   }
 
@@ -286,17 +320,26 @@ export class AuthController {
   }
 
   @Post('forgot-password')
-  @ApiOperation({ summary: 'Request password reset', description: 'Sends a password reset link to user email.' })
+  @ApiOperation({
+    summary: 'Request password reset',
+    description: 'Sends a password reset link to user email.',
+  })
   @ApiResponse({ status: 200, description: 'Reset instructions sent.' })
   async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
     return this.authService.forgotPassword(forgotPasswordDto.email);
   }
 
   @Post('reset-password-token')
-  @ApiOperation({ summary: 'Reset password with token', description: 'Sets a new password using reset token.' })
+  @ApiOperation({
+    summary: 'Reset password with token',
+    description: 'Sets a new password using reset token.',
+  })
   @ApiResponse({ status: 200, description: 'Password reset successfully.' })
   async resetPasswordWithToken(@Body() resetDto: ResetPasswordTokenDto) {
-    return this.authService.resetPasswordWithToken(resetDto.token, resetDto.newPassword);
+    return this.authService.resetPasswordWithToken(
+      resetDto.token,
+      resetDto.newPassword,
+    );
   }
 
   @Get('invite/:token')

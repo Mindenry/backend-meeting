@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, Inject, forwardRef, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Inject,
+  forwardRef,
+  Optional,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsGateway } from './notifications.gateway';
 import { NotificationPreferencesService } from './notification-preferences.service';
@@ -13,16 +19,25 @@ export class NotificationsService {
     @Inject(forwardRef(() => NotificationPreferencesService))
     @Optional()
     private readonly preferencesService?: NotificationPreferencesService,
-  ) { }
+  ) {}
 
   /**
    * Calculate priority based on notification type
    */
   private getPriority(type: string): string {
-    if (['mention', 'task_assigned', 'meeting_starting', 'pullrequest_review'].includes(type)) {
+    if (
+      [
+        'mention',
+        'task_assigned',
+        'meeting_starting',
+        'pullrequest_review',
+      ].includes(type)
+    ) {
       return 'urgent';
     }
-    if (['task_updated', 'meeting_created', 'pullrequest_created'].includes(type)) {
+    if (
+      ['task_updated', 'meeting_created', 'pullrequest_created'].includes(type)
+    ) {
       return 'high';
     }
     if (['message', 'message_mention'].includes(type)) {
@@ -34,7 +49,11 @@ export class NotificationsService {
   /**
    * Generate grouped ID for related notifications
    */
-  private generateGroupedId(type: string, relatedType?: string, relatedId?: string): string | null {
+  private generateGroupedId(
+    type: string,
+    relatedType?: string,
+    relatedId?: string,
+  ): string | null {
     if (relatedType && relatedId) {
       return `${type}_${relatedType}_${relatedId}`;
     }
@@ -53,9 +72,13 @@ export class NotificationsService {
   }) {
     // Calculate priority if not provided
     const priority = data.priority || this.getPriority(data.type);
-    
+
     // Generate grouped ID for smart grouping
-    const groupedId = this.generateGroupedId(data.type, data.relatedType, data.relatedId);
+    const groupedId = this.generateGroupedId(
+      data.type,
+      data.relatedType,
+      data.relatedId,
+    );
 
     const notification = await this.prisma.notification.create({
       data: {
@@ -69,7 +92,10 @@ export class NotificationsService {
     // Check if should send realtime based on preferences
     let shouldSendRealtime = true;
     if (this.preferencesService) {
-      shouldSendRealtime = await this.preferencesService.shouldSendRealtime(data.userId, data.type);
+      shouldSendRealtime = await this.preferencesService.shouldSendRealtime(
+        data.userId,
+        data.type,
+      );
     }
 
     // Send real-time notification via WebSocket only if preferences allow
@@ -121,7 +147,11 @@ export class NotificationsService {
     return result;
   }
 
-  async findAll(userId: string, unreadOnly = false, options?: { priority?: string; grouped?: boolean }) {
+  async findAll(
+    userId: string,
+    unreadOnly = false,
+    options?: { priority?: string; grouped?: boolean },
+  ) {
     const notifications = await this.prisma.notification.findMany({
       where: {
         userId,
@@ -189,8 +219,10 @@ export class NotificationsService {
     const sorted = [...grouped, ...ungrouped].sort((a, b) => {
       if (a.read !== b.read) return a.read ? 1 : -1;
       const priorityOrder = { urgent: 4, high: 3, normal: 2, low: 1 };
-      const aPriority = priorityOrder[a.priority as keyof typeof priorityOrder] || 0;
-      const bPriority = priorityOrder[b.priority as keyof typeof priorityOrder] || 0;
+      const aPriority =
+        priorityOrder[a.priority as keyof typeof priorityOrder] || 0;
+      const bPriority =
+        priorityOrder[b.priority as keyof typeof priorityOrder] || 0;
       if (aPriority !== bPriority) return bPriority - aPriority;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
@@ -280,7 +312,12 @@ export class NotificationsService {
   }
 
   // Helper methods for common notification types
-  async notifyMention(userId: string, mentionedBy: string, channelId: string, messageId: string) {
+  async notifyMention(
+    userId: string,
+    mentionedBy: string,
+    channelId: string,
+    messageId: string,
+  ) {
     const mentionedByUser = await this.prisma.user.findUnique({
       where: { id: mentionedBy },
       select: { name: true },
@@ -297,7 +334,12 @@ export class NotificationsService {
     });
   }
 
-  async notifyTaskAssignment(userId: string, taskId: string, taskTitle: string, assignedBy: string) {
+  async notifyTaskAssignment(
+    userId: string,
+    taskId: string,
+    taskTitle: string,
+    assignedBy: string,
+  ) {
     const assignedByUser = await this.prisma.user.findUnique({
       where: { id: assignedBy },
       select: { name: true },
@@ -314,7 +356,12 @@ export class NotificationsService {
     });
   }
 
-  async notifyMeetingStarting(userId: string, meetingId: string, meetingTitle: string, startTime: Date) {
+  async notifyMeetingStarting(
+    userId: string,
+    meetingId: string,
+    meetingTitle: string,
+    startTime: Date,
+  ) {
     return this.create({
       userId,
       type: 'meeting_starting',
@@ -341,7 +388,9 @@ export class NotificationsService {
     });
 
     const preview =
-      (text || '').length > 120 ? `${text.slice(0, 120)}...` : text || 'New message';
+      (text || '').length > 120
+        ? `${text.slice(0, 120)}...`
+        : text || 'New message';
     // Conversation key (so multiple DMs from the same conversation stack into one notification)
     const conversationId = [receiverId, senderId].sort().join(':');
 

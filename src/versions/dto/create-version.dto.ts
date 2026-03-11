@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsNotEmpty, IsBoolean, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNotEmpty,
+  IsBoolean,
+  IsDateString,
+} from 'class-validator';
 
 export class CreateVersionDto {
   @IsString()

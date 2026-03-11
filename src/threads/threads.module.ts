@@ -11,4 +11,3 @@ import { EventsModule } from '../events/events.module';
   exports: [ThreadsService],
 })
 export class ThreadsModule {}
-

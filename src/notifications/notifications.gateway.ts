@@ -59,14 +59,19 @@ export class NotificationsGateway
       let payload;
       try {
         payload = this.jwtService.verify(token, {
-          secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+          secret:
+            process.env.JWT_SECRET || 'your-secret-key-change-in-production',
         });
       } catch (err) {
         if (err.name === 'TokenExpiredError') {
-          this.logger.warn(`Connection rejected: Token expired for socket ${client.id}`);
+          this.logger.warn(
+            `Connection rejected: Token expired for socket ${client.id}`,
+          );
           client.emit('auth_error', { message: 'Token expired' });
         } else {
-          this.logger.warn(`Connection rejected: Invalid token for socket ${client.id}`);
+          this.logger.warn(
+            `Connection rejected: Invalid token for socket ${client.id}`,
+          );
         }
         client.disconnect();
         return;
@@ -129,10 +134,11 @@ export class NotificationsGateway
       this.server.to(`user:${userId}`).emit('notification', notification);
 
       // Update unread count
-      const unreadCount = await this.notificationsService.getUnreadCount(
-        userId,
-      );
-      this.server.to(`user:${userId}`).emit('unread-count', { count: unreadCount });
+      const unreadCount =
+        await this.notificationsService.getUnreadCount(userId);
+      this.server
+        .to(`user:${userId}`)
+        .emit('unread-count', { count: unreadCount });
     }
   }
 
@@ -188,9 +194,7 @@ export class NotificationsGateway
       return { success: false, error: 'Not authenticated' };
     }
 
-    const count = await this.notificationsService.getUnreadCount(
-      client.userId,
-    );
+    const count = await this.notificationsService.getUnreadCount(client.userId);
     return { success: true, count };
   }
 }

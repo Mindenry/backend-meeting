@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -21,7 +27,7 @@ export class TasksService {
     private readonly workflowsService: WorkflowsService,
     private readonly cacheHelper: CacheHelperService,
     private readonly taskWatchersService: TaskWatchersService,
-  ) { }
+  ) {}
 
   findAll(params?: {
     status?: TaskStatus;
@@ -45,10 +51,25 @@ export class TasksService {
     sortOrder?: 'asc' | 'desc';
   }) {
     const {
-      status, teamId, assigneeId, sprintId, epicId, meetingId,
-      priority, search, issueType, componentId, versionId, projectId,
-      parentTaskId, dueDateFrom, dueDateTo,
-      page, limit = 200, sortBy, sortOrder = 'asc',
+      status,
+      teamId,
+      assigneeId,
+      sprintId,
+      epicId,
+      meetingId,
+      priority,
+      search,
+      issueType,
+      componentId,
+      versionId,
+      projectId,
+      parentTaskId,
+      dueDateFrom,
+      dueDateTo,
+      page,
+      limit = 200,
+      sortBy,
+      sortOrder = 'asc',
     } = params || {};
 
     // Build due date range filter
@@ -65,10 +86,7 @@ export class TasksService {
 
     if (assigneeId) {
       andClauses.push({
-        OR: [
-          { assigneeId },
-          { assignments: { some: { userId: assigneeId } } },
-        ],
+        OR: [{ assigneeId }],
       });
     }
 
@@ -92,8 +110,11 @@ export class TasksService {
       componentId: componentId || undefined,
       versionId: versionId || undefined,
       projectId: projectId || undefined,
-      parentTaskId: parentTaskId !== undefined ? (parentTaskId || null) : undefined,
-      ...(Object.keys(dueDateFilter).length > 0 ? { dueDate: dueDateFilter } : {}),
+      parentTaskId:
+        parentTaskId !== undefined ? parentTaskId || null : undefined,
+      ...(Object.keys(dueDateFilter).length > 0
+        ? { dueDate: dueDateFilter }
+        : {}),
       ...(andClauses.length ? { AND: andClauses } : {}),
     };
 
@@ -127,13 +148,7 @@ export class TasksService {
         assignee: {
           select: { id: true, name: true, avatar: true },
         },
-        assignments: {
-          include: {
-            user: {
-              select: { id: true, name: true, email: true, avatar: true },
-            },
-          },
-        },
+
         project: {
           select: { id: true, key: true, name: true, color: true },
         },
@@ -192,13 +207,6 @@ export class TasksService {
         priority: true,
         updatedAt: true,
         assignee: { select: { id: true, name: true, avatar: true } },
-        assignments: {
-          include: {
-            user: {
-              select: { id: true, name: true, email: true, avatar: true },
-            },
-          },
-        },
       },
       orderBy: { updatedAt: 'desc' },
       take: limit + 1, // Fetch one extra to detect "hasMore"
@@ -282,20 +290,15 @@ export class TasksService {
           select: { id: true, title: true, status: true },
         },
         childTasks: {
-          select: { id: true, title: true, status: true, priority: true, assigneeId: true },
-        },
-        assignments: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                avatar: true,
-              },
-            },
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            priority: true,
+            assigneeId: true,
           },
         },
+
         watchers: {
           include: {
             user: true,
@@ -398,7 +401,9 @@ export class TasksService {
       });
       if (!parent) throw new NotFoundException('Parent task not found');
       if (parent.parentTaskId) {
-        throw new BadRequestException('Only 1 level of subtask nesting is allowed');
+        throw new BadRequestException(
+          'Only 1 level of subtask nesting is allowed',
+        );
       }
       // Inherit context from parent if not explicitly provided
       if (!inheritedTeamId) inheritedTeamId = parent.teamId;
@@ -416,7 +421,11 @@ export class TasksService {
     });
 
     const normalizedAssigneeIds = Array.from(
-      new Set([...(assigneeIds ?? []), ...(assigneeId ? [assigneeId] : [])].filter(Boolean)),
+      new Set(
+        [...(assigneeIds ?? []), ...(assigneeId ? [assigneeId] : [])].filter(
+          Boolean,
+        ),
+      ),
     );
     const primaryAssigneeId = assigneeId ?? normalizedAssigneeIds[0] ?? null;
 
@@ -432,11 +441,6 @@ export class TasksService {
               },
             }
           : {}),
-        assignments: normalizedAssigneeIds.length
-          ? {
-              create: normalizedAssigneeIds.map((userId) => ({ user: { connect: { id: userId } } })),
-            }
-          : undefined,
         ...(effectiveReporterId
           ? {
               reporter: {
@@ -511,13 +515,7 @@ export class TasksService {
         project: true,
         component: true,
         version: true,
-        assignments: {
-          include: {
-            user: {
-              select: { id: true, name: true, email: true, avatar: true },
-            },
-          },
-        },
+
         subtasks: true,
       },
     });
@@ -537,17 +535,26 @@ export class TasksService {
 
     // ── Auto-watch: creator + assignee ──
     if (createdBy) {
-      try { await this.taskWatchersService.autoWatch(task.id, createdBy); } catch {}
+      try {
+        await this.taskWatchersService.autoWatch(task.id, createdBy);
+      } catch {}
     }
     if (task.assigneeId && task.assigneeId !== createdBy) {
-      try { await this.taskWatchersService.autoWatch(task.id, task.assigneeId); } catch {}
+      try {
+        await this.taskWatchersService.autoWatch(task.id, task.assigneeId);
+      } catch {}
     }
 
     // ── Activity log on parent task if this is a subtask ──
     if (parentTaskId && createdBy) {
       try {
         await this.prisma.taskActivityLog.create({
-          data: { taskId: parentTaskId, userId: createdBy, action: 'subtask_created', newValue: task.title },
+          data: {
+            taskId: parentTaskId,
+            userId: createdBy,
+            action: 'subtask_created',
+            newValue: task.title,
+          },
         });
       } catch {}
     }
@@ -559,7 +566,11 @@ export class TasksService {
       entityId: task.id,
       userId: createdBy || task.reporterId || task.assigneeId || undefined,
       userName: undefined,
-      details: { title: task.title, priority: task.priority, status: task.status },
+      details: {
+        title: task.title,
+        priority: task.priority,
+        status: task.status,
+      },
     });
 
     // Create notification if task is assigned
@@ -639,11 +650,14 @@ export class TasksService {
     }>,
     userId?: string,
   ) {
-    const exists = await (this.prisma.task as any).findUnique({ where: { id } });
+    const exists = await (this.prisma.task as any).findUnique({
+      where: { id },
+    });
     if (!exists) throw new NotFoundException('Task not found');
 
     // Check if assignee changed
-    const assigneeChanged = data.assigneeId !== undefined && data.assigneeId !== exists.assigneeId;
+    const assigneeChanged =
+      data.assigneeId !== undefined && data.assigneeId !== exists.assigneeId;
 
     // Track changes for activity log
     const activityLogs: any[] = [];
@@ -658,7 +672,10 @@ export class TasksService {
       });
     }
 
-    if (data.assigneeId !== undefined && data.assigneeId !== exists.assigneeId) {
+    if (
+      data.assigneeId !== undefined &&
+      data.assigneeId !== exists.assigneeId
+    ) {
       activityLogs.push({
         taskId: id,
         userId,
@@ -668,7 +685,10 @@ export class TasksService {
       });
     }
 
-    if (data.dueDate !== undefined && data.dueDate?.getTime() !== exists.dueDate?.getTime()) {
+    if (
+      data.dueDate !== undefined &&
+      data.dueDate?.getTime() !== exists.dueDate?.getTime()
+    ) {
       activityLogs.push({
         taskId: id,
         userId,
@@ -708,7 +728,10 @@ export class TasksService {
       });
     }
 
-    if (data.storyPoints !== undefined && data.storyPoints !== exists.storyPoints) {
+    if (
+      data.storyPoints !== undefined &&
+      data.storyPoints !== exists.storyPoints
+    ) {
       activityLogs.push({
         taskId: id,
         userId,
@@ -718,7 +741,10 @@ export class TasksService {
       });
     }
 
-    if (data.description !== undefined && data.description !== exists.description) {
+    if (
+      data.description !== undefined &&
+      data.description !== exists.description
+    ) {
       activityLogs.push({
         taskId: id,
         userId,
@@ -751,22 +777,9 @@ export class TasksService {
       ...scalarData,
     };
 
-    if (assigneeId !== undefined) {
-      updateData.assignee = assigneeId
-        ? { connect: { id: assigneeId } }
-        : { disconnect: true };
-
-      if (assigneeIds === undefined) {
-        updateData.assignments = {
-          deleteMany: {},
-          ...(assigneeId
-            ? {
-                create: [{ user: { connect: { id: assigneeId } } }],
-              }
-            : {}),
-        };
-      }
-    }
+    updateData.assignee = assigneeId
+      ? { connect: { id: assigneeId } }
+      : { disconnect: true };
     if (reporterId !== undefined) {
       updateData.reporter = reporterId
         ? { connect: { id: reporterId } }
@@ -809,16 +822,10 @@ export class TasksService {
     }
 
     if (assigneeIds !== undefined) {
-      const normalizedAssigneeIds = Array.from(new Set((assigneeIds ?? []).filter(Boolean)));
+      const normalizedAssigneeIds = Array.from(
+        new Set((assigneeIds ?? []).filter(Boolean)),
+      );
       updateData.assigneeId = normalizedAssigneeIds[0] ?? null;
-      updateData.assignments = {
-        deleteMany: {},
-        ...(normalizedAssigneeIds.length
-          ? {
-              create: normalizedAssigneeIds.map((userId) => ({ user: { connect: { id: userId } } })),
-            }
-          : {}),
-      };
     }
 
     const task = await (this.prisma.task as any).update({
@@ -833,18 +840,7 @@ export class TasksService {
         project: true,
         component: true,
         version: true,
-        assignments: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                avatar: true,
-              },
-            },
-          },
-        },
+
         subtasks: { orderBy: { position: 'asc' } },
         comments: {
           include: {
@@ -914,7 +910,9 @@ export class TasksService {
       }
 
       // Auto-watch new assignee
-      try { await this.taskWatchersService.autoWatch(task.id, task.assigneeId); } catch {}
+      try {
+        await this.taskWatchersService.autoWatch(task.id, task.assigneeId);
+      } catch {}
     }
 
     // Trigger workflow if task was completed
@@ -948,8 +946,15 @@ export class TasksService {
     return task;
   }
 
-  async updatePosition(taskId: string, newStatus: string, newPosition: number, teamId?: string) {
-    const task = await (this.prisma.task as any).findUnique({ where: { id: taskId } });
+  async updatePosition(
+    taskId: string,
+    newStatus: string,
+    newPosition: number,
+    teamId?: string,
+  ) {
+    const task = await (this.prisma.task as any).findUnique({
+      where: { id: taskId },
+    });
     if (!task) throw new NotFoundException('Task not found');
 
     // Update task position and status
@@ -964,7 +969,9 @@ export class TasksService {
   }
 
   async addSubtask(taskId: string, title: string) {
-    const task = await (this.prisma.task as any).findUnique({ where: { id: taskId } });
+    const task = await (this.prisma.task as any).findUnique({
+      where: { id: taskId },
+    });
     if (!task) throw new NotFoundException('Task not found');
 
     const maxPosition = await this.prisma.subtask.findFirst({
@@ -982,7 +989,10 @@ export class TasksService {
     });
   }
 
-  async updateSubtask(subtaskId: string, data: { title?: string; isCompleted?: boolean; position?: number }) {
+  async updateSubtask(
+    subtaskId: string,
+    data: { title?: string; isCompleted?: boolean; position?: number },
+  ) {
     return this.prisma.subtask.update({
       where: { id: subtaskId },
       data,
@@ -993,7 +1003,13 @@ export class TasksService {
     return this.prisma.subtask.delete({ where: { id: subtaskId } });
   }
 
-  async addTimeEntry(taskId: string, userId: string, hours: number, description?: string, date?: Date) {
+  async addTimeEntry(
+    taskId: string,
+    userId: string,
+    hours: number,
+    description?: string,
+    date?: Date,
+  ) {
     return this.prisma.timeEntry.create({
       data: {
         taskId,
@@ -1019,7 +1035,14 @@ export class TasksService {
     return this.prisma.timeEntry.delete({ where: { id: timeEntryId } });
   }
 
-  async addAttachment(taskId: string, userId: string, name: string, url: string, mimeType?: string, size?: number) {
+  async addAttachment(
+    taskId: string,
+    userId: string,
+    name: string,
+    url: string,
+    mimeType?: string,
+    size?: number,
+  ) {
     return this.prisma.taskAttachment.create({
       data: {
         taskId,
@@ -1057,7 +1080,9 @@ export class TasksService {
   }
 
   async getTemplate(id: string) {
-    const template = await (this.prisma as any).taskTemplate.findUnique({ where: { id } });
+    const template = await (this.prisma as any).taskTemplate.findUnique({
+      where: { id },
+    });
     if (!template) throw new NotFoundException('Task template not found');
     return template;
   }
@@ -1116,7 +1141,9 @@ export class TasksService {
       versionId?: string | null;
     }>,
   ) {
-    const exists = await (this.prisma as any).taskTemplate.findUnique({ where: { id } });
+    const exists = await (this.prisma as any).taskTemplate.findUnique({
+      where: { id },
+    });
     if (!exists) throw new NotFoundException('Task template not found');
 
     return (this.prisma as any).taskTemplate.update({
@@ -1126,7 +1153,9 @@ export class TasksService {
   }
 
   async deleteTemplate(id: string) {
-    const exists = await (this.prisma as any).taskTemplate.findUnique({ where: { id } });
+    const exists = await (this.prisma as any).taskTemplate.findUnique({
+      where: { id },
+    });
     if (!exists) throw new NotFoundException('Task template not found');
     await (this.prisma as any).taskTemplate.delete({ where: { id } });
     return { success: true };
@@ -1150,14 +1179,20 @@ export class TasksService {
       descriptionOverride?: string;
     },
   ) {
-    const template = await (this.prisma as any).taskTemplate.findUnique({ where: { id: templateId } });
+    const template = await (this.prisma as any).taskTemplate.findUnique({
+      where: { id: templateId },
+    });
     if (!template) throw new NotFoundException('Task template not found');
 
     return this.create({
       title: data.titleOverride || template.title,
-      description: data.descriptionOverride || template.content || template.description || undefined,
-      priority: (template.priority as any) || 'medium',
-      issueType: (template.issueType as any) || 'task',
+      description:
+        data.descriptionOverride ||
+        template.content ||
+        template.description ||
+        undefined,
+      priority: template.priority || 'medium',
+      issueType: template.issueType || 'task',
       tags: template.tags || [],
       storyPoints: template.storyPoints,
       estimate: template.estimate,
@@ -1178,16 +1213,14 @@ export class TasksService {
 
   async generateRecurringTasks(untilDate?: Date) {
     const now = new Date();
-    const horizon = untilDate ?? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const horizon =
+      untilDate ?? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
     const recurringTasks = await (this.prisma.task as any).findMany({
       where: {
         isRecurring: true,
         recurringPattern: { not: null },
         OR: [{ recurringEndDate: null }, { recurringEndDate: { gte: now } }],
-      },
-      include: {
-        assignments: true,
       },
     });
 
@@ -1198,7 +1231,7 @@ export class TasksService {
       if (!baseDate) continue;
 
       const interval = Math.max(1, task.recurringInterval ?? 1);
-      let nextDue = new Date(baseDate);
+      const nextDue = new Date(baseDate);
 
       while (nextDue <= now) {
         if (task.recurringPattern === 'daily') {
@@ -1226,14 +1259,13 @@ export class TasksService {
       await this.create({
         title: task.title,
         description: task.description ?? undefined,
-        priority: task.priority as any,
+        priority: task.priority,
         status: 'todo',
-        issueType: task.issueType as any,
+        issueType: task.issueType,
         resolution: null,
         dueDate: nextDue,
         tags: task.tags,
         assigneeId: task.assigneeId,
-        assigneeIds: task.assignments.map((a) => a.userId),
         reporterId: task.reporterId,
         teamId: task.teamId,
         meetingId: null,
@@ -1260,31 +1292,34 @@ export class TasksService {
 
   async getAnalytics(teamId?: string) {
     const where = teamId ? { teamId } : {};
-    
-    const [total, byStatus, byPriority, byAssignee, timeSpent] = await Promise.all([
-      (this.prisma.task as any).count({ where }),
-      (this.prisma.task as any).groupBy({
-        by: ['status'],
-        where,
-        _count: true,
-      }),
-      (this.prisma.task as any).groupBy({
-        by: ['priority'],
-        where,
-        _count: true,
-      }),
-      (this.prisma.task as any).groupBy({
-        by: ['assigneeId'],
-        where: { ...where, assigneeId: { not: null } },
-        _count: true,
-      }),
-      this.prisma.timeEntry.aggregate({
-        where: teamId ? {
-          task: { teamId },
-        } : {},
-        _sum: { duration: true },
-      }),
-    ]);
+
+    const [total, byStatus, byPriority, byAssignee, timeSpent] =
+      await Promise.all([
+        (this.prisma.task as any).count({ where }),
+        (this.prisma.task as any).groupBy({
+          by: ['status'],
+          where,
+          _count: true,
+        }),
+        (this.prisma.task as any).groupBy({
+          by: ['priority'],
+          where,
+          _count: true,
+        }),
+        (this.prisma.task as any).groupBy({
+          by: ['assigneeId'],
+          where: { ...where, assigneeId: { not: null } },
+          _count: true,
+        }),
+        this.prisma.timeEntry.aggregate({
+          where: teamId
+            ? {
+                task: { teamId },
+              }
+            : {},
+          _sum: { duration: true },
+        }),
+      ]);
 
     return {
       total,
@@ -1297,7 +1332,7 @@ export class TasksService {
 
   async getActivity(teamId?: string, limit: number = 20) {
     const where: any = {};
-    
+
     if (teamId) {
       where.task = { teamId };
     }
@@ -1326,7 +1361,9 @@ export class TasksService {
   }
 
   async remove(id: string) {
-    const exists = await (this.prisma.task as any).findUnique({ where: { id } });
+    const exists = await (this.prisma.task as any).findUnique({
+      where: { id },
+    });
     if (!exists) throw new NotFoundException('Task not found');
 
     // Audit log before delete
@@ -1342,5 +1379,3 @@ export class TasksService {
     return { success: true };
   }
 }
-
-

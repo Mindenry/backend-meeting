@@ -1,6 +1,20 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 // @ts-ignore - Optional Swagger decorators
-import { ApiTags, ApiBearerAuth } from '../common/decorators/swagger.decorators';
+import {
+  ApiTags,
+  ApiBearerAuth,
+} from '../common/decorators/swagger.decorators';
 import { NotificationsService } from './notifications.service';
 import { NotificationPreferencesService } from './notification-preferences.service';
 import { NotificationDigestService } from './notification-digest.service';
@@ -31,8 +45,14 @@ export class NotificationsController {
   }
 
   @Get('user/:userId')
-  getUserNotifications(@Param('userId') userId: string, @Query('unreadOnly') unreadOnly?: string) {
-    return this.notificationsService.getUserNotifications(userId, unreadOnly === 'true');
+  getUserNotifications(
+    @Param('userId') userId: string,
+    @Query('unreadOnly') unreadOnly?: string,
+  ) {
+    return this.notificationsService.getUserNotifications(
+      userId,
+      unreadOnly === 'true',
+    );
   }
 
   @Get('unread-count')
@@ -46,15 +66,18 @@ export class NotificationsController {
   }
 
   @Post()
-  create(@Body() data: {
-    userId: string;
-    type: string;
-    title: string;
-    message: string;
-    relatedId?: string;
-    relatedType?: string;
-    link?: string;
-  }) {
+  create(
+    @Body()
+    data: {
+      userId: string;
+      type: string;
+      title: string;
+      message: string;
+      relatedId?: string;
+      relatedType?: string;
+      link?: string;
+    },
+  ) {
     return this.notificationsService.create(data);
   }
 
@@ -87,7 +110,8 @@ export class NotificationsController {
   @Patch('preferences')
   updatePreferences(
     @Query('userId') userId: string,
-    @Body() data: {
+    @Body()
+    data: {
       mentionDelivery?: string;
       taskAssignedDelivery?: string;
       meetingStartingDelivery?: string;

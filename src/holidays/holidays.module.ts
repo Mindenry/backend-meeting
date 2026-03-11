@@ -16,16 +16,18 @@ export class HolidaysModule implements OnModuleInit {
     // Auto-initialize holidays for current year and next year on server start
     const currentYear = new Date().getFullYear();
     const nextYear = currentYear + 1;
-    
+
     try {
       // Check if holidays exist for current year
-      const currentYearHolidays = await this.holidaysService.getThaiHolidays(currentYear);
+      const currentYearHolidays =
+        await this.holidaysService.getThaiHolidays(currentYear);
       if (currentYearHolidays.length === 0) {
         await this.holidaysService.initializeThaiHolidays(currentYear);
       }
 
       // Check if holidays exist for next year
-      const nextYearHolidays = await this.holidaysService.getThaiHolidays(nextYear);
+      const nextYearHolidays =
+        await this.holidaysService.getThaiHolidays(nextYear);
       if (nextYearHolidays.length === 0) {
         await this.holidaysService.initializeThaiHolidays(nextYear);
       }

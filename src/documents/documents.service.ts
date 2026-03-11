@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/audit.service';
 
@@ -83,8 +87,13 @@ export class DocumentsService {
     return folder;
   }
 
-  async updateFolder(id: string, data: { name?: string; description?: string }) {
-    const exists = await this.prisma.documentFolder.findUnique({ where: { id } });
+  async updateFolder(
+    id: string,
+    data: { name?: string; description?: string },
+  ) {
+    const exists = await this.prisma.documentFolder.findUnique({
+      where: { id },
+    });
     if (!exists) {
       throw new NotFoundException('Folder not found');
     }
@@ -117,7 +126,9 @@ export class DocumentsService {
     }
 
     if (folder.documents.length > 0 || folder.children.length > 0) {
-      throw new ForbiddenException('Cannot delete folder with documents or subfolders');
+      throw new ForbiddenException(
+        'Cannot delete folder with documents or subfolders',
+      );
     }
 
     await this.prisma.documentFolder.delete({ where: { id } });
@@ -214,8 +225,10 @@ export class DocumentsService {
 
     // Filter by permissions if userId provided
     if (userId) {
-      return documents.filter(doc => {
-        const userPermission = doc.permissions?.find(p => p.userId === userId);
+      return documents.filter((doc) => {
+        const userPermission = doc.permissions?.find(
+          (p) => p.userId === userId,
+        );
         return userPermission || doc.createdBy === userId;
       });
     }
@@ -250,7 +263,9 @@ export class DocumentsService {
 
     // Check permissions
     if (userId) {
-      const userPermission = document.permissions.find(p => p.userId === userId);
+      const userPermission = document.permissions.find(
+        (p) => p.userId === userId,
+      );
       const hasAccess = userPermission || document.createdBy === userId;
       if (!hasAccess) {
         throw new ForbiddenException('You do not have access to this document');
@@ -268,13 +283,18 @@ export class DocumentsService {
     const document = await this.getDocument(id, userId);
 
     // Check edit permission
-    const userPermission = document.permissions.find(p => p.userId === userId);
-    const canEdit = userPermission?.permission === 'edit' || 
-                    userPermission?.permission === 'delete' || 
-                    document.createdBy === userId;
+    const userPermission = document.permissions.find(
+      (p) => p.userId === userId,
+    );
+    const canEdit =
+      userPermission?.permission === 'edit' ||
+      userPermission?.permission === 'delete' ||
+      document.createdBy === userId;
 
     if (!canEdit) {
-      throw new ForbiddenException('You do not have permission to edit this document');
+      throw new ForbiddenException(
+        'You do not have permission to edit this document',
+      );
     }
 
     const updated = await this.prisma.document.update({
@@ -311,13 +331,18 @@ export class DocumentsService {
     const document = await this.getDocument(documentId);
 
     // Check edit permission
-    const userPermission = document.permissions.find(p => p.userId === data.createdBy);
-    const canEdit = userPermission?.permission === 'edit' || 
-                    userPermission?.permission === 'delete' || 
-                    document.createdBy === data.createdBy;
+    const userPermission = document.permissions.find(
+      (p) => p.userId === data.createdBy,
+    );
+    const canEdit =
+      userPermission?.permission === 'edit' ||
+      userPermission?.permission === 'delete' ||
+      document.createdBy === data.createdBy;
 
     if (!canEdit) {
-      throw new ForbiddenException('You do not have permission to create a new version');
+      throw new ForbiddenException(
+        'You do not have permission to create a new version',
+      );
     }
 
     const newVersion = document.version + 1;
@@ -364,11 +389,16 @@ export class DocumentsService {
     const document = await this.getDocument(id, userId);
 
     // Check delete permission
-    const userPermission = document.permissions.find(p => p.userId === userId);
-    const canDelete = userPermission?.permission === 'delete' || document.createdBy === userId;
+    const userPermission = document.permissions.find(
+      (p) => p.userId === userId,
+    );
+    const canDelete =
+      userPermission?.permission === 'delete' || document.createdBy === userId;
 
     if (!canDelete) {
-      throw new ForbiddenException('You do not have permission to archive this document');
+      throw new ForbiddenException(
+        'You do not have permission to archive this document',
+      );
     }
 
     const updated = await this.prisma.document.update({
@@ -397,11 +427,17 @@ export class DocumentsService {
     const document = await this.getDocument(documentId, grantedBy);
 
     // Check if grantor has delete permission
-    const grantorPermission = document.permissions.find(p => p.userId === grantedBy);
-    const canGrant = grantorPermission?.permission === 'delete' || document.createdBy === grantedBy;
+    const grantorPermission = document.permissions.find(
+      (p) => p.userId === grantedBy,
+    );
+    const canGrant =
+      grantorPermission?.permission === 'delete' ||
+      document.createdBy === grantedBy;
 
     if (!canGrant) {
-      throw new ForbiddenException('You do not have permission to grant access');
+      throw new ForbiddenException(
+        'You do not have permission to grant access',
+      );
     }
 
     const perm = await this.prisma.documentPermission.upsert({
@@ -430,15 +466,25 @@ export class DocumentsService {
     return perm;
   }
 
-  async removePermission(documentId: string, userId: string, removedBy: string) {
+  async removePermission(
+    documentId: string,
+    userId: string,
+    removedBy: string,
+  ) {
     const document = await this.getDocument(documentId, removedBy);
 
     // Check if remover has delete permission
-    const removerPermission = document.permissions.find(p => p.userId === removedBy);
-    const canRemove = removerPermission?.permission === 'delete' || document.createdBy === removedBy;
+    const removerPermission = document.permissions.find(
+      (p) => p.userId === removedBy,
+    );
+    const canRemove =
+      removerPermission?.permission === 'delete' ||
+      document.createdBy === removedBy;
 
     if (!canRemove) {
-      throw new ForbiddenException('You do not have permission to remove access');
+      throw new ForbiddenException(
+        'You do not have permission to remove access',
+      );
     }
 
     await this.prisma.documentPermission.delete({

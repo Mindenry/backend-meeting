@@ -11,7 +11,14 @@ import {
   Req,
 } from '@nestjs/common';
 // @ts-ignore - Optional Swagger decorators
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '../common/decorators/swagger.decorators';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+} from '../common/decorators/swagger.decorators';
 import { TeamsService } from './teams.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
@@ -27,14 +34,23 @@ export class TeamsController {
   constructor(private readonly teamsService: TeamsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all teams', description: 'Retrieve a list of all teams' })
-  @ApiResponse({ status: 200, description: 'List of teams retrieved successfully' })
+  @ApiOperation({
+    summary: 'Get all teams',
+    description: 'Retrieve a list of all teams',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of teams retrieved successfully',
+  })
   findAll(@Req() req: any) {
     return this.teamsService.findAll(req.user);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get team by ID', description: 'Retrieve a specific team by its ID' })
+  @ApiOperation({
+    summary: 'Get team by ID',
+    description: 'Retrieve a specific team by its ID',
+  })
   @ApiParam({ name: 'id', description: 'Team ID', example: 'team-123' })
   @ApiResponse({ status: 200, description: 'Team retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Team not found' })
@@ -75,20 +91,34 @@ export class TeamsController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update team', description: 'Update team information (name)' })
+  @ApiOperation({
+    summary: 'Update team',
+    description: 'Update team information (name)',
+  })
   @ApiParam({ name: 'id', description: 'Team ID', example: 'team-123' })
   @ApiResponse({ status: 200, description: 'Team updated successfully' })
   @ApiResponse({ status: 404, description: 'Team not found' })
-  update(@Param('id') id: string, @Body() updateTeamDto: UpdateTeamDto, @Req() req: any) {
+  update(
+    @Param('id') id: string,
+    @Body() updateTeamDto: UpdateTeamDto,
+    @Req() req: any,
+  ) {
     return this.teamsService.update(id, updateTeamDto, req.user);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete team', description: 'Permanently delete a team. Requires org owner or team lead role.' })
+  @ApiOperation({
+    summary: 'Delete team',
+    description:
+      'Permanently delete a team. Requires org owner or team lead role.',
+  })
   @ApiParam({ name: 'id', description: 'Team ID', example: 'team-123' })
   @ApiResponse({ status: 200, description: 'Team deleted successfully' })
   @ApiResponse({ status: 404, description: 'Team not found' })
-  @ApiResponse({ status: 403, description: 'Forbidden - admin or team lead required' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - admin or team lead required',
+  })
   remove(@Param('id') id: string, @Req() req: any) {
     return this.teamsService.remove(id, req.user);
   }
@@ -96,31 +126,72 @@ export class TeamsController {
   // --- members ---
 
   @Get(':id/members')
-  @ApiOperation({ summary: 'List team members', description: 'Get all members of a specific team' })
+  @ApiOperation({
+    summary: 'List team members',
+    description: 'Get all members of a specific team',
+  })
   @ApiParam({ name: 'id', description: 'Team ID', example: 'team-123' })
-  @ApiQuery({ name: 'includeSystem', required: false, type: Boolean, description: 'Include system users such as bots when true' })
-  @ApiResponse({ status: 200, description: 'Team members retrieved successfully' })
-  listMembers(@Param('id') id: string, @Query('includeSystem') includeSystem?: string) {
-    const includeSystemUsers = includeSystem === 'true' || includeSystem === '1';
+  @ApiQuery({
+    name: 'includeSystem',
+    required: false,
+    type: Boolean,
+    description: 'Include system users such as bots when true',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Team members retrieved successfully',
+  })
+  listMembers(
+    @Param('id') id: string,
+    @Query('includeSystem') includeSystem?: string,
+  ) {
+    const includeSystemUsers =
+      includeSystem === 'true' || includeSystem === '1';
     return this.teamsService.listMembers(id, includeSystemUsers);
   }
 
   @Post(':id/members')
-  @ApiOperation({ summary: 'Add member to team', description: 'Add a user to a team with optional role' })
+  @ApiOperation({
+    summary: 'Add member to team',
+    description: 'Add a user to a team with optional role',
+  })
   @ApiParam({ name: 'id', description: 'Team ID', example: 'team-123' })
-  @ApiResponse({ status: 201, description: 'Member added to team successfully' })
+  @ApiResponse({
+    status: 201,
+    description: 'Member added to team successfully',
+  })
   @ApiResponse({ status: 404, description: 'Team or user not found' })
   addMember(@Param('id') id: string, @Body() addMemberDto: AddMemberDto) {
-    return this.teamsService.addMember(id, addMemberDto.userId, addMemberDto.role);
+    return this.teamsService.addMember(
+      id,
+      addMemberDto.userId,
+      addMemberDto.role,
+    );
   }
 
-  @ApiOperation({ summary: 'Update team member role', description: 'Update team role (lead/admin/manager/member/viewer). Restricted to org owner/admin or team lead.' })
+  @Patch(':id/members/:userId/role')
+  @ApiOperation({
+    summary: 'Update team member role',
+    description:
+      'Update team role (lead/member). Restricted to org owner or team lead.',
+  })
   @ApiParam({ name: 'id', description: 'Team ID', example: 'team-123' })
-  @ApiParam({ name: 'userId', description: 'User ID in team', example: 'user-456' })
-  @ApiQuery({ name: 'role', description: 'Target role: lead/admin/manager/member/viewer', example: 'lead' })
+  @ApiParam({
+    name: 'userId',
+    description: 'User ID in team',
+    example: 'user-456',
+  })
+  @ApiQuery({
+    name: 'role',
+    description: 'Target role: lead/member',
+    example: 'lead',
+  })
   @ApiResponse({ status: 200, description: 'Member role updated successfully' })
   @ApiResponse({ status: 404, description: 'Team member not found' })
-  @ApiResponse({ status: 403, description: 'Forbidden - admin or team lead only' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - admin or team lead only',
+  })
   updateMemberRole(
     @Param('id') id: string,
     @Param('userId') userId: string,
@@ -130,13 +201,32 @@ export class TeamsController {
     return this.teamsService.updateMemberRole(id, userId, role, req.user);
   }
 
-  @ApiOperation({ summary: 'Remove member from team', description: 'Remove a user from a team. Requires org admin/manager or team lead/admin role.' })
+  @Delete(':id/members')
+  @ApiOperation({
+    summary: 'Remove member from team',
+    description:
+      'Remove a user from a team. Requires org manager or team lead role.',
+  })
   @ApiParam({ name: 'id', description: 'Team ID', example: 'team-123' })
-  @ApiQuery({ name: 'userId', description: 'User ID to remove', example: 'user-456' })
-  @ApiResponse({ status: 200, description: 'Member removed from team successfully' })
+  @ApiQuery({
+    name: 'userId',
+    description: 'User ID to remove',
+    example: 'user-456',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Member removed from team successfully',
+  })
   @ApiResponse({ status: 404, description: 'Team or user not found' })
-  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
-  removeMember(@Param('id') id: string, @Query('userId') userId: string, @Req() req: any) {
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - insufficient permissions',
+  })
+  removeMember(
+    @Param('id') id: string,
+    @Query('userId') userId: string,
+    @Req() req: any,
+  ) {
     return this.teamsService.removeMember(id, userId, req.user);
   }
 }

@@ -30,5 +30,3 @@ export class ThreadsController {
     return this.threadsService.addReply(threadId, body.senderId, body.text);
   }
 }
-
-

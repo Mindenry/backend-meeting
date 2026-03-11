@@ -1,9 +1,19 @@
-import { Injectable, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 
-export const LINK_TYPES = ['blocks', 'is_blocked_by', 'relates_to', 'duplicates'] as const;
-export type LinkType = typeof LINK_TYPES[number];
+export const LINK_TYPES = [
+  'blocks',
+  'is_blocked_by',
+  'relates_to',
+  'duplicates',
+] as const;
+export type LinkType = (typeof LINK_TYPES)[number];
 
 // Inverse mapping for bidirectional display
 const INVERSE_LINK_TYPE: Record<string, string> = {
@@ -21,13 +31,18 @@ export class IssueLinksService {
     private readonly eventsGateway: EventsGateway,
   ) {}
 
-  async create(data: { sourceId: string; targetId: string; type: string }, userId?: string) {
+  async create(
+    data: { sourceId: string; targetId: string; type: string },
+    userId?: string,
+  ) {
     if (data.sourceId === data.targetId) {
       throw new BadRequestException('Cannot link a task to itself');
     }
 
     if (!LINK_TYPES.includes(data.type as LinkType)) {
-      throw new BadRequestException(`Invalid link type: ${data.type}. Must be one of: ${LINK_TYPES.join(', ')}`);
+      throw new BadRequestException(
+        `Invalid link type: ${data.type}. Must be one of: ${LINK_TYPES.join(', ')}`,
+      );
     }
 
     // Check for duplicate (including reverse direction)
@@ -35,7 +50,11 @@ export class IssueLinksService {
       where: {
         OR: [
           { sourceId: data.sourceId, targetId: data.targetId, type: data.type },
-          { sourceId: data.targetId, targetId: data.sourceId, type: INVERSE_LINK_TYPE[data.type] },
+          {
+            sourceId: data.targetId,
+            targetId: data.sourceId,
+            type: INVERSE_LINK_TYPE[data.type],
+          },
         ],
       },
     });
@@ -46,20 +65,34 @@ export class IssueLinksService {
 
     // Cross-team safety guard: prevent linking tasks from different teams
     const [sourceTask, targetTask] = await Promise.all([
-      this.prisma.task.findUnique({ where: { id: data.sourceId }, select: { teamId: true } }),
-      this.prisma.task.findUnique({ where: { id: data.targetId }, select: { teamId: true } }),
+      this.prisma.task.findUnique({
+        where: { id: data.sourceId },
+        select: { teamId: true },
+      }),
+      this.prisma.task.findUnique({
+        where: { id: data.targetId },
+        select: { teamId: true },
+      }),
     ]);
     if (!sourceTask) throw new BadRequestException('Source task not found');
     if (!targetTask) throw new BadRequestException('Target task not found');
-    if (sourceTask.teamId && targetTask.teamId && sourceTask.teamId !== targetTask.teamId) {
+    if (
+      sourceTask.teamId &&
+      targetTask.teamId &&
+      sourceTask.teamId !== targetTask.teamId
+    ) {
       throw new BadRequestException('Cannot link tasks from different teams');
     }
 
     const link = await this.prisma.issueLink.create({
       data,
       include: {
-        source: { select: { id: true, title: true, status: true, issueType: true } },
-        target: { select: { id: true, title: true, status: true, issueType: true } },
+        source: {
+          select: { id: true, title: true, status: true, issueType: true },
+        },
+        target: {
+          select: { id: true, title: true, status: true, issueType: true },
+        },
       },
     });
 
@@ -93,7 +126,14 @@ export class IssueLinksService {
         where: { sourceId: taskId },
         include: {
           target: {
-            select: { id: true, title: true, status: true, priority: true, issueType: true, assigneeId: true },
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              priority: true,
+              issueType: true,
+              assigneeId: true,
+            },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -102,7 +142,14 @@ export class IssueLinksService {
         where: { targetId: taskId },
         include: {
           source: {
-            select: { id: true, title: true, status: true, priority: true, issueType: true, assigneeId: true },
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              priority: true,
+              issueType: true,
+              assigneeId: true,
+            },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -161,7 +208,11 @@ export class IssueLinksService {
       ],
     });
 
-    this.eventsGateway.server?.emit('issueLinkDeleted', { id, sourceId: link.sourceId, targetId: link.targetId });
+    this.eventsGateway.server?.emit('issueLinkDeleted', {
+      id,
+      sourceId: link.sourceId,
+      targetId: link.targetId,
+    });
 
     return { deleted: true };
   }

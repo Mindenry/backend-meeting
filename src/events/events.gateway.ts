@@ -44,11 +44,19 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // Track participants in each meeting
   private meetingParticipants: Map<string, MeetingParticipant[]> = new Map();
   // Map socket IDs to meeting IDs for cleanup on disconnect
-  private socketMeetings: Map<string, { meetingId: string; peerId: string }> = new Map();
+  private socketMeetings: Map<string, { meetingId: string; peerId: string }> =
+    new Map();
   // Online presence: socketId -> { userId, name, avatar }
-  private onlineUsers: Map<string, { userId: string; name: string; avatar?: string }> = new Map();
-  // Task viewing: taskId -> Set<{ userId, name, socketId }>
-  private taskViewers: Map<string, Set<{ userId: string; name: string; socketId: string }>> = new Map();
+  private onlineUsers: Map<
+    string,
+    { userId: string; name: string; avatar?: string }
+  > = new Map();
+  private taskViewers: Map<
+    string,
+    Set<{ userId: string; name: string; avatar?: string; socketId: string }>
+  > = new Map();
+  // Cache meeting titles so getActiveRoomsData can return real titles
+  private meetingTitles: Map<string, string> = new Map();
 
   handleConnection(client: Socket) {
     console.log(`Client connected: ${client.id}`);
@@ -60,7 +68,11 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Clean up meeting participation on disconnect
     const meetingInfo = this.socketMeetings.get(client.id);
     if (meetingInfo) {
-      await this.removeMeetingParticipant(meetingInfo.meetingId, meetingInfo.peerId, client);
+      await this.removeMeetingParticipant(
+        meetingInfo.meetingId,
+        meetingInfo.peerId,
+        client,
+      );
       this.socketMeetings.delete(client.id);
     }
 
@@ -72,7 +84,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     // Clean up task viewing
     for (const [taskId, viewers] of this.taskViewers.entries()) {
-      const viewer = Array.from(viewers).find(v => v.socketId === client.id);
+      const viewer = Array.from(viewers).find((v) => v.socketId === client.id);
       if (viewer) {
         viewers.delete(viewer);
         if (viewers.size === 0) {
@@ -84,7 +96,11 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  private async removeMeetingParticipant(meetingId: string, peerId: string, client: Socket) {
+  private async removeMeetingParticipant(
+    meetingId: string,
+    peerId: string,
+    client: Socket,
+  ) {
     const participants = this.meetingParticipants.get(meetingId) || [];
     const updated = participants.filter((p) => p.peerId !== peerId);
     this.meetingParticipants.set(meetingId, updated);
@@ -96,12 +112,17 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
         await this.participantsService.leaveMeeting(meetingId, userInfo.userId);
       } catch (error) {
         // Silently fail if participant doesn't exist or meeting is not found
-        console.warn(`Failed to record leave time for user ${userInfo.userId} in meeting ${meetingId}:`, error);
+        console.warn(
+          `Failed to record leave time for user ${userInfo.userId} in meeting ${meetingId}:`,
+          error,
+        );
       }
     }
 
     // Notify others in the meeting room
-    client.to(`meeting:${meetingId}`).emit('meeting:participant:left', { peerId });
+    client
+      .to(`meeting:${meetingId}`)
+      .emit('meeting:participant:left', { peerId });
     client.leave(`meeting:${meetingId}`);
   }
 
@@ -111,7 +132,14 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('meeting:join')
   async handleMeetingJoin(
-    @MessageBody() data: { meetingId: string; peerId: string; peerName: string; state: any; userId?: string },
+    @MessageBody()
+    data: {
+      meetingId: string;
+      peerId: string;
+      peerName: string;
+      state: any;
+      userId?: string;
+    },
     @ConnectedSocket() client: Socket,
   ) {
     const { meetingId, peerId, peerName, state, userId } = data;
@@ -122,16 +150,39 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Track this socket's meeting
     this.socketMeetings.set(client.id, { meetingId, peerId });
 
+    // Cache meeting title from DB (only once per meeting)
+    if (!this.meetingTitles.has(meetingId) && meetingId !== 'quick-huddle') {
+      try {
+        const meeting = await this.prisma.meeting.findUnique({
+          where: { id: meetingId },
+          select: { title: true },
+        });
+        if (meeting?.title) {
+          this.meetingTitles.set(meetingId, meeting.title);
+        }
+      } catch {
+        // Silently fail – the generic name will be used
+      }
+    }
+
     // Record join time in database if userId is available and it's not a quick huddle
     const userInfo = this.onlineUsers.get(client.id);
     const actualUserId = userId || userInfo?.userId;
     if (actualUserId && meetingId !== 'quick-huddle') {
       try {
-        await this.participantsService.joinMeeting(meetingId, actualUserId, undefined, true);
+        await this.participantsService.joinMeeting(
+          meetingId,
+          actualUserId,
+          undefined,
+          true,
+        );
       } catch (error) {
         // Silently fail if meeting doesn't exist or user is not authorized
         // This allows the WebSocket connection to continue even if DB record fails
-        console.warn(`Failed to record join time for user ${actualUserId} in meeting ${meetingId}:`, error);
+        console.warn(
+          `Failed to record join time for user ${actualUserId} in meeting ${meetingId}:`,
+          error,
+        );
       }
     }
 
@@ -157,7 +208,12 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Send existing participants to the new joiner
     const existingParticipants = participants
       .filter((p) => p.peerId !== peerId)
-      .map((p) => ({ peerId: p.peerId, name: p.name, avatar: p.avatar, state: p.state }));
+      .map((p) => ({
+        peerId: p.peerId,
+        name: p.name,
+        avatar: p.avatar,
+        state: p.state,
+      }));
 
     client.emit('meeting:participants', existingParticipants);
 
@@ -172,7 +228,11 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Broadcast to all clients (for Meetings page)
     this.broadcastActiveRooms();
 
-    return { event: 'meeting:joined', meetingId, participantCount: participants.length };
+    return {
+      event: 'meeting:joined',
+      meetingId,
+      participantCount: participants.length,
+    };
   }
 
   @SubscribeMessage('meeting:leave')
@@ -206,7 +266,11 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { userId: string; name: string; avatar?: string },
     @ConnectedSocket() client: Socket,
   ) {
-    this.onlineUsers.set(client.id, { userId: data.userId, name: data.name, avatar: data.avatar });
+    this.onlineUsers.set(client.id, {
+      userId: data.userId,
+      name: data.name,
+      avatar: data.avatar,
+    });
     this.broadcastPresence();
     return { event: 'presence:registered' };
   }
@@ -218,11 +282,21 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return { event: 'presence:sent' };
   }
 
-  private getOnlineUsersData(): Array<{ userId: string; name: string; avatar?: string }> {
+  private getOnlineUsersData(): Array<{
+    userId: string;
+    name: string;
+    avatar?: string;
+  }> {
     // Deduplicate by userId (same user may have multiple sockets)
-    const seen = new Map<string, { userId: string; name: string; avatar?: string }>();
+    const seen = new Map<
+      string,
+      { userId: string; name: string; avatar?: string }
+    >();
     for (const [, info] of this.onlineUsers) {
-      if (!seen.has(info.userId) || (info.avatar && !seen.get(info.userId)?.avatar)) {
+      if (
+        !seen.has(info.userId) ||
+        (info.avatar && !seen.get(info.userId)?.avatar)
+      ) {
         seen.set(info.userId, info);
       }
     }
@@ -264,7 +338,9 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
         attachments: data.attachments,
         mentions: data.mentions,
       });
-      console.log(`[DM] Persisted DM ${saved.id} from ${data.senderId} to ${data.receiverId}`);
+      console.log(
+        `[DM] Persisted DM ${saved.id} from ${data.senderId} to ${data.receiverId}`,
+      );
     } catch (error) {
       // Log but do not block real-time delivery
       console.error('[DM] Failed to persist direct message:', error);
@@ -275,19 +351,25 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     for (const [socketId, userInfo] of this.onlineUsers) {
       if (userInfo.userId === data.receiverId) {
         receiverFound = true;
-        console.log(`[DM] Emitting to receiver ${data.receiverId} on socket ${socketId}`);
+        console.log(
+          `[DM] Emitting to receiver ${data.receiverId} on socket ${socketId}`,
+        );
         this.server.to(socketId).emit('dm:message', {
           ...data,
           receiverId: data.receiverId,
-          senderAvatar: this.onlineUsers.get(client.id)?.avatar,
+          senderAvatar:
+            (data as any).senderAvatar ||
+            this.onlineUsers.get(client.id)?.avatar,
         });
       }
     }
-    
+
     if (!receiverFound) {
-      console.log(`[DM] Receiver ${data.receiverId} not found in onlineUsers (${this.onlineUsers.size} online)`);
+      console.log(
+        `[DM] Receiver ${data.receiverId} not found in onlineUsers (${this.onlineUsers.size} online)`,
+      );
     }
-    
+
     // Also emit back to sender so they see their own message immediately
     const senderInfo = this.onlineUsers.get(client.id);
     if (senderInfo && senderInfo.userId === data.senderId) {
@@ -295,17 +377,21 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.emit('dm:message', {
         ...data,
         receiverId: data.receiverId,
-        senderAvatar: senderInfo.avatar,
+        senderAvatar: (data as any).senderAvatar || senderInfo.avatar,
       });
     } else {
-      console.log(`[DM] Sender ${data.senderId} not found in onlineUsers for socket ${client.id}`);
+      console.log(
+        `[DM] Sender ${data.senderId} not found in onlineUsers for socket ${client.id}`,
+      );
     }
-    
+
     return { event: 'dm:sent' };
   }
 
   @SubscribeMessage('user:room:change')
-  handleUserRoomChange(@MessageBody() data: { userId: string; room: string | null }) {
+  handleUserRoomChange(
+    @MessageBody() data: { userId: string; room: string | null },
+  ) {
     this.server.emit('user:room:changed', data);
     return { event: 'room:changed' };
   }
@@ -314,27 +400,45 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const rooms: Array<{
       roomId: string;
       name: string;
-      participants: Array<{ peerId: string; name: string; userId?: string }>;
+      participants: Array<{
+        peerId: string;
+        name: string;
+        userId?: string;
+        avatar?: string;
+      }>;
       createdAt: Date;
     }> = [];
 
     for (const [meetingId, participants] of this.meetingParticipants) {
       const roomName = `meeting:${meetingId}`;
       const roomAdapter = this.server.sockets.adapter.rooms.get(roomName);
-      
+
       if (roomAdapter && roomAdapter.size > 0 && participants.length > 0) {
         // Filter participants to only those whose socket is still in the room
-        const activeParticipants = participants.filter(p => roomAdapter.has(p.socketId));
-        
+        const activeParticipants = participants.filter((p) =>
+          roomAdapter.has(p.socketId),
+        );
+
         if (activeParticipants.length > 0) {
+          // Use cached title, fallback to generic
+          const cachedTitle = this.meetingTitles.get(meetingId);
+          const displayName =
+            meetingId === 'quick-huddle'
+              ? 'Quick Huddle'
+              : cachedTitle || `Meeting ${meetingId.slice(0, 8)}`;
+
           rooms.push({
             roomId: meetingId,
-            name: meetingId === 'quick-huddle' ? 'Quick Huddle' : `Meeting ${meetingId.slice(0, 8)}`,
-            participants: activeParticipants.map((p) => ({ 
-              peerId: p.peerId, 
-              name: p.name,
-              userId: this.onlineUsers.get(p.socketId)?.userId
-            })),
+            name: displayName,
+            participants: activeParticipants.map((p) => {
+              const onlineInfo = this.onlineUsers.get(p.socketId);
+              return {
+                peerId: p.peerId,
+                name: p.name,
+                userId: onlineInfo?.userId,
+                avatar: p.avatar || onlineInfo?.avatar,
+              };
+            }),
             createdAt: new Date(),
           });
         }
@@ -351,7 +455,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('meeting:participant:update')
   handleParticipantUpdate(
-    @MessageBody() data: { meetingId: string; peerId: string; name: string; state: any },
+    @MessageBody()
+    data: { meetingId: string; peerId: string; name: string; state: any },
     @ConnectedSocket() client: Socket,
   ) {
     const { meetingId, peerId, name, state } = data;
@@ -364,20 +469,25 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     // Broadcast to others in the meeting
-    client.to(`meeting:${meetingId}`).emit('meeting:participant:update', { peerId, name, state });
+    client
+      .to(`meeting:${meetingId}`)
+      .emit('meeting:participant:update', { peerId, name, state });
     return { event: 'updated' };
   }
 
   @SubscribeMessage('meeting:participant:speaking')
   handleSpeakingUpdate(
-    @MessageBody() data: { meetingId: string; peerId: string; isSpeaking: boolean },
+    @MessageBody()
+    data: { meetingId: string; peerId: string; isSpeaking: boolean },
     @ConnectedSocket() client: Socket,
   ) {
     // Broadcast speaking state to others in the meeting
-    client.to(`meeting:${data.meetingId}`).emit('meeting:participant:speaking', {
-      peerId: data.peerId,
-      isSpeaking: data.isSpeaking,
-    });
+    client
+      .to(`meeting:${data.meetingId}`)
+      .emit('meeting:participant:speaking', {
+        peerId: data.peerId,
+        isSpeaking: data.isSpeaking,
+      });
     return { event: 'speaking:updated' };
   }
 
@@ -387,7 +497,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('webrtc:offer')
   handleWebRTCOffer(
-    @MessageBody() data: { to: string; name: string; offer: RTCSessionDescriptionInit },
+    @MessageBody()
+    data: { to: string; name: string; offer: RTCSessionDescriptionInit },
     @ConnectedSocket() client: Socket,
   ) {
     // Find the target socket
@@ -477,7 +588,12 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.server.to(`meeting:${data.meetingId}`).emit('meeting:chat:message', {
         id: data.message.id,
         sender: data.message.senderName,
-        time: data.message.time || new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+        time:
+          data.message.time ||
+          new Date().toLocaleTimeString('th-TH', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
         text: data.message.text,
       });
       return { event: 'chat:sent' };
@@ -550,13 +666,17 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   emitMessageCreated(message: any) {
-    this.server.to(`channel:${message.channelId}`).emit('message:created', message);
+    this.server
+      .to(`channel:${message.channelId}`)
+      .emit('message:created', message);
     // Also emit to the general server for global updates if needed
     this.server.emit('message:created', message);
   }
 
   emitMessageUpdated(message: any) {
-    this.server.to(`channel:${message.channelId}`).emit('message:updated', message);
+    this.server
+      .to(`channel:${message.channelId}`)
+      .emit('message:updated', message);
   }
 
   emitMessageDeleted(id: string, channelId: string) {
@@ -610,7 +730,9 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   // Thread events
   emitThreadCreated(thread: any) {
-    this.server.to(`channel:${thread.channelId}`).emit('thread:created', thread);
+    this.server
+      .to(`channel:${thread.channelId}`)
+      .emit('thread:created', thread);
   }
 
   emitThreadReplyAdded(threadId: string, reply: any) {
@@ -619,7 +741,9 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   // Typing indicators
   emitTypingStarted(channelId: string, userId: string, userName: string) {
-    this.server.to(`channel:${channelId}`).emit('typing:started', { userId, userName });
+    this.server
+      .to(`channel:${channelId}`)
+      .emit('typing:started', { userId, userName });
   }
 
   emitTypingStopped(channelId: string, userId: string) {
@@ -628,11 +752,15 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   // Voice channel events
   emitVoiceJoin(channelId: string, userId: string, peerId: string) {
-    this.server.to(`voice:${channelId}`).emit('voice:user:joined', { userId, peerId });
+    this.server
+      .to(`voice:${channelId}`)
+      .emit('voice:user:joined', { userId, peerId });
   }
 
   emitVoiceLeave(channelId: string, userId: string, peerId: string) {
-    this.server.to(`voice:${channelId}`).emit('voice:user:left', { userId, peerId });
+    this.server
+      .to(`voice:${channelId}`)
+      .emit('voice:user:left', { userId, peerId });
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -641,15 +769,16 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('task:viewing')
   handleTaskViewing(
-    @MessageBody() data: { taskId: string; userId: string; userName: string },
+    @MessageBody()
+    data: { taskId: string; userId: string; userName: string; avatar?: string },
     @ConnectedSocket() client: Socket,
   ) {
-    const { taskId, userId, userName } = data;
-    
+    const { taskId, userId, userName, avatar } = data;
+
     if (!this.taskViewers.has(taskId)) {
       this.taskViewers.set(taskId, new Set());
     }
-    
+
     const viewers = this.taskViewers.get(taskId)!;
     // Remove existing viewer with same socketId
     for (const viewer of viewers) {
@@ -658,10 +787,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
         break;
       }
     }
-    
-    viewers.add({ userId, name: userName, socketId: client.id });
+
+    viewers.add({ userId, name: userName, avatar, socketId: client.id });
     this.broadcastTaskViewing(taskId);
-    
+
     return { event: 'task:viewing:started' };
   }
 
@@ -672,9 +801,9 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     const { taskId } = data;
     const viewers = this.taskViewers.get(taskId);
-    
+
     if (viewers) {
-      const viewer = Array.from(viewers).find(v => v.socketId === client.id);
+      const viewer = Array.from(viewers).find((v) => v.socketId === client.id);
       if (viewer) {
         viewers.delete(viewer);
         if (viewers.size === 0) {
@@ -684,24 +813,25 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
       }
     }
-    
+
     return { event: 'task:viewing:stopped' };
   }
 
   private broadcastTaskViewing(taskId: string) {
     const viewers = this.taskViewers.get(taskId);
     if (!viewers) return;
-    
-    const viewersList = Array.from(viewers).map(v => ({
+
+    const viewersList = Array.from(viewers).map((v) => ({
       userId: v.userId,
       name: v.name,
+      avatar: v.avatar,
     }));
-    
+
     // Deduplicate by userId
     const uniqueViewers = Array.from(
-      new Map(viewersList.map(v => [v.userId, v])).values()
+      new Map(viewersList.map((v) => [v.userId, v])).values(),
     );
-    
+
     this.server.emit('task:viewing:update', {
       taskId,
       users: uniqueViewers,

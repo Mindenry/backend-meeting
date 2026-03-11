@@ -15,7 +15,12 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 
 // @ts-ignore - Optional Swagger decorators
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '../common/decorators/swagger.decorators';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '../common/decorators/swagger.decorators';
 
 @ApiTags('tasks')
 @Controller('tasks')
@@ -68,7 +73,10 @@ export class TasksController {
   }
 
   @Get('templates')
-  getTemplates(@Query('teamId') teamId?: string, @Query('createdById') createdById?: string) {
+  getTemplates(
+    @Query('teamId') teamId?: string,
+    @Query('createdById') createdById?: string,
+  ) {
     return this.tasksService.getTemplates({ teamId, createdById });
   }
 
@@ -180,18 +188,28 @@ export class TasksController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a new task', description: 'Create a new task with optional assignee, team, and other metadata' })
+  @ApiOperation({
+    summary: 'Create a new task',
+    description:
+      'Create a new task with optional assignee, team, and other metadata',
+  })
   @ApiResponse({ status: 201, description: 'Task created successfully' })
   create(@Body() createTaskDto: CreateTaskDto) {
     return this.tasksService.create({
       ...createTaskDto,
       dueDate: createTaskDto.dueDate ? new Date(createTaskDto.dueDate) : null,
-      recurringEndDate: createTaskDto.recurringEndDate ? new Date(createTaskDto.recurringEndDate) : null,
+      recurringEndDate: createTaskDto.recurringEndDate
+        ? new Date(createTaskDto.recurringEndDate)
+        : null,
     });
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a task', description: 'Update task properties. Only provided fields will be updated.' })
+  @ApiOperation({
+    summary: 'Update a task',
+    description:
+      'Update task properties. Only provided fields will be updated.',
+  })
   @ApiResponse({ status: 200, description: 'Task updated successfully' })
   update(@Param('id') id: string, @Body() updateTaskDto: UpdateTaskDto) {
     const { dueDate, recurringEndDate, userId, ...rest } = updateTaskDto;
@@ -211,7 +229,12 @@ export class TasksController {
     @Param('id') id: string,
     @Body() body: { status: string; position: number; teamId?: string },
   ) {
-    return this.tasksService.updatePosition(id, body.status, body.position, body.teamId);
+    return this.tasksService.updatePosition(
+      id,
+      body.status,
+      body.position,
+      body.teamId,
+    );
   }
 
   @Post(':id/subtasks')
@@ -235,7 +258,13 @@ export class TasksController {
   @Post(':id/time-entries')
   addTimeEntry(
     @Param('id') id: string,
-    @Body() body: { userId: string; hours: number; description?: string; date?: string },
+    @Body()
+    body: {
+      userId: string;
+      hours: number;
+      description?: string;
+      date?: string;
+    },
   ) {
     return this.tasksService.addTimeEntry(
       id,
@@ -254,9 +283,23 @@ export class TasksController {
   @Post(':id/attachments')
   addAttachment(
     @Param('id') id: string,
-    @Body() body: { userId: string; name: string; url: string; mimeType?: string; size?: number },
+    @Body()
+    body: {
+      userId: string;
+      name: string;
+      url: string;
+      mimeType?: string;
+      size?: number;
+    },
   ) {
-    return this.tasksService.addAttachment(id, body.userId, body.name, body.url, body.mimeType, body.size);
+    return this.tasksService.addAttachment(
+      id,
+      body.userId,
+      body.name,
+      body.url,
+      body.mimeType,
+      body.size,
+    );
   }
 
   @Delete('attachments/:attachmentId')
@@ -269,5 +312,3 @@ export class TasksController {
     return this.tasksService.remove(id);
   }
 }
-
-

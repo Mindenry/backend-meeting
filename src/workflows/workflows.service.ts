@@ -61,10 +61,7 @@ export class WorkflowsService {
     return workflow;
   }
 
-  async findAllWorkflows(params?: {
-    teamId?: string;
-    isActive?: boolean;
-  }) {
+  async findAllWorkflows(params?: { teamId?: string; isActive?: boolean }) {
     return this.prisma.workflow.findMany({
       where: {
         teamId: params?.teamId || undefined,
@@ -142,7 +139,10 @@ export class WorkflowsService {
     }
 
     // Check conditions
-    if (workflow.conditions && !this.checkConditions(workflow.conditions, input)) {
+    if (
+      workflow.conditions &&
+      !this.checkConditions(workflow.conditions, input)
+    ) {
       return {
         success: false,
         reason: 'Conditions not met',
@@ -225,9 +225,13 @@ export class WorkflowsService {
     if (!conditions) return true;
 
     // Example: { field: 'status', operator: 'equals', value: 'completed' }
-    if (conditions.field && conditions.operator && conditions.value !== undefined) {
+    if (
+      conditions.field &&
+      conditions.operator &&
+      conditions.value !== undefined
+    ) {
       const fieldValue = this.getNestedValue(input, conditions.field);
-      
+
       switch (conditions.operator) {
         case 'equals':
           return fieldValue === conditions.value;
@@ -256,7 +260,11 @@ export class WorkflowsService {
         const result = await this.executeAction(action, input, workflow);
         output.push({ action: action.type, success: true, result });
       } catch (error) {
-        output.push({ action: action.type, success: false, error: error.message });
+        output.push({
+          action: action.type,
+          success: false,
+          error: error.message,
+        });
       }
     }
 
@@ -307,8 +315,6 @@ export class WorkflowsService {
         }
         return { success: false, error: 'No taskId in input' };
 
-
-
       default:
         throw new Error(`Unknown action type: ${action.type}`);
     }
@@ -317,7 +323,7 @@ export class WorkflowsService {
   // Helper: Interpolate variables in strings
   private interpolate(template: string, data: any): string {
     if (!template) return '';
-    
+
     return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
       const value = this.getNestedValue(data, key);
       return value !== undefined ? String(value) : match;
@@ -330,10 +336,13 @@ export class WorkflowsService {
   }
 
   // Get workflow runs
-  async getWorkflowRuns(workflowId: string, params?: {
-    status?: string;
-    limit?: number;
-  }) {
+  async getWorkflowRuns(
+    workflowId: string,
+    params?: {
+      status?: string;
+      limit?: number;
+    },
+  ) {
     return this.prisma.workflowRun.findMany({
       where: {
         workflowId,

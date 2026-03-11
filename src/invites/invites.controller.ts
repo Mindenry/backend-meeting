@@ -21,7 +21,7 @@ export class InvitesController {
   /**
    * Create a new invite for a user in the same organization as the requester.
    * Only org_owner, admin, and manager can create invites.
-   * 
+   *
    * organizationId and invitedBy are always derived from the authenticated user
    * to prevent clients from spoofing these values.
    */
@@ -43,7 +43,9 @@ export class InvitesController {
   ) {
     const user = req.user;
     if (!user?.organizationId || !user?.id) {
-      throw new ForbiddenException('User must belong to an organization to send invites');
+      throw new ForbiddenException(
+        'User must belong to an organization to send invites',
+      );
     }
 
     const invite = await this.invitesService.createInvite({
@@ -74,7 +76,9 @@ export class InvitesController {
   ) {
     const user = req.user;
     if (!user?.organizationId || user.organizationId !== orgId) {
-      throw new ForbiddenException('Cannot access invites from another organization');
+      throw new ForbiddenException(
+        'Cannot access invites from another organization',
+      );
     }
     return this.invitesService.getInvitesByOrganization(orgId);
   }

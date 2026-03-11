@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/audit.service';
 
@@ -24,7 +28,9 @@ export class TimeTrackingService {
 
     if (data.endTime && !calculatedDuration) {
       calculatedDuration = Math.floor(
-        (new Date(data.endTime).getTime() - new Date(data.startTime).getTime()) / 1000,
+        (new Date(data.endTime).getTime() -
+          new Date(data.startTime).getTime()) /
+          1000,
       );
     }
 
@@ -141,18 +147,24 @@ export class TimeTrackingService {
     }
 
     if (entry.userId !== userId) {
-      throw new BadRequestException('You can only update your own time entries');
+      throw new BadRequestException(
+        'You can only update your own time entries',
+      );
     }
 
     let calculatedDuration = data.duration;
 
     if (data.endTime && data.startTime && !calculatedDuration) {
       calculatedDuration = Math.floor(
-        (new Date(data.endTime).getTime() - new Date(data.startTime).getTime()) / 1000,
+        (new Date(data.endTime).getTime() -
+          new Date(data.startTime).getTime()) /
+          1000,
       );
     } else if (data.endTime && !calculatedDuration) {
       calculatedDuration = Math.floor(
-        (new Date(data.endTime).getTime() - new Date(entry.startTime).getTime()) / 1000,
+        (new Date(data.endTime).getTime() -
+          new Date(entry.startTime).getTime()) /
+          1000,
       );
     }
 
@@ -190,7 +202,9 @@ export class TimeTrackingService {
     }
 
     if (entry.userId !== userId) {
-      throw new BadRequestException('You can only delete your own time entries');
+      throw new BadRequestException(
+        'You can only delete your own time entries',
+      );
     }
 
     await this.prisma.timeEntry.delete({ where: { id } });
@@ -228,7 +242,7 @@ export class TimeTrackingService {
         select: { userId: true },
       });
       where.userId = {
-        in: teamMembers.map(m => m.userId),
+        in: teamMembers.map((m) => m.userId),
       };
     }
 
@@ -244,9 +258,12 @@ export class TimeTrackingService {
       },
     });
 
-    const totalSeconds = entries.reduce((sum, entry) => sum + (entry.duration || 0), 0);
+    const totalSeconds = entries.reduce(
+      (sum, entry) => sum + (entry.duration || 0),
+      0,
+    );
     const billableSeconds = entries
-      .filter(e => e.billable)
+      .filter((e) => e.billable)
       .reduce((sum, entry) => sum + (entry.duration || 0), 0);
 
     const byUser = entries.reduce((acc, entry) => {
@@ -268,7 +285,7 @@ export class TimeTrackingService {
     }, {} as any);
 
     const byTask = entries
-      .filter(e => e.taskId)
+      .filter((e) => e.taskId)
       .reduce((acc, entry) => {
         const taskId = entry.taskId!;
         if (!acc[taskId]) {

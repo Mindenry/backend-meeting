@@ -20,11 +20,20 @@ export class NotificationDigestService {
    */
   private getNotificationPriority(type: string): string {
     // Urgent: requires immediate attention
-    if (['mention', 'task_assigned', 'meeting_starting', 'pullrequest_review'].includes(type)) {
+    if (
+      [
+        'mention',
+        'task_assigned',
+        'meeting_starting',
+        'pullrequest_review',
+      ].includes(type)
+    ) {
       return 'urgent';
     }
     // High: important but not urgent
-    if (['task_updated', 'meeting_created', 'pullrequest_created'].includes(type)) {
+    if (
+      ['task_updated', 'meeting_created', 'pullrequest_created'].includes(type)
+    ) {
       return 'high';
     }
     // Normal: regular updates
@@ -83,7 +92,10 @@ export class NotificationDigestService {
     // Filter notifications that should be in digest (not realtime)
     const digestNotifications: typeof notifications = [];
     for (const notif of notifications) {
-      const deliveryMode = await this.preferencesService.getDeliveryMode(userId, notif.type);
+      const deliveryMode = await this.preferencesService.getDeliveryMode(
+        userId,
+        notif.type,
+      );
       if (deliveryMode === 'digest_hourly') {
         digestNotifications.push(notif);
       }
@@ -148,7 +160,9 @@ export class NotificationDigestService {
       },
     });
 
-    this.logger.log(`Created hourly digest for user ${userId}: ${digestNotifications.length} notifications`);
+    this.logger.log(
+      `Created hourly digest for user ${userId}: ${digestNotifications.length} notifications`,
+    );
 
     return digest;
   }
@@ -182,7 +196,10 @@ export class NotificationDigestService {
     // Filter notifications that should be in digest
     const digestNotifications: typeof notifications = [];
     for (const notif of notifications) {
-      const deliveryMode = await this.preferencesService.getDeliveryMode(userId, notif.type);
+      const deliveryMode = await this.preferencesService.getDeliveryMode(
+        userId,
+        notif.type,
+      );
       if (['digest_daily', 'digest_hourly'].includes(deliveryMode)) {
         digestNotifications.push(notif);
       }
@@ -247,7 +264,9 @@ export class NotificationDigestService {
       },
     });
 
-    this.logger.log(`Created daily digest for user ${userId}: ${digestNotifications.length} notifications`);
+    this.logger.log(
+      `Created daily digest for user ${userId}: ${digestNotifications.length} notifications`,
+    );
 
     return digest;
   }
@@ -278,7 +297,10 @@ export class NotificationDigestService {
         }
       }
     } catch (error) {
-      this.logger.error(`Error sending daily digests: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error sending daily digests: ${error.message}`,
+        error.stack,
+      );
     }
   }
 
@@ -296,14 +318,20 @@ export class NotificationDigestService {
         await this.createHourlyDigest(user.id);
       }
     } catch (error) {
-      this.logger.error(`Error sending hourly digests: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error sending hourly digests: ${error.message}`,
+        error.stack,
+      );
     }
   }
 
   /**
    * Get digests for a user
    */
-  async getUserDigests(userId: string, options?: { limit?: number; digestType?: string }) {
+  async getUserDigests(
+    userId: string,
+    options?: { limit?: number; digestType?: string },
+  ) {
     return this.prisma.notificationDigest.findMany({
       where: {
         userId,

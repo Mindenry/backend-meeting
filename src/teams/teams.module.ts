@@ -9,5 +9,3 @@ import { EventsModule } from '../events/events.module';
   controllers: [TeamsController],
 })
 export class TeamsModule {}
-
-

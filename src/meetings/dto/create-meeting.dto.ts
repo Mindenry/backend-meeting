@@ -1,5 +1,15 @@
-import { IsString, IsOptional, IsBoolean, IsArray, IsDateString, IsNumber } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '../../common/decorators/swagger.decorators';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsArray,
+  IsDateString,
+  IsNumber,
+} from 'class-validator';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+} from '../../common/decorators/swagger.decorators';
 
 export class CreateMeetingDto {
   @ApiProperty({

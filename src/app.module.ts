@@ -55,7 +55,6 @@ import { MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { LoggingMiddleware } from './common/middleware/logging.middleware';
 import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 
-
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -68,14 +67,20 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
         rootPath: join(process.cwd(), 'uploads'),
         serveRoot: '/uploads',
       },
-      ...(require('fs').existsSync(join(process.cwd(), '..', 'team-connect-hub', 'dist'))
+      ...(require('fs').existsSync(
+        join(process.cwd(), '..', 'team-connect-hub', 'dist'),
+      )
         ? [
             {
               rootPath: join(process.cwd(), '..', 'team-connect-hub', 'dist'),
-              exclude: ['/api/{*path}', '/socket.io/{*path}', '/uploads/{*path}'],
+              exclude: [
+                '/api/{*path}',
+                '/socket.io/{*path}',
+                '/uploads/{*path}',
+              ],
             },
           ]
-        : [])
+        : []),
     ),
     ScheduleModule.forRoot(),
     PrismaModule,
@@ -131,9 +136,6 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(LoggingMiddleware, RateLimitMiddleware)
-      .forRoutes('*'); // Apply to all routes
+    consumer.apply(LoggingMiddleware, RateLimitMiddleware).forRoutes('*'); // Apply to all routes
   }
 }
-

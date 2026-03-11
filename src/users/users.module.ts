@@ -10,6 +10,4 @@ import { EventsModule } from '../events/events.module';
   controllers: [UsersController],
   exports: [UsersService],
 })
-export class UsersModule { }
-
-
+export class UsersModule {}

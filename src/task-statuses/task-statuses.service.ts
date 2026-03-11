@@ -2,10 +2,34 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 const DEFAULT_STATUSES = [
-  { key: 'todo', name: 'To Do', color: '#94a3b8', category: 'todo', position: 0 },
-  { key: 'in_progress', name: 'In Progress', color: '#3b82f6', category: 'doing', position: 1 },
-  { key: 'in_review', name: 'In Review', color: '#f59e0b', category: 'doing', position: 2 },
-  { key: 'done', name: 'Done', color: '#10b981', category: 'done', position: 3 },
+  {
+    key: 'todo',
+    name: 'To Do',
+    color: '#94a3b8',
+    category: 'todo',
+    position: 0,
+  },
+  {
+    key: 'in_progress',
+    name: 'In Progress',
+    color: '#3b82f6',
+    category: 'doing',
+    position: 1,
+  },
+  {
+    key: 'in_review',
+    name: 'In Review',
+    color: '#f59e0b',
+    category: 'doing',
+    position: 2,
+  },
+  {
+    key: 'done',
+    name: 'Done',
+    color: '#10b981',
+    category: 'done',
+    position: 3,
+  },
 ];
 
 @Injectable()
@@ -84,7 +108,9 @@ export class TaskStatusesService {
 
   async remove(id: string) {
     // Check if any tasks use this status
-    const status = await this.prisma.taskWorkflowStatus.findUnique({ where: { id } });
+    const status = await this.prisma.taskWorkflowStatus.findUnique({
+      where: { id },
+    });
     if (status) {
       const taskCount = await this.prisma.task.count({
         where: { status: status.key },

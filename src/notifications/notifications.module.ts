@@ -23,5 +23,4 @@ import { AuthModule } from '../auth/auth.module';
     NotificationDigestService,
   ],
 })
-export class NotificationsModule { }
-
+export class NotificationsModule {}

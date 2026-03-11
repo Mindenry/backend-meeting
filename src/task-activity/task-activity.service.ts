@@ -26,13 +26,15 @@ export class TaskActivityService {
     return this.prisma.taskActivityLog.create({ data });
   }
 
-  async logMany(entries: Array<{
-    taskId: string;
-    userId?: string;
-    action: string;
-    oldValue?: string;
-    newValue?: string;
-  }>) {
+  async logMany(
+    entries: Array<{
+      taskId: string;
+      userId?: string;
+      action: string;
+      oldValue?: string;
+      newValue?: string;
+    }>,
+  ) {
     if (entries.length === 0) return;
     return this.prisma.taskActivityLog.createMany({ data: entries });
   }

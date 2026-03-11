@@ -8,7 +8,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 // @ts-ignore - Optional Swagger decorators
-import { ApiTags, ApiBearerAuth } from '../common/decorators/swagger.decorators';
+import {
+  ApiTags,
+  ApiBearerAuth,
+} from '../common/decorators/swagger.decorators';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AnnouncementsService } from './announcements.service';
 import { PrismaService } from '../prisma/prisma.service';

@@ -1,5 +1,8 @@
 import { IsEmail, IsString, IsOptional, MinLength } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '../../common/decorators/swagger.decorators';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+} from '../../common/decorators/swagger.decorators';
 
 export class CreateUserDto {
   @ApiProperty({
@@ -30,7 +33,8 @@ export class CreateUserDto {
   organizationId?: string;
 
   @ApiPropertyOptional({
-    description: 'User password (optional, will be auto-generated if not provided)',
+    description:
+      'User password (optional, will be auto-generated if not provided)',
     example: 'SecurePass123!',
     type: String,
     minLength: 8,

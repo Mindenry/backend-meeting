@@ -1,4 +1,4 @@
-import { IsEmail, IsString, IsOptional, IsUrl } from 'class-validator';
+import { IsEmail, IsString, IsOptional, IsBoolean } from 'class-validator';
 import { ApiPropertyOptional } from '../../common/decorators/swagger.decorators';
 
 export class UpdateUserDto {
@@ -55,4 +55,13 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   position?: string;
+
+  @ApiPropertyOptional({
+    description: 'Whether the user is currently active',
+    example: true,
+    type: Boolean,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

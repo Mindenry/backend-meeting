@@ -11,7 +11,10 @@ import {
   Patch,
 } from '@nestjs/common';
 // @ts-ignore - Optional Swagger decorators
-import { ApiTags, ApiBearerAuth } from '../common/decorators/swagger.decorators';
+import {
+  ApiTags,
+  ApiBearerAuth,
+} from '../common/decorators/swagger.decorators';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { WikiService } from './wiki.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -34,7 +37,7 @@ export class WikiController {
       include: { team: true },
     });
     const teamIds = memberships.map((m) => m.team.id);
-    
+
     // Pass all team IDs to the service
     return this.wikiService.findAll(req.user.id, teamIds);
   }

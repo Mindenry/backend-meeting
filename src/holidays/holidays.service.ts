@@ -14,9 +14,9 @@ export class HolidaysService {
     const startDate = new Date(year, 0, 1);
     const endDate = new Date(year, 11, 31, 23, 59, 59);
 
-    const orConditions: Array<{ organizationId: null } | { organizationId: string }> = [
-      { organizationId: null },
-    ];
+    const orConditions: Array<
+      { organizationId: null } | { organizationId: string }
+    > = [{ organizationId: null }];
     if (organizationId) {
       orConditions.push({ organizationId });
     }
@@ -39,10 +39,14 @@ export class HolidaysService {
   /**
    * Get holidays for a date range
    */
-  async getHolidaysInRange(startDate: Date, endDate: Date, organizationId?: string) {
-    const orConditions: Array<{ organizationId: null } | { organizationId: string }> = [
-      { organizationId: null },
-    ];
+  async getHolidaysInRange(
+    startDate: Date,
+    endDate: Date,
+    organizationId?: string,
+  ) {
+    const orConditions: Array<
+      { organizationId: null } | { organizationId: string }
+    > = [{ organizationId: null }];
     if (organizationId) {
       orConditions.push({ organizationId });
     }
@@ -70,9 +74,9 @@ export class HolidaysService {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
-    const orConditions: Array<{ organizationId: null } | { organizationId: string }> = [
-      { organizationId: null },
-    ];
+    const orConditions: Array<
+      { organizationId: null } | { organizationId: string }
+    > = [{ organizationId: null }];
     if (organizationId) {
       orConditions.push({ organizationId });
     }
@@ -154,7 +158,7 @@ export class HolidaysService {
 
     for (const holiday of holidays) {
       const holidayDate = new Date(year, holiday.month - 1, holiday.day);
-      
+
       // Check if holiday already exists for this date
       const existing = await this.prisma.holiday.findFirst({
         where: {
@@ -194,7 +198,9 @@ export class HolidaysService {
       }
     }
 
-    this.logger.log(`Initialized Thai holidays for year ${year}: ${created} created, ${updated} updated`);
+    this.logger.log(
+      `Initialized Thai holidays for year ${year}: ${created} created, ${updated} updated`,
+    );
     return { created, updated, total: holidays.length };
   }
 
@@ -210,25 +216,139 @@ export class HolidaysService {
   }> {
     // Fixed date holidays
     const fixedHolidays = [
-      { name: 'วันขึ้นปีใหม่', nameEn: 'New Year\'s Day', month: 1, day: 1, type: 'public' },
-      { name: 'วันมาฆบูชา', nameEn: 'Makha Bucha Day', month: 2, day: this.getMakhaBuchaDay(year), type: 'public' },
-      { name: 'วันจักรี', nameEn: 'Chakri Memorial Day', month: 4, day: 6, type: 'public' },
-      { name: 'วันสงกรานต์', nameEn: 'Songkran Festival', month: 4, day: 13, type: 'public' },
-      { name: 'วันสงกรานต์', nameEn: 'Songkran Festival', month: 4, day: 14, type: 'public' },
-      { name: 'วันสงกรานต์', nameEn: 'Songkran Festival', month: 4, day: 15, type: 'public' },
-      { name: 'วันแรงงาน', nameEn: 'Labour Day', month: 5, day: 1, type: 'public' },
-      { name: 'วันฉัตรมงคล', nameEn: 'Coronation Day', month: 5, day: 4, type: 'public' },
-      { name: 'วันวิสาขบูชา', nameEn: 'Visakha Bucha Day', month: 5, day: this.getVisakhaBuchaDay(year), type: 'public' },
-      { name: 'วันอาสาฬหบูชา', nameEn: 'Asarnha Bucha Day', month: 7, day: this.getAsarnhaBuchaDay(year), type: 'public' },
-      { name: 'วันเข้าพรรษา', nameEn: 'Buddhist Lent Day', month: 7, day: this.getBuddhistLentDay(year), type: 'public' },
-      { name: 'วันเฉลิมพระชนมพรรษา', nameEn: 'HM The Queen\'s Birthday', month: 8, day: 12, type: 'public' },
-      { name: 'วันแม่แห่งชาติ', nameEn: 'Mother\'s Day', month: 8, day: 12, type: 'public' },
-      { name: 'วันออกพรรษา', nameEn: 'End of Buddhist Lent', month: 10, day: this.getEndOfLentDay(year), type: 'public' },
-      { name: 'วันปิยมหาราช', nameEn: 'King Chulalongkorn Day', month: 10, day: 23, type: 'public' },
-      { name: 'วันเฉลิมพระชนมพรรษา', nameEn: 'HM The King\'s Birthday', month: 12, day: 5, type: 'public' },
-      { name: 'วันพ่อแห่งชาติ', nameEn: 'Father\'s Day', month: 12, day: 5, type: 'public' },
-      { name: 'วันรัฐธรรมนูญ', nameEn: 'Constitution Day', month: 12, day: 10, type: 'public' },
-      { name: 'วันสิ้นปี', nameEn: 'New Year\'s Eve', month: 12, day: 31, type: 'public' },
+      {
+        name: 'วันขึ้นปีใหม่',
+        nameEn: "New Year's Day",
+        month: 1,
+        day: 1,
+        type: 'public',
+      },
+      {
+        name: 'วันมาฆบูชา',
+        nameEn: 'Makha Bucha Day',
+        month: 2,
+        day: this.getMakhaBuchaDay(year),
+        type: 'public',
+      },
+      {
+        name: 'วันจักรี',
+        nameEn: 'Chakri Memorial Day',
+        month: 4,
+        day: 6,
+        type: 'public',
+      },
+      {
+        name: 'วันสงกรานต์',
+        nameEn: 'Songkran Festival',
+        month: 4,
+        day: 13,
+        type: 'public',
+      },
+      {
+        name: 'วันสงกรานต์',
+        nameEn: 'Songkran Festival',
+        month: 4,
+        day: 14,
+        type: 'public',
+      },
+      {
+        name: 'วันสงกรานต์',
+        nameEn: 'Songkran Festival',
+        month: 4,
+        day: 15,
+        type: 'public',
+      },
+      {
+        name: 'วันแรงงาน',
+        nameEn: 'Labour Day',
+        month: 5,
+        day: 1,
+        type: 'public',
+      },
+      {
+        name: 'วันฉัตรมงคล',
+        nameEn: 'Coronation Day',
+        month: 5,
+        day: 4,
+        type: 'public',
+      },
+      {
+        name: 'วันวิสาขบูชา',
+        nameEn: 'Visakha Bucha Day',
+        month: 5,
+        day: this.getVisakhaBuchaDay(year),
+        type: 'public',
+      },
+      {
+        name: 'วันอาสาฬหบูชา',
+        nameEn: 'Asarnha Bucha Day',
+        month: 7,
+        day: this.getAsarnhaBuchaDay(year),
+        type: 'public',
+      },
+      {
+        name: 'วันเข้าพรรษา',
+        nameEn: 'Buddhist Lent Day',
+        month: 7,
+        day: this.getBuddhistLentDay(year),
+        type: 'public',
+      },
+      {
+        name: 'วันเฉลิมพระชนมพรรษา',
+        nameEn: "HM The Queen's Birthday",
+        month: 8,
+        day: 12,
+        type: 'public',
+      },
+      {
+        name: 'วันแม่แห่งชาติ',
+        nameEn: "Mother's Day",
+        month: 8,
+        day: 12,
+        type: 'public',
+      },
+      {
+        name: 'วันออกพรรษา',
+        nameEn: 'End of Buddhist Lent',
+        month: 10,
+        day: this.getEndOfLentDay(year),
+        type: 'public',
+      },
+      {
+        name: 'วันปิยมหาราช',
+        nameEn: 'King Chulalongkorn Day',
+        month: 10,
+        day: 23,
+        type: 'public',
+      },
+      {
+        name: 'วันเฉลิมพระชนมพรรษา',
+        nameEn: "HM The King's Birthday",
+        month: 12,
+        day: 5,
+        type: 'public',
+      },
+      {
+        name: 'วันพ่อแห่งชาติ',
+        nameEn: "Father's Day",
+        month: 12,
+        day: 5,
+        type: 'public',
+      },
+      {
+        name: 'วันรัฐธรรมนูญ',
+        nameEn: 'Constitution Day',
+        month: 12,
+        day: 10,
+        type: 'public',
+      },
+      {
+        name: 'วันสิ้นปี',
+        nameEn: "New Year's Eve",
+        month: 12,
+        day: 31,
+        type: 'public',
+      },
     ];
 
     return fixedHolidays;
@@ -274,9 +394,9 @@ export class HolidaysService {
    * Get all holidays (admin)
    */
   async findAll(organizationId?: string) {
-    const orConditions: Array<{ organizationId: null } | { organizationId: string }> = [
-      { organizationId: null },
-    ];
+    const orConditions: Array<
+      { organizationId: null } | { organizationId: string }
+    > = [{ organizationId: null }];
     if (organizationId) {
       orConditions.push({ organizationId });
     }

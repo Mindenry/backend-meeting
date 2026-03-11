@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, ParseIntPipe, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+} from '@nestjs/common';
 import { HolidaysService } from './holidays.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -38,7 +48,10 @@ export class HolidaysController {
     @Query('date') date: string,
     @Query('organizationId') organizationId?: string,
   ) {
-    const isHoliday = await this.holidaysService.isHoliday(new Date(date), organizationId);
+    const isHoliday = await this.holidaysService.isHoliday(
+      new Date(date),
+      organizationId,
+    );
     return { isHoliday };
   }
 

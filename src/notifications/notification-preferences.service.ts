@@ -60,7 +60,10 @@ export class NotificationPreferencesService {
   /**
    * Get delivery mode for a notification type
    */
-  async getDeliveryMode(userId: string, notificationType: string): Promise<string> {
+  async getDeliveryMode(
+    userId: string,
+    notificationType: string,
+  ): Promise<string> {
     const prefs = await this.getPreferences(userId);
 
     // Map notification types to preference fields
@@ -87,7 +90,10 @@ export class NotificationPreferencesService {
   /**
    * Check if notification should be sent immediately
    */
-  async shouldSendRealtime(userId: string, notificationType: string): Promise<boolean> {
+  async shouldSendRealtime(
+    userId: string,
+    notificationType: string,
+  ): Promise<boolean> {
     const deliveryMode = await this.getDeliveryMode(userId, notificationType);
     return deliveryMode === 'realtime';
   }

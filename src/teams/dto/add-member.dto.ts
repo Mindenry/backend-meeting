@@ -1,5 +1,8 @@
 import { IsString, IsOptional } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '../../common/decorators/swagger.decorators';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+} from '../../common/decorators/swagger.decorators';
 
 export class AddMemberDto {
   @ApiProperty({

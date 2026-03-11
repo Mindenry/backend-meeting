@@ -46,17 +46,17 @@ async function bootstrap() {
   const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim())
     : process.env.NODE_ENV === 'production'
-    ? [] // Must be set in production
-    : [
-        'http://localhost:3000',
-        'http://localhost:5173',
-        'http://localhost:5174',
-        'http://localhost:8080',
-        'http://127.0.0.1:3000',
-        'http://127.0.0.1:5173',
-        'http://127.0.0.1:5174',
-        'http://127.0.0.1:8080',
-      ]; // Development defaults
+      ? [] // Must be set in production
+      : [
+          'http://localhost:3000',
+          'http://localhost:5173',
+          'http://localhost:5174',
+          'http://localhost:8080',
+          'http://127.0.0.1:3000',
+          'http://127.0.0.1:5173',
+          'http://127.0.0.1:5174',
+          'http://127.0.0.1:8080',
+        ]; // Development defaults
 
   // Add ngrok domain if provided
   const ngrokDomain = process.env.NGROK_DOMAIN;
@@ -86,7 +86,12 @@ async function bootstrap() {
       }
 
       // Allow ngrok domains
-      if (origin && (origin.includes('.ngrok-free.app') || origin.includes('.ngrok.io') || origin.includes('.ngrok.app'))) {
+      if (
+        origin &&
+        (origin.includes('.ngrok-free.app') ||
+          origin.includes('.ngrok.io') ||
+          origin.includes('.ngrok.app'))
+      ) {
         return callback(null, true);
       }
 
@@ -117,7 +122,8 @@ async function bootstrap() {
 
     // Detect ngrok domain for relaxed CSP
     const isNgrok =
-      req.headers.host?.includes('ngrok') || req.headers.origin?.includes('ngrok');
+      req.headers.host?.includes('ngrok') ||
+      req.headers.origin?.includes('ngrok');
 
     // NOTE:
     // เดิมมีการตั้งค่า X-Frame-Options เป็น DENY/SAMEORIGIN ซึ่งทำให้ embed หน้า backend (เช่น PDF, Shared Drive)
@@ -127,24 +133,24 @@ async function bootstrap() {
 
     // Prevent MIME type sniffing
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    
+
     // Enable XSS protection
     res.setHeader('X-XSS-Protection', '1; mode=block');
-    
+
     // Content Security Policy (relaxed for ngrok)
     const cspDirectives = isNgrok
       ? "default-src 'self' https://*.ngrok-free.app https://*.ngrok.io https://*.ngrok.app; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.ngrok-free.app https://*.ngrok.io https://*.ngrok.app ws://*.ngrok-free.app wss://*.ngrok-free.app ws://*.ngrok.io wss://*.ngrok.io;"
       : "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:7880 wss://localhost:7880 ws: wss:;";
     res.setHeader('Content-Security-Policy', cspDirectives);
-    
+
     // Referrer Policy
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    
+
     // Allow ngrok browser warning bypass
     if (isNgrok) {
       res.setHeader('ngrok-skip-browser-warning', 'true');
     }
-    
+
     next();
   });
 
@@ -160,10 +166,13 @@ async function bootstrap() {
   });
   app.use('/rtc', livekitProxy);
 
-  app.use('/twirp', createProxyMiddleware({
-    target: 'http://localhost:7880',
-    changeOrigin: true,
-  }));
+  app.use(
+    '/twirp',
+    createProxyMiddleware({
+      target: 'http://localhost:7880',
+      changeOrigin: true,
+    }),
+  );
 
   // Set global prefix for API routes (but exclude WebSocket)
   app.setGlobalPrefix('api', {
@@ -171,13 +180,23 @@ async function bootstrap() {
   });
 
   // Setup Swagger (only in development or if enabled)
-  if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_SWAGGER === 'true') {
+  if (
+    process.env.NODE_ENV !== 'production' ||
+    process.env.ENABLE_SWAGGER === 'true'
+  ) {
     try {
       setupSwagger(app);
-      logger.log(`📚 Swagger documentation available at: http://localhost:${process.env.PORT ?? 3000}/api/docs`);
+      logger.log(
+        `📚 Swagger documentation available at: http://localhost:${process.env.PORT ?? 3000}/api/docs`,
+      );
     } catch (error) {
-      logger.warn('Swagger setup failed (packages may not be installed):', error.message);
-      logger.warn('To enable Swagger, run: npm install @nestjs/swagger swagger-ui-express --legacy-peer-deps');
+      logger.warn(
+        'Swagger setup failed (packages may not be installed):',
+        error.message,
+      );
+      logger.warn(
+        'To enable Swagger, run: npm install @nestjs/swagger swagger-ui-express --legacy-peer-deps',
+      );
     }
   }
 
@@ -198,15 +217,19 @@ async function bootstrap() {
 
   logger.log(`🚀 Application is running on: http://localhost:${port}`);
   logger.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
-  
+
   if (ngrokDomain) {
     logger.log(`🌐 Ngrok domain: https://${ngrokDomain}`);
   }
-  
+
   if (process.env.NODE_ENV === 'production') {
-    logger.log(`🔒 CORS enabled for: ${allowedOrigins.join(', ') || 'none (must configure ALLOWED_ORIGINS)'}`);
+    logger.log(
+      `🔒 CORS enabled for: ${allowedOrigins.join(', ') || 'none (must configure ALLOWED_ORIGINS)'}`,
+    );
   } else {
-    logger.log(`🔒 CORS enabled for: localhost:* and ngrok domains (development mode)`);
+    logger.log(
+      `🔒 CORS enabled for: localhost:* and ngrok domains (development mode)`,
+    );
     if (allowedOrigins.length > 0) {
       logger.log(`   Also allowing: ${allowedOrigins.join(', ')}`);
     }

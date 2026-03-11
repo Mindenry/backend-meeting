@@ -14,16 +14,17 @@ export class AnnouncementsService {
           {
             OR: [
               { targetType: 'all' },
-              ...(userRole ? [{ targetType: 'role', targetIds: { has: userRole } }] : []),
-              ...(teamIds && teamIds.length > 0 ? [{ targetType: 'team', targetIds: { hasSome: teamIds } }] : []),
+              ...(userRole
+                ? [{ targetType: 'role', targetIds: { has: userRole } }]
+                : []),
+              ...(teamIds && teamIds.length > 0
+                ? [{ targetType: 'team', targetIds: { hasSome: teamIds } }]
+                : []),
               { targetType: 'user', targetIds: { has: userId } },
             ],
           },
           {
-            OR: [
-              { expiresAt: null },
-              { expiresAt: { gt: now } },
-            ],
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
           },
         ],
       },

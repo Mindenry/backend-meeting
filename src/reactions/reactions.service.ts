@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 
@@ -12,7 +17,9 @@ export class ReactionsService {
 
   async addReaction(messageId: string, userId: string, emoji: string) {
     // Check if message exists
-    const message = await this.prisma.message.findUnique({ where: { id: messageId } });
+    const message = await this.prisma.message.findUnique({
+      where: { id: messageId },
+    });
     if (!message) {
       throw new NotFoundException('Message not found');
     }
@@ -56,14 +63,24 @@ export class ReactionsService {
     });
 
     // Group by emoji
-    const grouped = reactions.reduce((acc, r) => {
-      if (!acc[r.emoji]) {
-        acc[r.emoji] = { emoji: r.emoji, count: 0, users: [] };
-      }
-      acc[r.emoji].count++;
-      acc[r.emoji].users.push({ id: r.user.id, name: r.user.name });
-      return acc;
-    }, {} as Record<string, { emoji: string; count: number; users: Array<{ id: string; name: string }> }>);
+    const grouped = reactions.reduce(
+      (acc, r) => {
+        if (!acc[r.emoji]) {
+          acc[r.emoji] = { emoji: r.emoji, count: 0, users: [] };
+        }
+        acc[r.emoji].count++;
+        acc[r.emoji].users.push({ id: r.user.id, name: r.user.name });
+        return acc;
+      },
+      {} as Record<
+        string,
+        {
+          emoji: string;
+          count: number;
+          users: Array<{ id: string; name: string }>;
+        }
+      >,
+    );
 
     return Object.values(grouped);
   }
@@ -75,4 +92,3 @@ export class ReactionsService {
     return { success: true };
   }
 }
-

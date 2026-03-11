@@ -1,4 +1,12 @@
-import { Injectable, NotFoundException, Inject, forwardRef, InternalServerErrorException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Inject,
+  forwardRef,
+  InternalServerErrorException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -112,25 +120,35 @@ export class MeetingsService {
     });
   }
 
-  async generateLivekitToken(meetingId: string, userId: string, userName: string) {
+  async generateLivekitToken(
+    meetingId: string,
+    userId: string,
+    userName: string,
+  ) {
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
-    
+
     if (!apiKey || !apiSecret) {
-      throw new InternalServerErrorException('LiveKit API key or secret is not configured in environment variables');
+      throw new InternalServerErrorException(
+        'LiveKit API key or secret is not configured in environment variables',
+      );
     }
 
     // Use "quick-huddle" or the actual meeting ID as the room name
     const roomName = meetingId || 'quick-huddle';
 
+    // Fetch user to get avatar
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
     const at = new AccessToken(apiKey, apiSecret, {
       identity: userId,
       name: userName || 'Participant',
+      metadata: user?.avatar || '',
     });
-    
+
     at.addGrant({ roomJoin: true, room: roomName });
     const token = await at.toJwt();
-    
+
     return { token, room: roomName };
   }
 
@@ -182,7 +200,7 @@ export class MeetingsService {
     }
 
     this.eventsGateway.emitMeetingCreated(meeting);
-    
+
     // Audit log
     await this.auditService.log({
       action: 'create',
@@ -190,9 +208,13 @@ export class MeetingsService {
       entityId: meeting.id,
       userId: meeting.hostId,
       userName: meeting.host.name,
-      details: { title: meeting.title, teamId: meeting.teamId, startTime: meeting.startTime },
+      details: {
+        title: meeting.title,
+        teamId: meeting.teamId,
+        startTime: meeting.startTime,
+      },
     });
-    
+
     // Create notifications for team members if meeting is team-based
     if (meeting.teamId) {
       try {
@@ -200,28 +222,33 @@ export class MeetingsService {
           where: { teamId: meeting.teamId },
           include: { user: true },
         });
-        
+
         const notifications = teamMembers
-          .filter(m => m.userId !== meeting.hostId)
-          .map(member => 
-            this.notificationsService.create({
-              userId: member.userId,
-              type: 'meeting_created',
-              title: 'New meeting scheduled',
-              message: `${meeting.host.name} scheduled: ${meeting.title}`,
-              relatedId: meeting.id,
-              relatedType: 'meeting',
-            }).catch(err => {
-              console.error(`Failed to create notification for user ${member.userId}:`, err);
-            })
+          .filter((m) => m.userId !== meeting.hostId)
+          .map((member) =>
+            this.notificationsService
+              .create({
+                userId: member.userId,
+                type: 'meeting_created',
+                title: 'New meeting scheduled',
+                message: `${meeting.host.name} scheduled: ${meeting.title}`,
+                relatedId: meeting.id,
+                relatedType: 'meeting',
+              })
+              .catch((err) => {
+                console.error(
+                  `Failed to create notification for user ${member.userId}:`,
+                  err,
+                );
+              }),
           );
-        
+
         await Promise.allSettled(notifications);
       } catch (err) {
         console.error('Failed to create meeting notifications:', err);
       }
     }
-    
+
     return meeting;
   }
 
@@ -263,7 +290,7 @@ export class MeetingsService {
         teamId: updatedMeeting.teamId,
         startTime: updatedMeeting.startTime,
         actualStartTime: updatedMeeting.actualStartTime,
-        participants: updatedMeeting.participants.map(p => ({
+        participants: updatedMeeting.participants.map((p) => ({
           userId: p.userId,
           name: p.user.name,
           email: p.user.email,
@@ -328,7 +355,7 @@ export class MeetingsService {
         actualStartTime: updatedMeeting.actualStartTime,
         actualEndTime: updatedMeeting.actualEndTime,
         summary: updatedMeeting.summary,
-        participants: updatedMeeting.participants.map(p => ({
+        participants: updatedMeeting.participants.map((p) => ({
           userId: p.userId,
           name: p.user.name,
           email: p.user.email,
@@ -376,7 +403,7 @@ export class MeetingsService {
       },
     });
     this.eventsGateway.emitMeetingUpdated(meeting);
-    
+
     // Audit log
     await this.auditService.log({
       action: 'update',
@@ -384,20 +411,20 @@ export class MeetingsService {
       entityId: meeting.id,
       userId: meeting.hostId,
       userName: meeting.host.name,
-      details: { 
+      details: {
         changes: Object.keys(data),
         title: meeting.title,
         status: meeting.status,
       },
     });
-    
+
     return meeting;
   }
 
   async remove(id: string) {
     const exists = await this.prisma.meeting.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException('Meeting not found');
-    
+
     // Audit log before delete
     await this.auditService.log({
       action: 'delete',
@@ -406,15 +433,21 @@ export class MeetingsService {
       userId: exists.hostId,
       details: { title: exists.title },
     });
-    
+
     await this.prisma.meeting.delete({ where: { id } });
     this.eventsGateway.emitMeetingDeleted(id);
     return { success: true };
   }
 
   // Participants
-  async joinMeeting(meetingId: string, userId: string, role: string = 'participant') {
-    const meeting = await this.prisma.meeting.findUnique({ where: { id: meetingId } });
+  async joinMeeting(
+    meetingId: string,
+    userId: string,
+    role: string = 'participant',
+  ) {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+    });
     if (!meeting) {
       throw new NotFoundException('Meeting not found');
     }
@@ -514,8 +547,6 @@ export class MeetingsService {
     });
   }
 
-
-
   /**
    * Generate recurring meeting instances from a template
    */
@@ -528,7 +559,10 @@ export class MeetingsService {
       throw new NotFoundException('Recurring meeting template not found');
     }
 
-    const endDate = upToDate || template.recurringEndDate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // Default: 1 year ahead
+    const endDate =
+      upToDate ||
+      template.recurringEndDate ||
+      new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // Default: 1 year ahead
     const instances: any[] = [];
     let currentDate = new Date(template.startTime);
 
@@ -548,7 +582,9 @@ export class MeetingsService {
 
         const instanceEndTime = new Date(currentDate.getTime() + duration);
         let meetingCode = this.generateMeetingCode();
-        while (await this.prisma.meeting.findUnique({ where: { meetingCode } })) {
+        while (
+          await this.prisma.meeting.findUnique({ where: { meetingCode } })
+        ) {
           meetingCode = this.generateMeetingCode();
         }
 
@@ -576,17 +612,27 @@ export class MeetingsService {
       }
 
       // Calculate next occurrence
-      currentDate = this.getNextRecurrenceDate(currentDate, template.recurringPattern, template.recurringDays || []);
+      currentDate = this.getNextRecurrenceDate(
+        currentDate,
+        template.recurringPattern,
+        template.recurringDays || [],
+      );
     }
 
-    this.logger.log(`Generated ${instances.length} recurring meeting instances for template ${templateId}`);
+    this.logger.log(
+      `Generated ${instances.length} recurring meeting instances for template ${templateId}`,
+    );
     return instances;
   }
 
   /**
    * Get the next recurrence date based on pattern
    */
-  private getNextRecurrenceDate(currentDate: Date, pattern: string, days: number[]): Date {
+  private getNextRecurrenceDate(
+    currentDate: Date,
+    pattern: string,
+    days: number[],
+  ): Date {
     const next = new Date(currentDate);
 
     switch (pattern) {
@@ -599,8 +645,9 @@ export class MeetingsService {
           // Find next day in the days array
           const currentDay = next.getDay(); // 0 = Sunday, 1 = Monday, etc.
           const sortedDays = [...days].sort((a, b) => a - b);
-          const nextDay = sortedDays.find((d) => d > currentDay) || sortedDays[0];
-          
+          const nextDay =
+            sortedDays.find((d) => d > currentDay) || sortedDays[0];
+
           if (nextDay > currentDay) {
             next.setDate(next.getDate() + (nextDay - currentDay));
           } else {

@@ -56,7 +56,14 @@ export class LoggingInterceptor implements NestInterceptor {
     if (!body) return undefined;
 
     const sanitized = { ...body };
-    const sensitiveFields = ['password', 'token', 'secret', 'apiKey', 'accessToken', 'refreshToken'];
+    const sensitiveFields = [
+      'password',
+      'token',
+      'secret',
+      'apiKey',
+      'accessToken',
+      'refreshToken',
+    ];
 
     sensitiveFields.forEach((field) => {
       if (sanitized[field]) {

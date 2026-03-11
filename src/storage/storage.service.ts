@@ -53,8 +53,8 @@ export class StorageService {
   private config: StorageConfig;
 
   constructor(private configService: ConfigService) {
-    const provider = (this.configService.get('STORAGE_PROVIDER') as any) || 'local';
-    
+    const provider = this.configService.get('STORAGE_PROVIDER') || 'local';
+
     this.config = {
       provider,
       localPath: this.configService.get('STORAGE_LOCAL_PATH') || './uploads',
@@ -105,10 +105,7 @@ export class StorageService {
     }
   }
 
-  async uploadFile(
-    file: UploadedFile,
-    folder?: string,
-  ): Promise<UploadResult> {
+  async uploadFile(file: UploadedFile, folder?: string): Promise<UploadResult> {
     switch (this.config.provider) {
       case 's3':
         return this.uploadToS3(file, folder);
@@ -154,7 +151,9 @@ export class StorageService {
 
     await fs.writeFile(filepath, file.buffer);
 
-    const url = folder ? `/uploads/${folder}/${filename}` : `/uploads/${filename}`;
+    const url = folder
+      ? `/uploads/${folder}/${filename}`
+      : `/uploads/${filename}`;
     return {
       url,
       key: folder ? `${folder}/${filename}` : filename,
@@ -180,7 +179,7 @@ export class StorageService {
     try {
       // Dynamic import to avoid requiring AWS SDK if not using S3
       const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
-      
+
       // Generate unique filename
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
 
@@ -227,7 +226,8 @@ export class StorageService {
 
   private async deleteFromS3(key: string): Promise<void> {
     try {
-      const { S3Client, DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+      const { S3Client, DeleteObjectCommand } =
+        await import('@aws-sdk/client-s3');
 
       const s3Client = new S3Client({
         region: this.config.s3!.region,
@@ -270,8 +270,8 @@ export class StorageService {
     folder?: string,
   ): Promise<UploadResult> {
     try {
-      const cloudinary = await import('cloudinary').then(m => m.v2);
-      
+      const cloudinary = await import('cloudinary').then((m) => m.v2);
+
       // Support CLOUDINARY_URL format (easier - just copy from dashboard)
       if (this.config.cloudinary?.url) {
         cloudinary.config({
@@ -308,7 +308,7 @@ export class StorageService {
           (error, result) => {
             if (error) reject(error);
             else resolve(result);
-          }
+          },
         );
         uploadStream.end(file.buffer);
       });
@@ -321,18 +321,20 @@ export class StorageService {
         provider: 'cloudinary',
       };
     } catch (error) {
-      this.logger.error('Cloudinary upload failed, falling back to local', error);
+      this.logger.error(
+        'Cloudinary upload failed, falling back to local',
+        error,
+      );
       return this.uploadToLocal(file, folder);
     }
   }
 
   private async deleteFromCloudinary(key: string): Promise<void> {
     try {
-      const cloudinary = await import('cloudinary').then(m => m.v2);
+      const cloudinary = await import('cloudinary').then((m) => m.v2);
       await cloudinary.uploader.destroy(key);
     } catch (error) {
       this.logger.error(`Failed to delete Cloudinary file: ${key}`, error);
     }
   }
-
 }

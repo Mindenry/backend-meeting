@@ -23,4 +23,3 @@ export function verifyPassword(password: string, stored: string): boolean {
 
   return timingSafeEqual(expected, actual);
 }
-

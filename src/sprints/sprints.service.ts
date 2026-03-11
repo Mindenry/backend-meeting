@@ -77,14 +77,17 @@ export class SprintsService {
     });
   }
 
-  async update(id: string, data: Partial<{
-    name: string;
-    description?: string;
-    startDate: Date;
-    endDate: Date;
-    goal?: string;
-    status: string;
-  }>) {
+  async update(
+    id: string,
+    data: Partial<{
+      name: string;
+      description?: string;
+      startDate: Date;
+      endDate: Date;
+      goal?: string;
+      status: string;
+    }>,
+  ) {
     const exists = await this.prisma.sprint.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException('Sprint not found');
 

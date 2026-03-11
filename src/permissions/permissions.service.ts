@@ -8,44 +8,156 @@ const DEFAULT_PERMISSIONS: {
   roles: Record<string, boolean>;
 }[] = [
   // Users
-  { resource: 'users', action: 'view', roles: { org_owner: true, admin: true, manager: true, employee: true } },
-  { resource: 'users', action: 'create', roles: { org_owner: true, admin: true, manager: true, employee: false } },
-  { resource: 'users', action: 'edit', roles: { org_owner: true, admin: true, manager: false, employee: false } },
-  { resource: 'users', action: 'delete', roles: { org_owner: true, admin: true, manager: false, employee: false } },
+  {
+    resource: 'users',
+    action: 'view',
+    roles: { org_owner: true, admin: true, manager: true, employee: true },
+  },
+  {
+    resource: 'users',
+    action: 'create',
+    roles: { org_owner: true, admin: true, manager: true, employee: false },
+  },
+  {
+    resource: 'users',
+    action: 'edit',
+    roles: { org_owner: true, admin: true, manager: false, employee: false },
+  },
+  {
+    resource: 'users',
+    action: 'delete',
+    roles: { org_owner: true, admin: true, manager: false, employee: false },
+  },
   // Teams
-  { resource: 'teams', action: 'view', roles: { org_owner: true, admin: true, manager: true, employee: true } },
-  { resource: 'teams', action: 'create', roles: { org_owner: true, admin: true, manager: false, employee: false } },
-  { resource: 'teams', action: 'edit', roles: { org_owner: true, admin: true, manager: true, employee: false } },
-  { resource: 'teams', action: 'delete', roles: { org_owner: true, admin: true, manager: false, employee: false } },
+  {
+    resource: 'teams',
+    action: 'view',
+    roles: { org_owner: true, admin: true, manager: true, employee: true },
+  },
+  {
+    resource: 'teams',
+    action: 'create',
+    roles: { org_owner: true, admin: true, manager: false, employee: false },
+  },
+  {
+    resource: 'teams',
+    action: 'edit',
+    roles: { org_owner: true, admin: true, manager: true, employee: false },
+  },
+  {
+    resource: 'teams',
+    action: 'delete',
+    roles: { org_owner: true, admin: true, manager: false, employee: false },
+  },
   // Meetings
-  { resource: 'meetings', action: 'view', roles: { org_owner: true, admin: true, manager: true, employee: true } },
-  { resource: 'meetings', action: 'create', roles: { org_owner: true, admin: true, manager: true, employee: true } },
-  { resource: 'meetings', action: 'edit', roles: { org_owner: true, admin: true, manager: true, employee: false } },
-  { resource: 'meetings', action: 'delete', roles: { org_owner: true, admin: true, manager: false, employee: false } },
+  {
+    resource: 'meetings',
+    action: 'view',
+    roles: { org_owner: true, admin: true, manager: true, employee: true },
+  },
+  {
+    resource: 'meetings',
+    action: 'create',
+    roles: { org_owner: true, admin: true, manager: true, employee: true },
+  },
+  {
+    resource: 'meetings',
+    action: 'edit',
+    roles: { org_owner: true, admin: true, manager: true, employee: false },
+  },
+  {
+    resource: 'meetings',
+    action: 'delete',
+    roles: { org_owner: true, admin: true, manager: false, employee: false },
+  },
   // Tasks
-  { resource: 'tasks', action: 'view', roles: { org_owner: true, admin: true, manager: true, employee: true } },
-  { resource: 'tasks', action: 'create', roles: { org_owner: true, admin: true, manager: true, employee: true } },
-  { resource: 'tasks', action: 'edit', roles: { org_owner: true, admin: true, manager: true, employee: true } },
-  { resource: 'tasks', action: 'delete', roles: { org_owner: true, admin: true, manager: true, employee: false } },
+  {
+    resource: 'tasks',
+    action: 'view',
+    roles: { org_owner: true, admin: true, manager: true, employee: true },
+  },
+  {
+    resource: 'tasks',
+    action: 'create',
+    roles: { org_owner: true, admin: true, manager: true, employee: true },
+  },
+  {
+    resource: 'tasks',
+    action: 'edit',
+    roles: { org_owner: true, admin: true, manager: true, employee: true },
+  },
+  {
+    resource: 'tasks',
+    action: 'delete',
+    roles: { org_owner: true, admin: true, manager: true, employee: false },
+  },
   // Channels
-  { resource: 'channels', action: 'view', roles: { org_owner: true, admin: true, manager: true, employee: true } },
-  { resource: 'channels', action: 'create', roles: { org_owner: true, admin: true, manager: true, employee: false } },
-  { resource: 'channels', action: 'edit', roles: { org_owner: true, admin: true, manager: true, employee: false } },
-  { resource: 'channels', action: 'delete', roles: { org_owner: true, admin: true, manager: false, employee: false } },
+  {
+    resource: 'channels',
+    action: 'view',
+    roles: { org_owner: true, admin: true, manager: true, employee: true },
+  },
+  {
+    resource: 'channels',
+    action: 'create',
+    roles: { org_owner: true, admin: true, manager: true, employee: false },
+  },
+  {
+    resource: 'channels',
+    action: 'edit',
+    roles: { org_owner: true, admin: true, manager: true, employee: false },
+  },
+  {
+    resource: 'channels',
+    action: 'delete',
+    roles: { org_owner: true, admin: true, manager: false, employee: false },
+  },
   // Reports
-  { resource: 'reports', action: 'view', roles: { org_owner: true, admin: true, manager: true, employee: false } },
+  {
+    resource: 'reports',
+    action: 'view',
+    roles: { org_owner: true, admin: true, manager: true, employee: false },
+  },
   // Drive
-  { resource: 'drive', action: 'view', roles: { org_owner: true, admin: true, manager: true, employee: true } },
-  { resource: 'drive', action: 'manage', roles: { org_owner: true, admin: true, manager: true, employee: false } },
+  {
+    resource: 'drive',
+    action: 'view',
+    roles: { org_owner: true, admin: true, manager: true, employee: true },
+  },
+  {
+    resource: 'drive',
+    action: 'manage',
+    roles: { org_owner: true, admin: true, manager: true, employee: false },
+  },
   // Settings
-  { resource: 'settings', action: 'view', roles: { org_owner: true, admin: true, manager: false, employee: false } },
-  { resource: 'settings', action: 'manage', roles: { org_owner: true, admin: true, manager: false, employee: false } },
+  {
+    resource: 'settings',
+    action: 'view',
+    roles: { org_owner: true, admin: true, manager: false, employee: false },
+  },
+  {
+    resource: 'settings',
+    action: 'manage',
+    roles: { org_owner: true, admin: true, manager: false, employee: false },
+  },
   // Audit
-  { resource: 'audit', action: 'view', roles: { org_owner: true, admin: true, manager: false, employee: false } },
+  {
+    resource: 'audit',
+    action: 'view',
+    roles: { org_owner: true, admin: true, manager: false, employee: false },
+  },
   // Invites
-  { resource: 'invites', action: 'manage', roles: { org_owner: true, admin: true, manager: true, employee: false } },
+  {
+    resource: 'invites',
+    action: 'manage',
+    roles: { org_owner: true, admin: true, manager: true, employee: false },
+  },
   // Announcements
-  { resource: 'announcements', action: 'manage', roles: { org_owner: true, admin: true, manager: true, employee: false } },
+  {
+    resource: 'announcements',
+    action: 'manage',
+    roles: { org_owner: true, admin: true, manager: true, employee: false },
+  },
 ];
 
 @Injectable()
@@ -113,7 +225,12 @@ export class PermissionsService {
    */
   async updatePermissions(
     organizationId: string,
-    permissions: { role: string; resource: string; action: string; allowed: boolean }[],
+    permissions: {
+      role: string;
+      resource: string;
+      action: string;
+      allowed: boolean;
+    }[],
   ) {
     const ops = permissions.map((p) =>
       this.prisma.rolePermission.upsert({

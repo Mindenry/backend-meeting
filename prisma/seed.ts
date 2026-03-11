@@ -448,8 +448,8 @@ async function main() {
         title: 'Update API documentation',
         description: 'Update API documentation for meeting endpoints',
         priority: 'medium',
-        status: 'todo',
-        dueDate: new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000), // 3 days from now
+        status: 'done',
+        dueDate: new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000), // Yesterday
         tags: ['docs', 'api'],
         assigneeId: users[1].id,
         teamId: engineeringTeam.id,
@@ -461,8 +461,8 @@ async function main() {
         title: 'Fix Safari upload bug',
         description: 'Fix file upload issue on Safari browser. CORS configuration issue.',
         priority: 'high',
-        status: 'todo',
-        dueDate: new Date(today.getTime() + 1 * 24 * 60 * 60 * 1000), // Tomorrow
+        status: 'done',
+        dueDate: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
         tags: ['bug', 'browser', 'frontend'],
         assigneeId: users[2].id,
         teamId: engineeringTeam.id,
@@ -473,8 +473,8 @@ async function main() {
         title: 'Design new onboarding flow',
         description: 'Create design mockups for new user onboarding experience',
         priority: 'medium',
-        status: 'todo',
-        dueDate: new Date(today.getTime() + 6 * 24 * 60 * 60 * 1000), // 6 days from now
+        status: 'done',
+        dueDate: new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
         tags: ['design', 'ux'],
         assigneeId: users[3].id,
         teamId: designTeam.id,
@@ -485,8 +485,8 @@ async function main() {
         title: 'Implement user profile page',
         description: 'Build user profile page with settings and preferences',
         priority: 'high',
-        status: 'in_progress',
-        dueDate: new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000), // 2 days from now
+        status: 'done',
+        dueDate: new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000), // Yesterday
         tags: ['frontend', 'feature'],
         assigneeId: users[0].id,
         teamId: engineeringTeam.id,
@@ -497,8 +497,8 @@ async function main() {
         title: 'Database migration v2.3',
         description: 'Run database migration for version 2.3',
         priority: 'urgent',
-        status: 'in_progress',
-        dueDate: new Date(today.getTime() + 1 * 24 * 60 * 60 * 1000), // Tomorrow
+        status: 'done',
+        dueDate: new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000), // Yesterday
         tags: ['backend', 'db', 'migration'],
         assigneeId: users[4].id,
         teamId: engineeringTeam.id,
@@ -509,7 +509,7 @@ async function main() {
         title: 'PR #142 - Mobile responsive fix',
         description: 'Fix mobile responsive issues on dashboard',
         priority: 'medium',
-        status: 'review',
+        status: 'done',
         dueDate: new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000), // Yesterday
         tags: ['frontend', 'mobile', 'responsive'],
         assigneeId: users[3].id,
@@ -542,7 +542,47 @@ async function main() {
     }),
   ]);
 
-  console.log(`✅ Created ${tasks.length} tasks`);
+  console.log(`✅ Created ${tasks.length} static tasks`);
+
+  // Generate additional dynamic tasks for realistic performance data
+  console.log('🔄 Generating bulk realistic tasks...');
+  const dynamicTasks: any[] = [];
+  const statuses = ['done', 'done', 'done', 'done', 'in_progress', 'todo']; // Skew towards done
+  const priorities = ['low', 'medium', 'high', 'urgent'];
+  
+  for (let i = 0; i < 80; i++) {
+    const status = statuses[Math.floor(Math.random() * statuses.length)];
+    const priority = priorities[Math.floor(Math.random() * priorities.length)];
+    // Random user from index 0 to 8 (9 users total)
+    const randomUser = users[Math.floor(Math.random() * users.length)];
+    // Random team (engineering, design, ops)
+    const teams = [engineeringTeam, designTeam, operationsTeam];
+    const randomTeam = teams[Math.floor(Math.random() * teams.length)];
+    
+    // Random due date between 10 days ago and 10 days from now
+    const offsetDays = Math.floor(Math.random() * 20) - 10;
+    const dueDate = new Date(today.getTime() + offsetDays * 24 * 60 * 60 * 1000);
+    
+    dynamicTasks.push({
+      title: `Auto-generated task #${i + 1}`,
+      description: `This is an automatically generated task for testing performance metrics. It's varied to look realistic.`,
+      priority,
+      status,
+      dueDate,
+      tags: ['generated', 'test-data'],
+      assigneeId: randomUser.id,
+      teamId: randomTeam.id,
+    });
+  }
+
+  const createdDynamicTasks = await Promise.all(
+    dynamicTasks.map(taskData => prisma.task.create({ data: taskData }))
+  );
+
+  console.log(`✅ Created ${createdDynamicTasks.length} dynamic tasks`);
+
+  // Combine tasks arrays for later references
+  tasks.push(...createdDynamicTasks);
 
   // 9. Create Task Comments
   console.log('💬 Creating task comments...');

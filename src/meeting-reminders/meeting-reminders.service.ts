@@ -21,7 +21,7 @@ export class MeetingRemindersService {
   async checkAndSendReminders() {
     try {
       const now = new Date();
-      
+
       // Find all scheduled meetings that haven't started yet
       const upcomingMeetings = await this.prisma.meeting.findMany({
         where: {
@@ -71,13 +71,18 @@ export class MeetingRemindersService {
         return;
       }
 
-      this.logger.debug(`Checking ${upcomingMeetings.length} upcoming meetings for reminders`);
+      this.logger.debug(
+        `Checking ${upcomingMeetings.length} upcoming meetings for reminders`,
+      );
 
       for (const meeting of upcomingMeetings) {
         await this.processMeetingReminders(meeting, now);
       }
     } catch (error) {
-      this.logger.error(`Error checking meeting reminders: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error checking meeting reminders: ${error.message}`,
+        error.stack,
+      );
     }
   }
 
@@ -91,7 +96,10 @@ export class MeetingRemindersService {
     // Check each reminder interval (30, 15, 5 minutes)
     for (const minutesBefore of this.reminderMinutes) {
       // Check if we're within the reminder window (within 1 minute of the target time)
-      if (minutesUntilMeeting <= minutesBefore && minutesUntilMeeting > minutesBefore - 1) {
+      if (
+        minutesUntilMeeting <= minutesBefore &&
+        minutesUntilMeeting > minutesBefore - 1
+      ) {
         await this.sendReminderForMeeting(meeting, minutesBefore);
       }
     }
@@ -141,23 +149,30 @@ export class MeetingRemindersService {
       });
 
       const sentUserIds = new Set(sentReminders.map((r) => r.userId));
-      const usersToNotifyFiltered = usersToNotify.filter((userId) => !sentUserIds.has(userId));
+      const usersToNotifyFiltered = usersToNotify.filter(
+        (userId) => !sentUserIds.has(userId),
+      );
 
       if (usersToNotifyFiltered.length === 0) {
-        this.logger.debug(`All reminders already sent for meeting ${meeting.id} at ${minutesBefore} minutes`);
+        this.logger.debug(
+          `All reminders already sent for meeting ${meeting.id} at ${minutesBefore} minutes`,
+        );
         return;
       }
 
       // Format the reminder message based on minutes before
       const timeText = this.getTimeText(minutesBefore);
-      const startTimeFormatted = new Date(meeting.startTime).toLocaleString('th-TH', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+      const startTimeFormatted = new Date(meeting.startTime).toLocaleString(
+        'th-TH',
+        {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        },
+      );
 
       // Send notifications to all users who haven't received this reminder yet
       for (const userId of usersToNotifyFiltered) {

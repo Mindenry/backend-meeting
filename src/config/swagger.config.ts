@@ -14,12 +14,16 @@ try {
 
 export function setupSwagger(app: INestApplication) {
   if (!DocumentBuilder || !SwaggerModule) {
-    throw new Error('@nestjs/swagger is not installed. Run: npm install @nestjs/swagger swagger-ui-express --legacy-peer-deps');
+    throw new Error(
+      '@nestjs/swagger is not installed. Run: npm install @nestjs/swagger swagger-ui-express --legacy-peer-deps',
+    );
   }
 
   const config = new DocumentBuilder()
     .setTitle('Team Connect API')
-    .setDescription('Team Connect - Complete WFH Collaboration Platform API Documentation')
+    .setDescription(
+      'Team Connect - Complete WFH Collaboration Platform API Documentation',
+    )
     .setVersion('1.0')
     .addTag('auth', 'Authentication endpoints')
     .addTag('users', 'User management')

@@ -40,7 +40,10 @@ export class CacheHelperService {
   /**
    * Invalidate cache for a specific entity
    */
-  async invalidateEntityCache(entityType: string, entityId: string): Promise<void> {
+  async invalidateEntityCache(
+    entityType: string,
+    entityId: string,
+  ): Promise<void> {
     await this.cacheService.del(`${entityType}:${entityId}`);
   }
 }

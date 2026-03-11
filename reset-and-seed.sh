@@ -21,7 +21,8 @@ fi
 
 # Reset database and run seed
 echo "📦 Resetting database..."
-npx prisma migrate reset --force
+npx prisma db push --force-reset
+npx prisma db seed
 
 echo ""
 echo "✅ Database reset and seed completed successfully!"

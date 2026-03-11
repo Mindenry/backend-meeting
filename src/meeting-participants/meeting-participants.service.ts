@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { verifyPassword } from '../auth/password';
 
@@ -26,7 +30,10 @@ export class MeetingParticipantsService {
         throw new BadRequestException('Meeting is locked');
       }
 
-      if (meeting.password && (!password || !verifyPassword(password, meeting.password))) {
+      if (
+        meeting.password &&
+        (!password || !verifyPassword(password, meeting.password))
+      ) {
         throw new BadRequestException('Invalid meeting password');
       }
     }
@@ -53,7 +60,10 @@ export class MeetingParticipantsService {
         data: {
           joinedAt: new Date(),
           leftAt: null,
-          waitingRoom: meeting.waitingRoom && !skipWaitingRoom && meeting.hostId !== userId,
+          waitingRoom:
+            meeting.waitingRoom &&
+            !skipWaitingRoom &&
+            meeting.hostId !== userId,
         },
         include: {
           user: {
@@ -73,7 +83,8 @@ export class MeetingParticipantsService {
       data: {
         meetingId,
         userId,
-        waitingRoom: meeting.waitingRoom && !skipWaitingRoom && meeting.hostId !== userId,
+        waitingRoom:
+          meeting.waitingRoom && !skipWaitingRoom && meeting.hostId !== userId,
       },
       include: {
         user: {
@@ -115,7 +126,10 @@ export class MeetingParticipantsService {
     });
   }
 
-  async getParticipants(meetingId: string, includeWaitingRoom: boolean = false) {
+  async getParticipants(
+    meetingId: string,
+    includeWaitingRoom: boolean = false,
+  ) {
     // Check if meeting exists first
     const meeting = await this.prisma.meeting.findUnique({
       where: { id: meetingId },
@@ -313,4 +327,3 @@ export class MeetingParticipantsService {
     return this.leaveMeeting(meetingId, userId);
   }
 }
-

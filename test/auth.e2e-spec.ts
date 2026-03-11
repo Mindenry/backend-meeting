@@ -73,13 +73,11 @@ describe('Auth (e2e)', () => {
   describe('/auth/login (POST)', () => {
     it('should login with valid credentials', async () => {
       // First register a user
-      await request(app.getHttpServer())
-        .post('/api/auth/register')
-        .send({
-          email: 'login@example.com',
-          password: 'Password123!',
-          name: 'Login User',
-        });
+      await request(app.getHttpServer()).post('/api/auth/register').send({
+        email: 'login@example.com',
+        password: 'Password123!',
+        name: 'Login User',
+      });
 
       // Then login
       return request(app.getHttpServer())

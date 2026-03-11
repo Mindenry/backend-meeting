@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { extname } from 'path';
 
@@ -20,10 +24,7 @@ export class DriveService {
           take: 1,
         },
       },
-      orderBy: [
-        { isFolder: 'desc' },
-        { name: 'asc' },
-      ],
+      orderBy: [{ isFolder: 'desc' }, { name: 'asc' }],
     });
 
     return entries.map((e) => ({
@@ -45,7 +46,12 @@ export class DriveService {
     }));
   }
 
-  async createFolder(teamId: string, createdById: string, name: string, path: string = '/') {
+  async createFolder(
+    teamId: string,
+    createdById: string,
+    name: string,
+    path: string = '/',
+  ) {
     const normalizedPath = this.normalizePath(path);
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -62,7 +68,9 @@ export class DriveService {
       },
     });
     if (existing) {
-      throw new BadRequestException('Folder with this name already exists in this path');
+      throw new BadRequestException(
+        'Folder with this name already exists in this path',
+      );
     }
 
     return this.prisma.driveEntry.create({
@@ -91,7 +99,7 @@ export class DriveService {
     // First, find the organization this team belongs to
     const team = await this.prisma.team.findUnique({
       where: { id: params.teamId },
-      select: { organizationId: true }
+      select: { organizationId: true },
     });
 
     if (!team) {
@@ -101,24 +109,26 @@ export class DriveService {
     // Calculate total storage used by all teams in this organization
     const orgTeams = await this.prisma.team.findMany({
       where: { organizationId: team.organizationId },
-      select: { id: true }
+      select: { id: true },
     });
-    const orgTeamIds = orgTeams.map(t => t.id);
+    const orgTeamIds = orgTeams.map((t) => t.id);
 
     const usageResult = await this.prisma.driveFileVersion.aggregate({
       where: {
         entry: {
-          teamId: { in: orgTeamIds }
-        }
+          teamId: { in: orgTeamIds },
+        },
       },
       _sum: {
-        size: true
-      }
+        size: true,
+      },
     });
 
     const currentUsedBytes = usageResult._sum.size || 0;
     if (currentUsedBytes + params.size > MAX_STORAGE_BYTES) {
-      throw new BadRequestException('Organization storage limit exceeded (5GB maximum)');
+      throw new BadRequestException(
+        'Organization storage limit exceeded (5GB maximum)',
+      );
     }
 
     const normalizedPath = this.normalizePath(params.path || '/');
@@ -207,6 +217,71 @@ export class DriveService {
     };
   }
 
+  async deleteEntry(id: string) {
+    const entry = await this.prisma.driveEntry.findUnique({
+      where: { id },
+    });
+
+    if (!entry) {
+      throw new NotFoundException('Drive entry not found');
+    }
+
+    if (entry.isFolder) {
+      // Find all child entries inside this folder path
+      const folderPath =
+        entry.path === '/' ? `/${entry.name}` : `${entry.path}/${entry.name}`;
+
+      await this.prisma.$transaction(async (tx) => {
+        // Find all sub-entries
+        const subEntries = await tx.driveEntry.findMany({
+          where: {
+            teamId: entry.teamId,
+            path: {
+              startsWith: folderPath,
+            },
+          },
+        });
+
+        const subEntryIds = subEntries.map((e) => e.id);
+
+        // Delete all versions for sub-entries
+        if (subEntryIds.length > 0) {
+          await tx.driveFileVersion.deleteMany({
+            where: { entryId: { in: subEntryIds } },
+          });
+
+          // Delete all sub-entries
+          await tx.driveEntry.deleteMany({
+            where: { id: { in: subEntryIds } },
+          });
+        }
+
+        // Delete versions for the folder itself (though usually empty)
+        await tx.driveFileVersion.deleteMany({
+          where: { entryId: entry.id },
+        });
+
+        // Delete the folder itself
+        await tx.driveEntry.delete({
+          where: { id: entry.id },
+        });
+      });
+    } else {
+      // Just delete the file and its versions
+      await this.prisma.$transaction(async (tx) => {
+        await tx.driveFileVersion.deleteMany({
+          where: { entryId: entry.id },
+        });
+
+        await tx.driveEntry.delete({
+          where: { id: entry.id },
+        });
+      });
+    }
+
+    return { success: true };
+  }
+
   private normalizePath(path: string) {
     if (!path || path === '/') return '/';
     let p = path.trim();
@@ -218,10 +293,10 @@ export class DriveService {
   // Convenience helper to derive content type when needed on frontend
   guessTypeFromName(name: string) {
     const ext = extname(name).toLowerCase();
-    if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) return 'image';
+    if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext))
+      return 'image';
     if (['.pdf'].includes(ext)) return 'pdf';
     if (['.mp4', '.mov', '.webm'].includes(ext)) return 'video';
     return 'file';
   }
 }
-

@@ -8,9 +8,15 @@ import { StandupsModule } from '../standups/standups.module';
 import { WorkflowsModule } from '../workflows/workflows.module';
 
 @Module({
-    imports: [PrismaModule, forwardRef(() => EventsModule), NotificationsModule, StandupsModule, forwardRef(() => WorkflowsModule)],
-    controllers: [MessagesController],
-    providers: [MessagesService],
-    exports: [MessagesService],
+  imports: [
+    PrismaModule,
+    forwardRef(() => EventsModule),
+    NotificationsModule,
+    StandupsModule,
+    forwardRef(() => WorkflowsModule),
+  ],
+  controllers: [MessagesController],
+  providers: [MessagesService],
+  exports: [MessagesService],
 })
-export class MessagesModule { }
+export class MessagesModule {}

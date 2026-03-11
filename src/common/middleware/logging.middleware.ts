@@ -20,14 +20,17 @@ export class LoggingMiddleware implements NestMiddleware {
       const userId = (req as any).user?.id || 'anonymous';
 
       // Log response
-      const logLevel = statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'log';
+      const logLevel =
+        statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'log';
       this.logger[logLevel](
         `${method} ${originalUrl} ${statusCode} - ${responseTime}ms - User: ${userId}`,
       );
 
       // Log slow requests
       if (responseTime > 1000) {
-        this.logger.warn(`Slow request detected: ${method} ${originalUrl} took ${responseTime}ms`);
+        this.logger.warn(
+          `Slow request detected: ${method} ${originalUrl} took ${responseTime}ms`,
+        );
       }
     });
 

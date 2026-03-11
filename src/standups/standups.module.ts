@@ -12,4 +12,3 @@ import { CommonModule } from '../common/common.module';
   exports: [StandupsService],
 })
 export class StandupsModule {}
-

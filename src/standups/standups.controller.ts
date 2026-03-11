@@ -1,11 +1,9 @@
-import {
-  Controller,
-  Get,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 // @ts-ignore - Optional Swagger decorators
-import { ApiTags, ApiBearerAuth } from '../common/decorators/swagger.decorators';
+import {
+  ApiTags,
+  ApiBearerAuth,
+} from '../common/decorators/swagger.decorators';
 import { StandupsService } from './standups.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -34,4 +32,3 @@ export class StandupsController {
     );
   }
 }
-

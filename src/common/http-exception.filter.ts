@@ -26,7 +26,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
-      
+
       if (typeof exceptionResponse === 'string') {
         message = exceptionResponse;
       } else if (typeof exceptionResponse === 'object') {
@@ -36,10 +36,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
     }
     // Handle Prisma errors
-    else if (exception && typeof exception === 'object' && 'code' in exception) {
+    else if (
+      exception &&
+      typeof exception === 'object' &&
+      'code' in exception
+    ) {
       const prismaError = exception as any;
       status = HttpStatus.BAD_REQUEST;
-      
+
       // Handle unique constraint violations
       if (prismaError.code === 'P2002') {
         message = 'A record with this value already exists';
@@ -58,8 +62,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         status = HttpStatus.NOT_FOUND;
         message = 'Record not found';
         errorCode = 'RECORD_NOT_FOUND';
-      }
-      else {
+      } else {
         message = 'Database operation failed';
         errorCode = 'DATABASE_ERROR';
       }
@@ -67,7 +70,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     // Handle validation errors (class-validator)
     else if (exception instanceof Error) {
       message = exception.message;
-      
+
       // Check if it's a validation error
       if (exception.message.includes('validation')) {
         status = HttpStatus.BAD_REQUEST;
@@ -104,7 +107,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: request.url,
-      message: typeof message === 'string' ? message : Array.isArray(message) ? message : (message as any).message || 'An error occurred',
+      message:
+        typeof message === 'string'
+          ? message
+          : Array.isArray(message)
+            ? message
+            : (message as any).message || 'An error occurred',
     };
 
     // Add error code if available
@@ -125,4 +133,3 @@ export class AllExceptionsFilter implements ExceptionFilter {
     response.status(status).json(errorResponse);
   }
 }
-

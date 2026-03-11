@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { randomUUID } from 'crypto';
 
@@ -39,7 +43,9 @@ export class InvitesService {
     });
 
     if (existingInvite) {
-      throw new BadRequestException('Active invite already exists for this email');
+      throw new BadRequestException(
+        'Active invite already exists for this email',
+      );
     }
 
     const expiresInDays = data.expiresInDays || 7;
@@ -129,4 +135,3 @@ export class InvitesService {
     return { success: true };
   }
 }
-

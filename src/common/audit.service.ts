@@ -23,7 +23,7 @@ export class AuditService {
           entityId: data.entityId,
           userId: data.userId,
           userName: data.userName,
-          details: data.details ? (data.details as any) : null,
+          details: data.details ? data.details : null,
           ipAddress: data.ipAddress,
           userAgent: data.userAgent,
         },
@@ -34,4 +34,3 @@ export class AuditService {
     }
   }
 }
-

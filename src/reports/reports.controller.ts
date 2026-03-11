@@ -1,6 +1,18 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 // @ts-ignore - Optional Swagger decorators
-import { ApiTags, ApiBearerAuth } from '../common/decorators/swagger.decorators';
+import {
+  ApiTags,
+  ApiBearerAuth,
+} from '../common/decorators/swagger.decorators';
 import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,10 +28,13 @@ export class ReportsController {
   ) {}
 
   @Get()
-  async getUserReport(@Query('range') range: string = 'month', @Request() req: any) {
+  async getUserReport(
+    @Query('range') range: string = 'month',
+    @Request() req: any,
+  ) {
     const endDate = new Date();
     const startDate = new Date();
-    
+
     switch (range) {
       case 'week':
         startDate.setDate(startDate.getDate() - 7);
@@ -47,22 +62,23 @@ export class ReportsController {
       include: { team: true },
     });
     const teams = memberships.map((m) => m.team);
-    
+
     const teamMetrics = await Promise.all(
       teams.map(async (team) => {
         try {
-          const teamReport = await this.reportsService.getTeamProductivityReport(
-            team.id,
-            startDate,
-            endDate,
-          );
+          const teamReport =
+            await this.reportsService.getTeamProductivityReport(
+              team.id,
+              startDate,
+              endDate,
+            );
           return {
             teamName: team.name,
             tasksCompleted: teamReport.summary?.tasks?.completed || 0,
             meetingsAttended: teamReport.summary?.meetings?.completed || 0,
-            messagesSent: teamReport.members
-              ?.find((m) => m.user?.id === req.user.id)
-              ?.messagesSent || 0,
+            messagesSent:
+              teamReport.members?.find((m) => m.user?.id === req.user.id)
+                ?.messagesSent || 0,
           };
         } catch (error) {
           // If team report fails, return empty metrics
@@ -81,9 +97,12 @@ export class ReportsController {
     const tasksCompleted = userReport.summary?.tasks?.completed || 0;
     const tasksTotal = userReport.summary?.tasks?.total || 0;
     const messagesSent = userReport.summary?.messagesSent || 0;
-    const productivityScore = tasksTotal > 0
-      ? Math.min(100, (tasksCompleted / tasksTotal) * 100)
-      : (messagesSent > 0 ? 100 : 0);
+    const productivityScore =
+      tasksTotal > 0
+        ? Math.min(100, (tasksCompleted / tasksTotal) * 100)
+        : messagesSent > 0
+          ? 100
+          : 0;
 
     return {
       tasksCompleted,
@@ -185,10 +204,10 @@ export class ReportsController {
     });
   }
 
-
   @Post('work-hours')
   async createWorkHours(
-    @Body() data: {
+    @Body()
+    data: {
       userId: string;
       date: string;
       hours: number;

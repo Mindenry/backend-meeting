@@ -23,7 +23,8 @@ export class MeetingParticipantsController {
   @Post()
   async joinMeeting(
     @Param('meetingId') meetingId: string,
-    @Body() body: { userId: string; password?: string; skipWaitingRoom?: boolean },
+    @Body()
+    body: { userId: string; password?: string; skipWaitingRoom?: boolean },
   ) {
     try {
       if (!body.userId) {
@@ -139,4 +140,3 @@ export class MeetingParticipantsController {
     );
   }
 }
-

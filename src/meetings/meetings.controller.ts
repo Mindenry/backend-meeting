@@ -16,7 +16,12 @@ import { CreateMeetingDto } from './dto/create-meeting.dto';
 import { UpdateMeetingDto } from './dto/update-meeting.dto';
 
 // @ts-ignore - Optional Swagger decorators
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '../common/decorators/swagger.decorators';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '../common/decorators/swagger.decorators';
 
 @ApiTags('meetings')
 @Controller('meetings')
@@ -27,16 +32,20 @@ export class MeetingsController {
 
   @Get(':id/livekit-token')
   @ApiOperation({ summary: 'Get LiveKit token' })
-  @ApiResponse({ status: 200, description: 'LiveKit token generated successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'LiveKit token generated successfully',
+  })
   getLiveKitToken(@Param('id') id: string, @Request() req) {
-    return this.meetingsService.generateLivekitToken(id, req.user.id, req.user.name);
+    return this.meetingsService.generateLivekitToken(
+      id,
+      req.user.id,
+      req.user.name,
+    );
   }
 
   @Get()
-  findAll(
-    @Query('status') status?: string,
-    @Query('teamId') teamId?: string,
-  ) {
+  findAll(@Query('status') status?: string, @Query('teamId') teamId?: string) {
     return this.meetingsService.findAll({ status, teamId });
   }
 
@@ -46,19 +55,28 @@ export class MeetingsController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a new meeting', description: 'Create a new meeting with optional recurring settings' })
+  @ApiOperation({
+    summary: 'Create a new meeting',
+    description: 'Create a new meeting with optional recurring settings',
+  })
   @ApiResponse({ status: 201, description: 'Meeting created successfully' })
   create(@Body() createMeetingDto: CreateMeetingDto) {
     return this.meetingsService.create({
       ...createMeetingDto,
       startTime: new Date(createMeetingDto.startTime),
       endTime: new Date(createMeetingDto.endTime),
-      recurringEndDate: createMeetingDto.recurringEndDate ? new Date(createMeetingDto.recurringEndDate) : undefined,
+      recurringEndDate: createMeetingDto.recurringEndDate
+        ? new Date(createMeetingDto.recurringEndDate)
+        : undefined,
     });
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a meeting', description: 'Update meeting properties. Only provided fields will be updated.' })
+  @ApiOperation({
+    summary: 'Update a meeting',
+    description:
+      'Update meeting properties. Only provided fields will be updated.',
+  })
   @ApiResponse({ status: 200, description: 'Meeting updated successfully' })
   update(@Param('id') id: string, @Body() updateMeetingDto: UpdateMeetingDto) {
     const { startTime, endTime, ...rest } = updateMeetingDto;
@@ -107,10 +125,7 @@ export class MeetingsController {
   }
 
   @Post(':id/end')
-  endMeeting(
-    @Param('id') id: string,
-    @Body() body: { summary?: string },
-  ) {
+  endMeeting(@Param('id') id: string, @Body() body: { summary?: string }) {
     return this.meetingsService.endMeeting(id, body.summary);
   }
 
@@ -123,5 +138,4 @@ export class MeetingsController {
   unlockMeeting(@Param('id') id: string) {
     return this.meetingsService.unlockMeeting(id);
   }
-
 }

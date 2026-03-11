@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -10,7 +14,9 @@ export class WikiService {
       where: {
         OR: [
           { isPublic: true },
-          ...(teamIds && teamIds.length > 0 ? [{ teamId: { in: teamIds } }] : []),
+          ...(teamIds && teamIds.length > 0
+            ? [{ teamId: { in: teamIds } }]
+            : []),
           { createdBy: userId },
         ],
       },
@@ -75,8 +81,8 @@ export class WikiService {
     const hasAccess =
       article.isPublic ||
       article.createdBy === userId ||
-      (article.teamId ? true : false); // Fallback generic access if teamId is part of team check elsewhere. 
-      // Simplified since explicit permissions were removed.
+      (article.teamId ? true : false); // Fallback generic access if teamId is part of team check elsewhere.
+    // Simplified since explicit permissions were removed.
 
     if (!hasAccess) {
       throw new ForbiddenException('Access denied');
@@ -115,13 +121,17 @@ export class WikiService {
     });
   }
 
-  async update(id: string, userId: string, data: {
-    title?: string;
-    content?: string;
-    category?: string;
-    tags?: string[];
-    isPublic?: boolean;
-  }) {
+  async update(
+    id: string,
+    userId: string,
+    data: {
+      title?: string;
+      content?: string;
+      category?: string;
+      tags?: string[];
+      isPublic?: boolean;
+    },
+  ) {
     const article = await this.prisma.wikiArticle.findUnique({
       where: { id },
     });

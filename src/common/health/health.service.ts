@@ -7,19 +7,21 @@ export class HealthService {
 
   async getHealthMetrics() {
     const startTime = Date.now();
-    
+
     try {
       // Test database connection
       await this.prisma.$queryRaw`SELECT 1`;
       const dbResponseTime = Date.now() - startTime;
 
       // Get basic metrics
-      const [userCount, teamCount, taskCount, meetingCount] = await Promise.all([
-        this.prisma.user.count(),
-        this.prisma.team.count(),
-        this.prisma.task.count(),
-        this.prisma.meeting.count(),
-      ]);
+      const [userCount, teamCount, taskCount, meetingCount] = await Promise.all(
+        [
+          this.prisma.user.count(),
+          this.prisma.team.count(),
+          this.prisma.task.count(),
+          this.prisma.meeting.count(),
+        ],
+      );
 
       return {
         status: 'healthy',

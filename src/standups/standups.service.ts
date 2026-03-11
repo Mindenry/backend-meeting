@@ -1,4 +1,11 @@
-import { Injectable, Logger, Inject, forwardRef, BadRequestException, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Inject,
+  forwardRef,
+  BadRequestException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
@@ -37,7 +44,10 @@ export class StandupsService implements OnModuleInit {
 
       this.logger.log('Standup bot initialized successfully');
     } catch (error) {
-      this.logger.error(`Failed to initialize standup bot: ${error.message}`, error.stack);
+      this.logger.error(
+        `Failed to initialize standup bot: ${error.message}`,
+        error.stack,
+      );
     }
   }
 
@@ -116,10 +126,15 @@ export class StandupsService implements OnModuleInit {
           details: { teamId: team.id, channelId: channel.id },
         });
 
-        this.logger.log(`Sent daily standup prompt to team "${team.name}" (${team.id})`);
+        this.logger.log(
+          `Sent daily standup prompt to team "${team.name}" (${team.id})`,
+        );
       }
     } catch (error) {
-      this.logger.error(`Error while sending standup prompts: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error while sending standup prompts: ${error.message}`,
+        error.stack,
+      );
     }
   }
 
@@ -165,9 +180,15 @@ export class StandupsService implements OnModuleInit {
       });
     } else {
       // Merge arrays and append raw text
-      const mergedYesterday = this.mergeArrays(existing.yesterday, parsed.yesterday);
+      const mergedYesterday = this.mergeArrays(
+        existing.yesterday,
+        parsed.yesterday,
+      );
       const mergedToday = this.mergeArrays(existing.today, parsed.today);
-      const mergedBlockers = this.mergeArrays(existing.blockers, parsed.blockers);
+      const mergedBlockers = this.mergeArrays(
+        existing.blockers,
+        parsed.blockers,
+      );
 
       await this.prisma.standupEntry.update({
         where: { id: existing.id },
@@ -240,7 +261,9 @@ export class StandupsService implements OnModuleInit {
     }
 
     const todayInfo = this.getLocalDay(new Date());
-    const start = from ? this.getLocalDay(from).startOfDay : todayInfo.startOfDay;
+    const start = from
+      ? this.getLocalDay(from).startOfDay
+      : todayInfo.startOfDay;
     const end = to ? this.getLocalDay(to).endOfDay : todayInfo.endOfDay;
 
     const entries = await this.prisma.standupEntry.findMany({
@@ -366,7 +389,11 @@ export class StandupsService implements OnModuleInit {
     ].join('\n');
   }
 
-  private parseStandupText(text: string): { yesterday: string[]; today: string[]; blockers: string[] } {
+  private parseStandupText(text: string): {
+    yesterday: string[];
+    today: string[];
+    blockers: string[];
+  } {
     const lines = text
       .split(/\r?\n/)
       .map((l) => l.trim())
@@ -379,7 +406,11 @@ export class StandupsService implements OnModuleInit {
     for (const line of lines) {
       const lower = line.toLowerCase();
 
-      if (line.startsWith('✅') || lower.startsWith('yesterday') || lower.startsWith('เมื่อวาน')) {
+      if (
+        line.startsWith('✅') ||
+        lower.startsWith('yesterday') ||
+        lower.startsWith('เมื่อวาน')
+      ) {
         yesterday.push(line.replace(/^✅\s*/u, '').trim());
       } else if (
         line.startsWith('📝') ||
@@ -400,7 +431,12 @@ export class StandupsService implements OnModuleInit {
     }
 
     // Fallback: if nothing matched, treat whole message as "today"
-    if (yesterday.length === 0 && today.length === 0 && blockers.length === 0 && text.trim()) {
+    if (
+      yesterday.length === 0 &&
+      today.length === 0 &&
+      blockers.length === 0 &&
+      text.trim()
+    ) {
       today.push(text.trim());
     }
 
@@ -436,4 +472,3 @@ export class StandupsService implements OnModuleInit {
     return { local, startOfDay, endOfDay };
   }
 }
-

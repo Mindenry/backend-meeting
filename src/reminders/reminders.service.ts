@@ -29,7 +29,7 @@ export class RemindersService {
         remindAt: data.remindAt,
         createdBy: data.createdBy,
         recipients: {
-          create: data.userIds.map(userId => ({
+          create: data.userIds.map((userId) => ({
             userId,
           })),
         },

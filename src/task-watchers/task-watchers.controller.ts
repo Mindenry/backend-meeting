@@ -21,10 +21,7 @@ export class TaskWatchersController {
   }
 
   @Get('is-watching')
-  isWatching(
-    @Query('taskId') taskId: string,
-    @Query('userId') userId: string,
-  ) {
+  isWatching(@Query('taskId') taskId: string, @Query('userId') userId: string) {
     return this.taskWatchersService.isWatching(taskId, userId);
   }
 
@@ -34,10 +31,7 @@ export class TaskWatchersController {
   }
 
   @Delete()
-  unwatch(
-    @Query('taskId') taskId: string,
-    @Query('userId') userId: string,
-  ) {
+  unwatch(@Query('taskId') taskId: string, @Query('userId') userId: string) {
     return this.taskWatchersService.unwatch(taskId, userId);
   }
 }

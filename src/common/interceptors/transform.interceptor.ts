@@ -14,11 +14,17 @@ export interface Response<T> {
 }
 
 @Injectable()
-export class TransformInterceptor<T> implements NestInterceptor<T, Response<T>> {
-  intercept(context: ExecutionContext, next: CallHandler): Observable<Response<T>> {
+export class TransformInterceptor<T> implements NestInterceptor<
+  T,
+  Response<T>
+> {
+  intercept(
+    context: ExecutionContext,
+    next: CallHandler,
+  ): Observable<Response<T>> {
     const request = context.switchToHttp().getRequest();
     const path = request.url;
-    
+
     // Skip transformation for auth endpoints to maintain compatibility
     const skipTransformPaths = [
       '/api/auth/login',
@@ -27,15 +33,15 @@ export class TransformInterceptor<T> implements NestInterceptor<T, Response<T>> 
       '/api/auth/logout',
       '/api/auth/me',
     ];
-    
-    const shouldSkip = skipTransformPaths.some(pathPattern => 
-      path.includes(pathPattern)
+
+    const shouldSkip = skipTransformPaths.some((pathPattern) =>
+      path.includes(pathPattern),
     );
-    
+
     if (shouldSkip) {
       return next.handle();
     }
-    
+
     return next.handle().pipe(
       map((data) => ({
         success: true,

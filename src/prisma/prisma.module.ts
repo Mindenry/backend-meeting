@@ -8,5 +8,3 @@ import { AuditService } from '../common/audit.service';
   exports: [PrismaService, AuditService],
 })
 export class PrismaModule {}
-
-

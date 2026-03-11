@@ -1,6 +1,11 @@
 import { Controller, Get, UseGuards, Request } from '@nestjs/common';
 // @ts-ignore - Optional Swagger decorators
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from './common/decorators/swagger.decorators';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from './common/decorators/swagger.decorators';
 import { AppService } from './app.service';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { PrismaService } from './prisma/prisma.service';
@@ -18,12 +23,13 @@ export class AppController {
   @Get('api/dashboard')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get dashboard data',
-    description: 'Returns comprehensive dashboard statistics including meetings, tasks, notifications, and team metrics'
+    description:
+      'Returns comprehensive dashboard statistics including meetings, tasks, notifications, and team metrics',
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Dashboard data retrieved successfully',
     schema: {
       type: 'object',
@@ -77,7 +83,7 @@ export class AppController {
         where: { userId },
         select: { teamId: true, team: { select: { id: true, name: true } } },
       });
-      const teamIds = teamMemberships.map(tm => tm.teamId);
+      const teamIds = teamMemberships.map((tm) => tm.teamId);
 
       // Get today's meetings
       const meetingsToday = await this.prisma.meeting.findMany({
@@ -241,24 +247,28 @@ export class AppController {
       });
 
       // Get team statistics (optimized - batch queries)
-      const teamStats = teamIds.length > 0
-        ? await Promise.all(
-            teamIds.map(async (teamId) => {
-              const [totalTasks, completedTasks, activeMembers] = await Promise.all([
-                this.prisma.task.count({ where: { teamId } }),
-                this.prisma.task.count({ where: { teamId, status: 'done' } }),
-                this.prisma.teamMember.count({ where: { teamId } }),
-              ]);
+      const teamStats =
+        teamIds.length > 0
+          ? await Promise.all(
+              teamIds.map(async (teamId) => {
+                const [totalTasks, completedTasks, activeMembers] =
+                  await Promise.all([
+                    this.prisma.task.count({ where: { teamId } }),
+                    this.prisma.task.count({
+                      where: { teamId, status: 'done' },
+                    }),
+                    this.prisma.teamMember.count({ where: { teamId } }),
+                  ]);
 
-              return {
-                teamId,
-                totalTasks,
-                completedTasks,
-                activeMembers,
-              };
-            }),
-          )
-        : [];
+                return {
+                  teamId,
+                  totalTasks,
+                  completedTasks,
+                  activeMembers,
+                };
+              }),
+            )
+          : [];
 
       const result = {
         stats: {
@@ -269,16 +279,19 @@ export class AppController {
           unreadNotifications: unreadNotificationsCount,
           unreadMessages: unreadMessagesCount,
           activeMembers,
-          taskStats: taskStats.reduce((acc, stat) => {
-            acc[stat.status] = stat._count;
-            return acc;
-          }, {} as Record<string, number>),
+          taskStats: taskStats.reduce(
+            (acc, stat) => {
+              acc[stat.status] = stat._count;
+              return acc;
+            },
+            {} as Record<string, number>,
+          ),
         },
         meetingsToday,
         upcomingMeetings,
         recentTasks: userTasks,
         teamStats,
-        recentActivities: recentActivities.map(activity => ({
+        recentActivities: recentActivities.map((activity) => ({
           id: activity.id,
           action: activity.action,
           oldValue: activity.oldValue,

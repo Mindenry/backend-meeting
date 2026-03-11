@@ -86,7 +86,9 @@ export class RecordingsService {
       status?: string;
     },
   ) {
-    const exists = await this.prisma.meetingRecording.findUnique({ where: { id } });
+    const exists = await this.prisma.meetingRecording.findUnique({
+      where: { id },
+    });
     if (!exists) {
       throw new NotFoundException('Recording not found');
     }

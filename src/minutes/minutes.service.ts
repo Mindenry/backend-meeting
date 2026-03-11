@@ -95,7 +95,9 @@ export class MinutesService {
     },
     userId: string,
   ) {
-    const exists = await this.prisma.meetingMinutes.findUnique({ where: { id } });
+    const exists = await this.prisma.meetingMinutes.findUnique({
+      where: { id },
+    });
     if (!exists) {
       throw new NotFoundException('Meeting minutes not found');
     }

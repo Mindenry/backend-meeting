@@ -1,4 +1,11 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException, SetMetadata, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  SetMetadata,
+  Inject,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -26,7 +33,9 @@ export class RolesGuard implements CanActivate {
     }
 
     const userRole = String(user.role || '').toLowerCase();
-    const hasRole = requiredRoles.some((role) => userRole === String(role).toLowerCase());
+    const hasRole = requiredRoles.some(
+      (role) => userRole === String(role).toLowerCase(),
+    );
     if (!hasRole) {
       throw new ForbiddenException('Insufficient permissions');
     }
@@ -58,10 +67,10 @@ export class PermissionGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const meta = this.reflector.getAllAndOverride<{ resource: string; action: string }>(
-      PERMISSION_KEY,
-      [context.getHandler(), context.getClass()],
-    );
+    const meta = this.reflector.getAllAndOverride<{
+      resource: string;
+      action: string;
+    }>(PERMISSION_KEY, [context.getHandler(), context.getClass()]);
 
     if (!meta) {
       return true; // No permission requirement set
@@ -90,10 +99,10 @@ export class PermissionGuard implements CanActivate {
             role: userRole,
             resource: meta.resource,
             action: meta.action,
-          }
-        }
+          },
+        },
       });
-      
+
       if (perm) {
         if (!perm.allowed) {
           throw new ForbiddenException(

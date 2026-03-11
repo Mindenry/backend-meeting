@@ -1,4 +1,9 @@
-import { Injectable, NestMiddleware, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Injectable,
+  NestMiddleware,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { Logger } from '@nestjs/common';
 
@@ -19,9 +24,15 @@ export class RateLimitMiddleware implements NestMiddleware {
 
   constructor() {
     // Configurable via environment variables (Fallback increased to prevent 429 on normal load)
-    this.maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '3000', 10);
+    this.maxRequests = parseInt(
+      process.env.RATE_LIMIT_MAX_REQUESTS || '3000',
+      10,
+    );
     this.windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10); // 15 minutes default
-    this.cleanupInterval = parseInt(process.env.RATE_LIMIT_CLEANUP_INTERVAL || '600000', 10); // 10 minutes
+    this.cleanupInterval = parseInt(
+      process.env.RATE_LIMIT_CLEANUP_INTERVAL || '600000',
+      10,
+    ); // 10 minutes
 
     // Cleanup old entries periodically
     setInterval(() => this.cleanup(), this.cleanupInterval);
@@ -48,7 +59,12 @@ export class RateLimitMiddleware implements NestMiddleware {
     // Check if limit exceeded
     if (record.count > this.maxRequests) {
       this.logger.warn(`Rate limit exceeded for ${key}`);
-      this.setHeaders(res, this.maxRequests, record.count, record.resetTime - now);
+      this.setHeaders(
+        res,
+        this.maxRequests,
+        record.count,
+        record.resetTime - now,
+      );
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,
@@ -60,7 +76,12 @@ export class RateLimitMiddleware implements NestMiddleware {
       );
     }
 
-    this.setHeaders(res, this.maxRequests, record.count, record.resetTime - now);
+    this.setHeaders(
+      res,
+      this.maxRequests,
+      record.count,
+      record.resetTime - now,
+    );
     next();
   }
 
@@ -68,15 +89,26 @@ export class RateLimitMiddleware implements NestMiddleware {
     // Use IP address and user ID if available
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
     const userId = (req as any).user?.id || 'anonymous';
-    
+
     // Different limits for authenticated vs anonymous users
     return userId !== 'anonymous' ? `user:${userId}` : `ip:${ip}`;
   }
 
-  private setHeaders(res: Response, limit: number, remaining: number, resetIn: number) {
+  private setHeaders(
+    res: Response,
+    limit: number,
+    remaining: number,
+    resetIn: number,
+  ) {
     res.setHeader('X-RateLimit-Limit', limit.toString());
-    res.setHeader('X-RateLimit-Remaining', Math.max(0, limit - remaining).toString());
-    res.setHeader('X-RateLimit-Reset', new Date(Date.now() + resetIn).toISOString());
+    res.setHeader(
+      'X-RateLimit-Remaining',
+      Math.max(0, limit - remaining).toString(),
+    );
+    res.setHeader(
+      'X-RateLimit-Reset',
+      new Date(Date.now() + resetIn).toISOString(),
+    );
     res.setHeader('Retry-After', Math.ceil(resetIn / 1000).toString());
   }
 

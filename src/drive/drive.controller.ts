@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Delete,
   Query,
   UploadedFile,
   UseInterceptors,
@@ -11,7 +12,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 // @ts-ignore - Optional Swagger decorators
-import { ApiTags, ApiBearerAuth } from '../common/decorators/swagger.decorators';
+import {
+  ApiTags,
+  ApiBearerAuth,
+} from '../common/decorators/swagger.decorators';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -39,10 +43,7 @@ export class DriveController {
   constructor(private readonly driveService: DriveService) {}
 
   @Get('teams/:teamId')
-  listEntries(
-    @Param('teamId') teamId: string,
-    @Query('path') path?: string,
-  ) {
+  listEntries(@Param('teamId') teamId: string, @Query('path') path?: string) {
     return this.driveService.listEntries(teamId, path || '/');
   }
 
@@ -51,7 +52,12 @@ export class DriveController {
     @Param('teamId') teamId: string,
     @Body() body: { name: string; path?: string; createdById: string },
   ) {
-    return this.driveService.createFolder(teamId, body.createdById, body.name, body.path || '/');
+    return this.driveService.createFolder(
+      teamId,
+      body.createdById,
+      body.name,
+      body.path || '/',
+    );
   }
 
   @Post('teams/:teamId/upload')
@@ -60,7 +66,8 @@ export class DriveController {
       storage: diskStorage({
         destination: './uploads',
         filename: (req, file, callback) => {
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const uniqueSuffix =
+            Date.now() + '-' + Math.round(Math.random() * 1e9);
           callback(null, `${uniqueSuffix}${extname(file.originalname)}`);
         },
       }),
@@ -104,5 +111,9 @@ export class DriveController {
   getEntryVersions(@Param('id') id: string) {
     return this.driveService.getEntryWithVersions(id);
   }
-}
 
+  @Delete('entries/:id')
+  deleteEntry(@Param('id') id: string) {
+    return this.driveService.deleteEntry(id);
+  }
+}

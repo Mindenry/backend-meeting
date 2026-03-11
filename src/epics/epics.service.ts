@@ -75,12 +75,15 @@ export class EpicsService {
     });
   }
 
-  async update(id: string, data: Partial<{
-    name: string;
-    description?: string;
-    color?: string;
-    status: string;
-  }>) {
+  async update(
+    id: string,
+    data: Partial<{
+      name: string;
+      description?: string;
+      color?: string;
+      status: string;
+    }>,
+  ) {
     const exists = await this.prisma.epic.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException('Epic not found');
 

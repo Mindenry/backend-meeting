@@ -1,6 +1,9 @@
 import { IsString, IsOptional, IsArray, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '../../common/decorators/swagger.decorators';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+} from '../../common/decorators/swagger.decorators';
 
 export class AttachmentDto {
   @ApiProperty({
@@ -58,8 +61,16 @@ export class CreateMessageDto {
   @ApiPropertyOptional({
     description: 'Message attachments',
     example: [
-      { url: 'https://example.com/files/image.png', name: 'image.png', type: 'image/png' },
-      { url: 'https://example.com/files/document.pdf', name: 'document.pdf', type: 'application/pdf' }
+      {
+        url: 'https://example.com/files/image.png',
+        name: 'image.png',
+        type: 'image/png',
+      },
+      {
+        url: 'https://example.com/files/document.pdf',
+        name: 'document.pdf',
+        type: 'application/pdf',
+      },
     ],
     type: [AttachmentDto],
   })

@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { InvitesService } from '../invites/invites.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { AuditService } from '../common/audit.service';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -21,6 +22,10 @@ describe('AuthController', () => {
     getInviteByToken: jest.fn(),
   };
 
+  const mockAuditService = {
+    log: jest.fn(),
+  };
+
   const mockPrismaService = {
     user: {
       findUnique: jest.fn(),
@@ -33,7 +38,6 @@ describe('AuthController', () => {
       findUnique: jest.fn(),
     },
   };
-
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -50,6 +54,10 @@ describe('AuthController', () => {
         {
           provide: PrismaService,
           useValue: mockPrismaService,
+        },
+        {
+          provide: AuditService,
+          useValue: mockAuditService,
         },
       ],
     })

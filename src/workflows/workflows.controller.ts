@@ -11,7 +11,10 @@ import {
   Request,
 } from '@nestjs/common';
 // @ts-ignore - Optional Swagger decorators
-import { ApiTags, ApiBearerAuth } from '../common/decorators/swagger.decorators';
+import {
+  ApiTags,
+  ApiBearerAuth,
+} from '../common/decorators/swagger.decorators';
 import { WorkflowsService } from './workflows.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -37,7 +40,8 @@ export class WorkflowsController {
   ) {
     return this.workflowsService.findAllWorkflows({
       teamId,
-      isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
+      isActive:
+        isActive === 'true' ? true : isActive === 'false' ? false : undefined,
     });
   }
 

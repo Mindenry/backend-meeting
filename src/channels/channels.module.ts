@@ -5,9 +5,9 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { EventsModule } from '../events/events.module';
 
 @Module({
-    imports: [PrismaModule, forwardRef(() => EventsModule)],
-    controllers: [ChannelsController],
-    providers: [ChannelsService],
-    exports: [ChannelsService],
+  imports: [PrismaModule, forwardRef(() => EventsModule)],
+  controllers: [ChannelsController],
+  providers: [ChannelsService],
+  exports: [ChannelsService],
 })
-export class ChannelsModule { }
+export class ChannelsModule {}

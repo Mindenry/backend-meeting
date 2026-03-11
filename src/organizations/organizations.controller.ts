@@ -88,4 +88,3 @@ export class OrganizationsController {
     return this.organizationsService.remove(id);
   }
 }
-

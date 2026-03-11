@@ -71,4 +71,3 @@ export class OrganizationsService {
     return { success: true };
   }
 }
-

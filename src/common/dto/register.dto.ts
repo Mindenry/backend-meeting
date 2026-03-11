@@ -1,4 +1,10 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength, Matches } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsString,
+  MinLength,
+  Matches,
+} from 'class-validator';
 import { ApiProperty } from '../decorators/swagger.decorators';
 
 export class RegisterDto {
@@ -12,7 +18,8 @@ export class RegisterDto {
   email: string;
 
   @ApiProperty({
-    description: 'User password (must contain uppercase, lowercase, number, and special character)',
+    description:
+      'User password (must contain uppercase, lowercase, number, and special character)',
     example: 'SecurePass123!',
     type: String,
     minLength: 8,
@@ -20,10 +27,16 @@ export class RegisterDto {
   @IsString({ message: 'Password must be a string' })
   @IsNotEmpty({ message: 'Password is required' })
   @MinLength(8, { message: 'Password must be at least 8 characters long' })
-  @Matches(/[A-Z]/, { message: 'Password must contain at least one uppercase letter' })
-  @Matches(/[a-z]/, { message: 'Password must contain at least one lowercase letter' })
+  @Matches(/[A-Z]/, {
+    message: 'Password must contain at least one uppercase letter',
+  })
+  @Matches(/[a-z]/, {
+    message: 'Password must contain at least one lowercase letter',
+  })
   @Matches(/[0-9]/, { message: 'Password must contain at least one number' })
-  @Matches(/[!@#$%^&*]/, { message: 'Password must contain at least one special character (!@#$%^&*)' })
+  @Matches(/[!@#$%^&*]/, {
+    message: 'Password must contain at least one special character (!@#$%^&*)',
+  })
   password: string;
 
   @ApiProperty({

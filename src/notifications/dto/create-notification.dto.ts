@@ -1,5 +1,8 @@
 import { IsString, IsOptional } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '../../common/decorators/swagger.decorators';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+} from '../../common/decorators/swagger.decorators';
 
 export class CreateNotificationDto {
   @ApiProperty({
@@ -13,7 +16,15 @@ export class CreateNotificationDto {
   @ApiProperty({
     description: 'Notification type',
     example: 'task_assigned',
-    enum: ['task_assigned', 'task_updated', 'meeting_starting', 'message_received', 'mention', 'announcement', 'team_update'],
+    enum: [
+      'task_assigned',
+      'task_updated',
+      'meeting_starting',
+      'message_received',
+      'mention',
+      'announcement',
+      'team_update',
+    ],
     type: String,
   })
   @IsString()
@@ -29,7 +40,8 @@ export class CreateNotificationDto {
 
   @ApiProperty({
     description: 'Notification message',
-    example: 'You have been assigned to "Implement user authentication feature"',
+    example:
+      'You have been assigned to "Implement user authentication feature"',
     type: String,
   })
   @IsString()

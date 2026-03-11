@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
@@ -22,11 +26,14 @@ export class AuthService {
 
     if (!user.password) {
       // Allow migration scenario or require set password
-      throw new UnauthorizedException('Password not set. Please contact admin or reset password.');
+      throw new UnauthorizedException(
+        'Password not set. Please contact admin or reset password.',
+      );
     }
 
-    if (user.isActive === false) { // Explicitly check for false, assuming default true if undefined or strictly boolean
-       throw new UnauthorizedException('Account is deactivated');
+    if (user.isActive === false) {
+      // Explicitly check for false, assuming default true if undefined or strictly boolean
+      throw new UnauthorizedException('Account is deactivated');
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
@@ -40,28 +47,32 @@ export class AuthService {
 
   async login(email: string, password: string) {
     const user = await this.validateUser(email, password);
-    
+
     // Ensure user has required properties
     if (!user || !user.id || !user.email) {
       throw new UnauthorizedException('Invalid user data');
     }
-    
-    const payload = { email: user.email, sub: user.id, role: user.role || 'employee' };
+
+    const payload = {
+      email: user.email,
+      sub: user.id,
+      role: user.role || 'employee',
+    };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
 
     // Store refresh token
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
-    
+
     try {
-    await this.prisma.refreshToken.create({
-      data: {
-        token: refreshToken,
-        userId: user.id,
-        expiresAt,
-      },
-    });
+      await this.prisma.refreshToken.create({
+        data: {
+          token: refreshToken,
+          userId: user.id,
+          expiresAt,
+        },
+      });
     } catch (error) {
       // Log error but don't fail login if refresh token creation fails
       console.error('Failed to create refresh token:', error);
@@ -82,13 +93,15 @@ export class AuthService {
   }
 
   async register(email: string, password: string, name: string) {
-    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
     if (existingUser) {
       throw new BadRequestException('User already exists');
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    
+
     // Create a default organization for the new user
     const organization = await this.prisma.organization.create({
       data: {
@@ -122,8 +135,14 @@ export class AuthService {
       }
 
       const user = storedToken.user;
-      const newPayload = { email: user.email, sub: user.id, role: user.role || 'employee' };
-      const accessToken = this.jwtService.sign(newPayload, { expiresIn: '15m' });
+      const newPayload = {
+        email: user.email,
+        sub: user.id,
+        role: user.role || 'employee',
+      };
+      const accessToken = this.jwtService.sign(newPayload, {
+        expiresIn: '15m',
+      });
 
       return { accessToken };
     } catch (error) {
@@ -145,7 +164,10 @@ export class AuthService {
     return bcrypt.compare(password, hash);
   }
 
-  async validateEmailDomain(email: string, organizationId: string): Promise<boolean> {
+  async validateEmailDomain(
+    email: string,
+    organizationId: string,
+  ): Promise<boolean> {
     const org = await this.prisma.organization.findUnique({
       where: { id: organizationId },
     });
@@ -155,12 +177,15 @@ export class AuthService {
     }
 
     // If no domain restrictions, allow any email
-    if (!org.domain && (!org.allowedDomains || org.allowedDomains.length === 0)) {
+    if (
+      !org.domain &&
+      (!org.allowedDomains || org.allowedDomains.length === 0)
+    ) {
       return true;
     }
 
     const emailDomain = email.split('@')[1];
-    
+
     // Check single domain
     if (org.domain && emailDomain === org.domain) {
       return true;
@@ -181,11 +206,15 @@ export class AuthService {
     }
 
     if (!/[A-Z]/.test(password)) {
-      throw new BadRequestException('Password must contain at least one uppercase letter');
+      throw new BadRequestException(
+        'Password must contain at least one uppercase letter',
+      );
     }
 
     if (!/[!@#$%^&*]/.test(password)) {
-      throw new BadRequestException('Password must contain at least one special character');
+      throw new BadRequestException(
+        'Password must contain at least one special character',
+      );
     }
 
     const hashedPassword = await this.hashPassword(password);
@@ -195,7 +224,11 @@ export class AuthService {
     });
   }
 
-  async resetPassword(userId: string, oldPassword: string, newPassword: string): Promise<void> {
+  async resetPassword(
+    userId: string,
+    oldPassword: string,
+    newPassword: string,
+  ): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -204,7 +237,10 @@ export class AuthService {
       throw new BadRequestException('User not found or password not set');
     }
 
-    const isOldPasswordValid = await this.comparePassword(oldPassword, user.password);
+    const isOldPasswordValid = await this.comparePassword(
+      oldPassword,
+      user.password,
+    );
     if (!isOldPasswordValid) {
       throw new UnauthorizedException('Current password is incorrect');
     }
@@ -212,7 +248,9 @@ export class AuthService {
     await this.setPassword(userId, newPassword);
   }
 
-  async forgotPassword(email: string): Promise<{ success: boolean; message?: string }> {
+  async forgotPassword(
+    email: string,
+  ): Promise<{ success: boolean; message?: string }> {
     const user = await this.prisma.user.findUnique({
       where: { email: email.toLowerCase() },
     });
@@ -220,26 +258,41 @@ export class AuthService {
     if (!user) {
       // In a real application, we might not want to reveal if a user exists
       // However, for this demo/project scale, it's fine.
-      return { success: true, message: 'If an account exists, a reset link will be sent.' };
+      return {
+        success: true,
+        message: 'If an account exists, a reset link will be sent.',
+      };
     }
 
     // Usually, we would generate a unique token, save it to DB, and send an email
     // For this implementation, we will use a JWT token that expires quickly
-    const payload = { email: user.email, sub: user.id, action: 'reset_password' };
+    const payload = {
+      email: user.email,
+      sub: user.id,
+      action: 'reset_password',
+    };
     const resetToken = this.jwtService.sign(payload, { expiresIn: '1h' });
 
     // Since we don't have an email sending service integrated yet,
     // we'll log the token to the console and return it for development purposes.
-    console.log(`Password reset link for ${user.email}: http://localhost:5173/reset-password?token=${resetToken}`);
-    
-    return { success: true, message: 'Password reset instructions have been sent to your email.' };
+    console.log(
+      `Password reset link for ${user.email}: http://localhost:5173/reset-password?token=${resetToken}`,
+    );
+
+    return {
+      success: true,
+      message: 'Password reset instructions have been sent to your email.',
+    };
   }
 
-  async resetPasswordWithToken(token: string, newPassword: string): Promise<{ success: boolean }> {
+  async resetPasswordWithToken(
+    token: string,
+    newPassword: string,
+  ): Promise<{ success: boolean }> {
     try {
       // Verify token
       const payload = this.jwtService.verify(token);
-      
+
       if (payload.action !== 'reset_password' || !payload.sub) {
         throw new UnauthorizedException('Invalid reset token');
       }

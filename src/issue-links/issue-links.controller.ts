@@ -18,7 +18,13 @@ export class IssueLinksController {
 
   @Post()
   create(
-    @Body() body: { sourceId: string; targetId: string; type: string; userId?: string },
+    @Body()
+    body: {
+      sourceId: string;
+      targetId: string;
+      type: string;
+      userId?: string;
+    },
   ) {
     const { userId, ...data } = body;
     return this.issueLinksService.create(data, userId);

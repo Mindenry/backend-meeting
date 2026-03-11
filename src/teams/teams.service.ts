@@ -1,4 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 
@@ -10,7 +17,7 @@ export class TeamsService {
     private readonly eventsGateway: EventsGateway,
   ) {}
 
-  private readonly allowedTeamRoles = ['lead', 'admin', 'manager', 'member', 'viewer'] as const;
+  private readonly allowedTeamRoles = ['lead', 'member'] as const;
 
   findAll(user: any) {
     const orgRole = user?.role?.toLowerCase() || 'employee';
@@ -47,12 +54,18 @@ export class TeamsService {
     });
   }
 
-  async create(data: { name: string; description?: string; organizationId?: string }) {
+  async create(data: {
+    name: string;
+    description?: string;
+    organizationId?: string;
+  }) {
     let organizationId = data.organizationId;
     if (!organizationId) {
       const defaultOrg = await this.prisma.organization.findFirst();
       if (!defaultOrg) {
-        throw new Error('No organization found. Please create an organization first.');
+        throw new Error(
+          'No organization found. Please create an organization first.',
+        );
       }
       organizationId = defaultOrg.id;
     }
@@ -68,7 +81,11 @@ export class TeamsService {
     return team;
   }
 
-  async update(id: string, data: { name?: string; description?: string }, requester: any) {
+  async update(
+    id: string,
+    data: { name?: string; description?: string },
+    requester: any,
+  ) {
     const exists = await this.prisma.team.findUnique({ where: { id } });
     if (!exists) {
       throw new NotFoundException('Team not found');
@@ -82,7 +99,9 @@ export class TeamsService {
         where: { userId_teamId: { userId: requester.id, teamId: id } },
       });
       if (!requesterMember || requesterMember.role !== 'lead') {
-        throw new ForbiddenException('You do not have permission to update this team');
+        throw new ForbiddenException(
+          'You do not have permission to update this team',
+        );
       }
     }
 
@@ -105,7 +124,9 @@ export class TeamsService {
         where: { userId_teamId: { userId: requester.id, teamId: id } },
       });
       if (!requesterMember || requesterMember.role !== 'lead') {
-        throw new ForbiddenException('You do not have permission to delete this team');
+        throw new ForbiddenException(
+          'You do not have permission to delete this team',
+        );
       }
     }
 
@@ -152,7 +173,12 @@ export class TeamsService {
     });
   }
 
-  async updateMemberRole(teamId: string, userId: string, role: string, requester: any) {
+  async updateMemberRole(
+    teamId: string,
+    userId: string,
+    role: string,
+    requester: any,
+  ) {
     const safeRole = this.sanitizeTeamRole(role);
 
     const member = await this.prisma.teamMember.findUnique({
@@ -172,8 +198,10 @@ export class TeamsService {
       const requesterMember = await this.prisma.teamMember.findUnique({
         where: { userId_teamId: { userId: requester.id, teamId } },
       });
-      if (!requesterMember || !['lead', 'admin'].includes(requesterMember.role)) {
-        throw new ForbiddenException('You do not have permission to manage roles in this team');
+      if (!requesterMember || requesterMember.role !== 'lead') {
+        throw new ForbiddenException(
+          'You do not have permission to manage roles in this team',
+        );
       }
     }
 
@@ -209,22 +237,26 @@ export class TeamsService {
       const requesterMember = await this.prisma.teamMember.findUnique({
         where: { userId_teamId: { userId: requester.id, teamId } },
       });
-      if (!requesterMember || !['lead', 'admin'].includes(requesterMember.role)) {
-        throw new ForbiddenException('You do not have permission to remove members from this team');
+      if (!requesterMember || requesterMember.role !== 'lead') {
+        throw new ForbiddenException(
+          'You do not have permission to remove members from this team',
+        );
       }
     }
 
-    if (['lead', 'admin'].includes(member.role)) {
-      const otherLeadsOrAdmins = await this.prisma.teamMember.count({
+    if (member.role === 'lead') {
+      const otherLeads = await this.prisma.teamMember.count({
         where: {
           teamId,
-          role: { in: ['lead', 'admin'] },
+          role: 'lead',
           userId: { not: userId },
         },
       });
 
-      if (otherLeadsOrAdmins === 0) {
-        throw new BadRequestException('Cannot remove the only team lead/admin. Assign another one first.');
+      if (otherLeads === 0) {
+        throw new BadRequestException(
+          'Cannot remove the only team lead. Assign another one first.',
+        );
       }
     }
 
@@ -236,10 +268,16 @@ export class TeamsService {
     return { success: true };
   }
 
-  private sanitizeTeamRole(role?: string): (typeof this.allowedTeamRoles)[number] {
+  private sanitizeTeamRole(
+    role?: string,
+  ): (typeof this.allowedTeamRoles)[number] {
     const value = String(role || 'member').toLowerCase();
 
-    if (!this.allowedTeamRoles.includes(value as (typeof this.allowedTeamRoles)[number])) {
+    if (
+      !this.allowedTeamRoles.includes(
+        value as (typeof this.allowedTeamRoles)[number],
+      )
+    ) {
       return 'member';
     }
 

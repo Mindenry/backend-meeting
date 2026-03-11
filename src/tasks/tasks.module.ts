@@ -8,11 +8,15 @@ import { WorkflowsModule } from '../workflows/workflows.module';
 import { TaskWatchersModule } from '../task-watchers/task-watchers.module';
 
 @Module({
-  imports: [forwardRef(() => EventsModule), NotificationsModule, PrismaModule, forwardRef(() => WorkflowsModule), TaskWatchersModule],
+  imports: [
+    forwardRef(() => EventsModule),
+    NotificationsModule,
+    PrismaModule,
+    forwardRef(() => WorkflowsModule),
+    TaskWatchersModule,
+  ],
   providers: [TasksService],
   controllers: [TasksController],
   exports: [TasksService],
 })
 export class TasksModule {}
-
-
