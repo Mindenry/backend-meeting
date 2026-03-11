@@ -139,8 +139,24 @@ async function bootstrap() {
 
     // Content Security Policy (relaxed for ngrok)
     const cspDirectives = isNgrok
-      ? "default-src 'self' https://*.ngrok-free.app https://*.ngrok.io https://*.ngrok.app; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.ngrok-free.app https://*.ngrok.io https://*.ngrok.app ws://*.ngrok-free.app wss://*.ngrok-free.app ws://*.ngrok.io wss://*.ngrok.io;"
-      : "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:7880 wss://localhost:7880 ws: wss:;";
+      ? [
+          "default-src 'self' https://*.ngrok-free.app https://*.ngrok.io https://*.ngrok.app",
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+          "font-src 'self' https://fonts.gstatic.com",
+          "img-src 'self' data: blob: https: http:",
+          "media-src 'self' blob: https: http:",
+          "connect-src 'self' https://*.ngrok-free.app https://*.ngrok.io https://*.ngrok.app ws://*.ngrok-free.app wss://*.ngrok-free.app ws://*.ngrok.io wss://*.ngrok.io",
+        ].join('; ')
+      : [
+          "default-src 'self'",
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+          "font-src 'self' https://fonts.gstatic.com",
+          "img-src 'self' data: blob: https: http:",
+          "media-src 'self' blob: https: http:",
+          "connect-src 'self' ws://localhost:7880 wss://localhost:7880 ws: wss:",
+        ].join('; ');
     res.setHeader('Content-Security-Policy', cspDirectives);
 
     // Referrer Policy
