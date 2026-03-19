@@ -158,9 +158,6 @@ model Meeting {
   actualStartTime  DateTime?
   actualEndTime    DateTime?
   summary          String? // Post-meeting summary
-  recordingUrl     String? // URL to recording file
-  aiSummary        String? // AI generated summary
-  transcript       String? // Meeting transcript
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
