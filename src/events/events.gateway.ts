@@ -628,6 +628,15 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
     return { event: 'updated' };
   }
 
+  @SubscribeMessage('meeting:participant:mute')
+  handleForceMute(
+    @MessageBody() data: { meetingId: string; targetPeerId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    this.server.to(`meeting:${data.meetingId}`).emit('meeting:participant:force_mute', { peerId: data.targetPeerId });
+    return { event: 'muted' };
+  }
+
 
 
 
@@ -706,6 +715,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
       }),
       text: created.text,
       type: 'text',
+      attachments: created.attachments,
     });
 
     return { event: 'chat:sent', channelId: channel.id, messageId: created.id };

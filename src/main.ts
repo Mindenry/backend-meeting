@@ -176,7 +176,7 @@ async function bootstrap() {
 
   // Add LiveKit proxy here
   const livekitProxy = createProxyMiddleware({
-    target: 'http://localhost:7880',
+    target: 'http://127.0.0.1:7880',
     changeOrigin: true,
     ws: true,
   });
@@ -185,7 +185,7 @@ async function bootstrap() {
   app.use(
     '/twirp',
     createProxyMiddleware({
-      target: 'http://localhost:7880',
+      target: 'http://127.0.0.1:7880',
       changeOrigin: true,
     }),
   );

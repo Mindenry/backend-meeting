@@ -137,6 +137,26 @@ export class MeetingsService {
     // Use "quick-huddle" or the actual meeting ID as the room name
     const roomName = meetingId || 'quick-huddle';
 
+    let isHost = false;
+    if (meetingId && meetingId !== 'quick-huddle') {
+      const meeting = await this.prisma.meeting.findUnique({
+        where: { id: meetingId },
+      });
+      if (meeting) {
+        isHost = meeting.hostId === userId;
+        if (!isHost && meeting.waitingRoom) {
+          const participant = await this.prisma.meetingParticipant.findUnique({
+            where: {
+              meetingId_userId: { meetingId, userId },
+            },
+          });
+          if (participant?.waitingRoom) {
+            throw new BadRequestException('Guest is in waiting room');
+          }
+        }
+      }
+    }
+
     // Fetch user to get avatar
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
@@ -146,7 +166,14 @@ export class MeetingsService {
       metadata: user?.avatar || '',
     });
 
-    at.addGrant({ roomJoin: true, room: roomName });
+    at.addGrant({ 
+      roomJoin: true, 
+      room: roomName,
+      canUpdateOwnMetadata: true,
+      roomAdmin: isHost,
+      canPublish: true,
+      canPublishData: true,
+    });
     const token = await at.toJwt();
 
     return { token, room: roomName };
