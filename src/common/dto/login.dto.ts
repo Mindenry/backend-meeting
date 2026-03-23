@@ -1,5 +1,13 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsString,
+  MinLength,
+  IsOptional,
+  IsBoolean,
+} from 'class-validator';
 import { ApiProperty } from '../decorators/swagger.decorators';
+import { Transform } from 'class-transformer';
 
 export class LoginDto {
   @ApiProperty({
@@ -21,4 +29,15 @@ export class LoginDto {
   @IsNotEmpty({ message: 'Password is required' })
   @MinLength(8, { message: 'Password must be at least 8 characters long' })
   password: string;
+
+  @ApiProperty({
+    description: 'Remember me - extends token expiry to 7 days',
+    example: true,
+    type: Boolean,
+    required: false,
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  rememberMe?: boolean;
 }

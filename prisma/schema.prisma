@@ -66,6 +66,7 @@ model User {
   taskActivityLogs        TaskActivityLog[]
   driveEntries            DriveEntry[]
   driveFileVersions       DriveFileVersion[]
+  drivePermissions        DrivePermission[]
   workHours               WorkHours[]
   timeEntries             TimeEntry[]
   createdSprints          Sprint[]                @relation("SprintCreator")
@@ -795,8 +796,25 @@ model DriveEntry {
   team      Team               @relation(fields: [teamId], references: [id])
   createdBy User               @relation(fields: [createdById], references: [id])
   versions  DriveFileVersion[]
+  permissions DrivePermission[]
 
   @@index([teamId, path, name])
+}
+
+model DrivePermission {
+  id         String   @id @default(uuid())
+  entryId    String
+  userId     String
+  permission String   @default("view") // view, edit
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  entry DriveEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, userId])
+  @@index([entryId])
+  @@index([userId])
 }
 
 model DriveFileVersion {

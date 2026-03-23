@@ -129,4 +129,19 @@ export class UsersController {
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);
   }
+
+  @Patch(':id/password')
+  @ApiOperation({
+    summary: 'Change user password',
+    description: 'Change user password by providing the current password',
+  })
+  @ApiParam({ name: 'id', description: 'User ID', example: 'user-123' })
+  @ApiResponse({ status: 200, description: 'Password changed successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid current password' })
+  changePassword(
+    @Param('id') id: string,
+    @Body() passwords: any
+  ) {
+    return this.usersService.changePassword(id, passwords);
+  }
 }

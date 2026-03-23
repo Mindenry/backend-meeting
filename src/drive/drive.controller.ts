@@ -116,4 +116,25 @@ export class DriveController {
   deleteEntry(@Param('id') id: string) {
     return this.driveService.deleteEntry(id);
   }
+
+  @Get('entries/:id/permissions')
+  getPermissions(@Param('id') id: string) {
+    return this.driveService.getPermissions(id);
+  }
+
+  @Post('entries/:id/permissions')
+  addPermission(
+    @Param('id') id: string,
+    @Body() body: { userId: string; permission: string },
+  ) {
+    if (!body.userId || !body.permission) {
+      throw new BadRequestException('userId and permission are required');
+    }
+    return this.driveService.addPermission(id, body.userId, body.permission);
+  }
+
+  @Delete('entries/:id/permissions/:userId')
+  removePermission(@Param('id') id: string, @Param('userId') userId: string) {
+    return this.driveService.removePermission(id, userId);
+  }
 }

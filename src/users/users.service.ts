@@ -1,9 +1,11 @@
 import {
   Injectable,
   NotFoundException,
+  BadRequestException,
   Inject,
   forwardRef,
 } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { Prisma } from '@prisma/client';
@@ -91,6 +93,36 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
     await this.prisma.user.delete({ where: { id } });
+    return { success: true };
+  }
+
+  async changePassword(id: string, passwords: any) {
+    const { currentPassword, newPassword } = passwords;
+    
+    if (!currentPassword || !newPassword) {
+      throw new BadRequestException('รหัสผ่านปัจจุบันและรหัสผ่านใหม่จำเป็นต้องระบุ');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Verify current password
+    if (user.password) {
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
+      if (!isMatch) {
+        throw new BadRequestException('รหัสผ่านปัจจุบันไม่ถูกต้อง');
+      }
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword },
+    });
+
     return { success: true };
   }
 }

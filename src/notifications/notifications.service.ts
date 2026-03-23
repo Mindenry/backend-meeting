@@ -91,11 +91,13 @@ export class NotificationsService {
 
     // Check if should send realtime based on preferences
     let shouldSendRealtime = true;
+    let preferences: any = null;
     if (this.preferencesService) {
       shouldSendRealtime = await this.preferencesService.shouldSendRealtime(
         data.userId,
         data.type,
       );
+      preferences = await this.preferencesService.getPreferences(data.userId);
     }
 
     // Send real-time notification via WebSocket only if preferences allow
@@ -106,8 +108,11 @@ export class NotificationsService {
       );
     }
 
+    // Send external notifications for high priority items
+
     return notification;
   }
+
 
   async createForUsers(
     userIds: string[],

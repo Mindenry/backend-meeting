@@ -32,7 +32,13 @@ interface MeetingParticipant {
     credentials: true,
   },
 })
-export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy {
+export class EventsGateway
+  implements
+    OnGatewayConnection,
+    OnGatewayDisconnect,
+    OnModuleInit,
+    OnModuleDestroy
+{
   @WebSocketServer()
   server: Server;
 
@@ -59,7 +65,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
   // Cache meeting titles so getActiveRoomsData can return real titles
   private meetingTitles: Map<string, string> = new Map();
   // Track userId -> meetingId for rejoin on reconnect
-  private userMeetings: Map<string, { meetingId: string; peerId: string; peerName: string; state: any }> = new Map();
+  private userMeetings: Map<
+    string,
+    { meetingId: string; peerId: string; peerName: string; state: any }
+  > = new Map();
   // Periodic cleanup interval
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -85,17 +94,21 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
   }
 
   async handleDisconnect(client: Socket) {
-    console.log(`Client disconnected: ${client.id}`);
+    console.log(`[Disconnect] Client ${client.id} disconnected`);
 
-    // Clean up meeting participation on disconnect
     const meetingInfo = this.socketMeetings.get(client.id);
     if (meetingInfo) {
-      await this.removeMeetingParticipant(
-        meetingInfo.meetingId,
-        meetingInfo.peerId,
-        client,
+      // DON'T remove participant on disconnect - keep them visible
+      // They will be removed only on explicit meeting:leave
+      // This ensures rooms stay visible permanently
+      console.log(
+        `[Disconnect] Peer ${meetingInfo.peerId} socket disconnected but keeping them in meeting ${meetingInfo.meetingId}`,
       );
+
+      // Just clean up the socket mapping, not the participant
       this.socketMeetings.delete(client.id);
+
+      // DON'T broadcast - participant is still in room
     }
 
     // Clean up presence
@@ -124,7 +137,15 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
     client: Socket,
   ) {
     const participants = this.meetingParticipants.get(meetingId) || [];
+    console.log(
+      `[RemoveParticipant] Before: ${participants.length} participants in meeting ${meetingId}`,
+    );
+
     const updated = participants.filter((p) => p.peerId !== peerId);
+    console.log(
+      `[RemoveParticipant] After: ${updated.length} participants (removed peer ${peerId})`,
+    );
+
     this.meetingParticipants.set(meetingId, updated);
 
     // Record leave time in database if userId is available
@@ -165,6 +186,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
     @ConnectedSocket() client: Socket,
   ) {
     const { meetingId, peerId, peerName, state, userId } = data;
+
+    console.log(
+      `[Join] Peer ${peerId} joining meeting ${meetingId}, socket: ${client.id}`,
+    );
 
     // Join the meeting room
     client.join(`meeting:${meetingId}`);
@@ -230,7 +255,12 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
     // Track user -> meeting for rejoin on reconnect
     const actualUserId2 = userId || userInfo?.userId;
     if (actualUserId2) {
-      this.userMeetings.set(actualUserId2, { meetingId, peerId, peerName, state: newParticipant.state });
+      this.userMeetings.set(actualUserId2, {
+        meetingId,
+        peerId,
+        peerName,
+        state: newParticipant.state,
+      });
     }
 
     // Send existing participants to the new joiner
@@ -268,17 +298,30 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
     @MessageBody() data: { meetingId: string; peerId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    await this.removeMeetingParticipant(data.meetingId, data.peerId, client);
-    this.socketMeetings.delete(client.id);
+    console.log(
+      `[Leave] Peer ${data.peerId} leaving meeting ${data.meetingId}`,
+    );
 
-    // Broadcast to all clients that someone left (for Meetings page)
-    this.broadcastActiveRooms();
+    // Mark as properly left before removing
+    const meetingInfo = this.socketMeetings.get(client.id);
+    if (meetingInfo) {
+      // Clear the tracking first so handleDisconnect knows we left properly
+      this.socketMeetings.delete(client.id);
+    }
+
+    await this.removeMeetingParticipant(data.meetingId, data.peerId, client);
 
     // Remove user meeting tracking
     const userInfo = this.onlineUsers.get(client.id);
     if (userInfo?.userId) {
       this.userMeetings.delete(userInfo.userId);
     }
+
+    // Broadcast to all clients that someone left (for Meetings page)
+    console.log(
+      `[Leave] Broadcasting updated active rooms after peer ${data.peerId} left`,
+    );
+    this.broadcastActiveRooms();
 
     return { event: 'meeting:left', meetingId: data.meetingId };
   }
@@ -298,9 +341,15 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
   ) {
     const { meetingId, peerId, peerName, state, userId } = data;
 
-    // Remove any stale entry for this peerId in the same meeting
+    console.log(
+      `[Rejoin] Peer ${peerId} rejoining meeting ${meetingId} with new socket ${client.id}`,
+    );
+
+    // Get existing participants
     const participants = this.meetingParticipants.get(meetingId) || [];
-    const filtered = participants.filter((p) => p.peerId !== peerId);
+
+    // Check if this peer already exists
+    const existingIndex = participants.findIndex((p) => p.peerId === peerId);
 
     // Join the socket room
     client.join(`meeting:${meetingId}`);
@@ -315,7 +364,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
 
     const userInfo = this.onlineUsers.get(client.id);
 
-    // Add participant with new socket ID
+    // Update or add participant with new socket ID
     const newParticipant: MeetingParticipant = {
       peerId,
       name: peerName,
@@ -328,11 +377,22 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
         isHandRaised: false,
       },
     };
-    filtered.push(newParticipant);
-    this.meetingParticipants.set(meetingId, filtered);
+
+    if (existingIndex >= 0) {
+      // Update existing participant with new socket
+      participants[existingIndex] = newParticipant;
+      console.log(`[Rejoin] Updated existing participant ${peerId}`);
+    } else {
+      // Add new participant
+      participants.push(newParticipant);
+      console.log(`[Rejoin] Added new participant ${peerId}`);
+    }
+
+    this.meetingParticipants.set(meetingId, participants);
+    console.log(`[Rejoin] Total participants: ${participants.length}`);
 
     // Send existing participants to the rejoiner
-    const existingParticipants = filtered
+    const existingParticipants = participants
       .filter((p) => p.peerId !== peerId)
       .map((p) => ({
         peerId: p.peerId,
@@ -357,7 +417,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
     return {
       event: 'meeting:rejoined',
       meetingId,
-      participantCount: filtered.length,
+      participantCount: participants.length,
     };
   }
 
@@ -521,88 +581,71 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
       createdAt: Date;
     }> = [];
 
+    console.log(
+      '[ActiveRooms] Getting active rooms, meetingParticipants size:',
+      this.meetingParticipants.size,
+    );
+
     for (const [meetingId, participants] of this.meetingParticipants) {
       const roomName = `meeting:${meetingId}`;
       const roomAdapter = this.server.sockets.adapter.rooms.get(roomName);
 
-      if (roomAdapter && roomAdapter.size > 0 && participants.length > 0) {
-        // Filter participants to only those whose socket is still in the room
-        const activeParticipants = participants.filter((p) =>
-          roomAdapter.has(p.socketId),
+      console.log(
+        `[ActiveRooms] Meeting ${meetingId}: ${participants.length} participants in map, roomAdapter size: ${roomAdapter?.size ?? 'undefined'}`,
+      );
+
+      // Use participants from map directly - don't filter by socket room
+      // The socket room is for broadcasting, not for tracking presence
+      // We only remove participants on explicit leave or disconnect
+      if (participants.length > 0) {
+        // Use cached title, fallback to generic
+        const cachedTitle = this.meetingTitles.get(meetingId);
+        const displayName =
+          meetingId === 'quick-huddle'
+            ? 'Quick Huddle'
+            : cachedTitle || `Meeting ${meetingId.slice(0, 8)}`;
+
+        const activeParticipants = participants.map((p) => {
+          const onlineInfo = this.onlineUsers.get(p.socketId);
+          return {
+            peerId: p.peerId,
+            name: p.name,
+            userId: onlineInfo?.userId,
+            avatar: p.avatar || onlineInfo?.avatar,
+          };
+        });
+
+        console.log(
+          `[ActiveRooms] Returning room ${meetingId} with ${activeParticipants.length} participants`,
         );
 
-        // Clean up stale entries from the map right away
-        if (activeParticipants.length !== participants.length) {
-          this.meetingParticipants.set(meetingId, activeParticipants);
-        }
-
-        if (activeParticipants.length > 0) {
-          // Use cached title, fallback to generic
-          const cachedTitle = this.meetingTitles.get(meetingId);
-          const displayName =
-            meetingId === 'quick-huddle'
-              ? 'Quick Huddle'
-              : cachedTitle || `Meeting ${meetingId.slice(0, 8)}`;
-
-          rooms.push({
-            roomId: meetingId,
-            name: displayName,
-            participants: activeParticipants.map((p) => {
-              const onlineInfo = this.onlineUsers.get(p.socketId);
-              return {
-                peerId: p.peerId,
-                name: p.name,
-                userId: onlineInfo?.userId,
-                avatar: p.avatar || onlineInfo?.avatar,
-              };
-            }),
-            createdAt: new Date(),
-          });
-        } else {
-          // All participants stale — clean up meeting entry
-          this.meetingParticipants.delete(meetingId);
-        }
-      } else if (!roomAdapter || roomAdapter.size === 0) {
-        // No sockets in room — clean up
-        this.meetingParticipants.delete(meetingId);
+        rooms.push({
+          roomId: meetingId,
+          name: displayName,
+          participants: activeParticipants,
+          createdAt: new Date(),
+        });
       }
     }
 
+    console.log('[ActiveRooms] Total rooms returning:', rooms.length);
     return rooms;
   }
 
   private cleanupStaleParticipants() {
-    if (!this.server) return;
-    let changed = false;
-
-    for (const [meetingId, participants] of this.meetingParticipants) {
-      const roomName = `meeting:${meetingId}`;
-      const roomAdapter = this.server.sockets.adapter.rooms.get(roomName);
-
-      if (!roomAdapter || roomAdapter.size === 0) {
-        this.meetingParticipants.delete(meetingId);
-        changed = true;
-        continue;
-      }
-
-      const active = participants.filter((p) => roomAdapter.has(p.socketId));
-      if (active.length !== participants.length) {
-        if (active.length > 0) {
-          this.meetingParticipants.set(meetingId, active);
-        } else {
-          this.meetingParticipants.delete(meetingId);
-        }
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      this.broadcastActiveRooms();
-    }
+    // DISABLED - Don't remove participants automatically
+    // Participants are only removed when they explicitly leave (meeting:leave)
+    // This keeps them visible permanently so users can always see who's in which room
+    console.log(
+      '[Cleanup] Skipping stale participant cleanup - participants kept visible permanently',
+    );
   }
 
   private broadcastActiveRooms() {
     const rooms = this.getActiveRoomsData();
+    console.log(
+      `[BroadcastActiveRooms] Broadcasting ${rooms.length} rooms to all clients`,
+    );
     this.server.emit('rooms:active', rooms);
   }
 
@@ -633,13 +676,11 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
     @MessageBody() data: { meetingId: string; targetPeerId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    this.server.to(`meeting:${data.meetingId}`).emit('meeting:participant:force_mute', { peerId: data.targetPeerId });
+    this.server
+      .to(`meeting:${data.meetingId}`)
+      .emit('meeting:participant:force_mute', { peerId: data.targetPeerId });
     return { event: 'muted' };
   }
-
-
-
-
 
   // ─────────────────────────────────────────────────────────────────────────────
   // MEETING CHAT (persisted via Channels/Messages)

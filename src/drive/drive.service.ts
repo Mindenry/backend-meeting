@@ -299,4 +299,40 @@ export class DriveService {
     if (['.mp4', '.mov', '.webm'].includes(ext)) return 'video';
     return 'file';
   }
+
+  async getPermissions(entryId: string) {
+    const entry = await this.prisma.driveEntry.findUnique({
+      where: { id: entryId },
+      include: {
+        permissions: {
+          include: {
+            user: { select: { id: true, name: true, email: true, avatar: true } },
+          },
+        },
+      },
+    });
+    if (!entry) throw new NotFoundException('Entry not found');
+    return entry.permissions;
+  }
+
+  async addPermission(entryId: string, userId: string, permission: string) {
+    const existing = await this.prisma.drivePermission.findUnique({
+      where: { entryId_userId: { entryId, userId } },
+    });
+    if (existing) {
+      return this.prisma.drivePermission.update({
+        where: { id: existing.id },
+        data: { permission },
+      });
+    }
+    return this.prisma.drivePermission.create({
+      data: { entryId, userId, permission },
+    });
+  }
+
+  async removePermission(entryId: string, userId: string) {
+    return this.prisma.drivePermission.deleteMany({
+      where: { entryId, userId },
+    });
+  }
 }

@@ -46,6 +46,8 @@ export class NotificationPreferencesService {
       soundEnabled?: boolean;
       desktopEnabled?: boolean;
       badgeEnabled?: boolean;
+      lineNotifyToken?: string | null;
+      emailEnabled?: boolean;
     },
   ) {
     // Ensure preferences exist

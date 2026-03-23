@@ -45,7 +45,7 @@ export class AuthService {
     return result;
   }
 
-  async login(email: string, password: string) {
+  async login(email: string, password: string, rememberMe: boolean = false) {
     const user = await this.validateUser(email, password);
 
     // Ensure user has required properties
@@ -58,12 +58,21 @@ export class AuthService {
       sub: user.id,
       role: user.role || 'employee',
     };
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+    // Access token: 7 days if remember me, otherwise 24 hours
+    const accessTokenExpiry = rememberMe ? '7d' : '24h';
+    const refreshTokenExpiry = rememberMe ? 30 : 7; // days
+
+    const accessToken = this.jwtService.sign(payload, {
+      expiresIn: accessTokenExpiry,
+    });
+    const refreshToken = this.jwtService.sign(payload, {
+      expiresIn: `${refreshTokenExpiry}d`,
+    });
 
     // Store refresh token
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    expiresAt.setDate(expiresAt.getDate() + refreshTokenExpiry);
 
     try {
       await this.prisma.refreshToken.create({
@@ -81,6 +90,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
+      expiresIn: accessTokenExpiry,
       user: {
         id: user.id,
         email: user.email,
@@ -140,8 +150,9 @@ export class AuthService {
         sub: user.id,
         role: user.role || 'employee',
       };
+      // New access token valid for 24 hours
       const accessToken = this.jwtService.sign(newPayload, {
-        expiresIn: '15m',
+        expiresIn: '24h',
       });
 
       return { accessToken };

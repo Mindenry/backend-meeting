@@ -59,6 +59,7 @@ export class AuthController {
       const result = await this.authService.login(
         loginDto.email,
         loginDto.password,
+        loginDto.rememberMe ?? false,
       );
 
       this.logger.debug('Auth service login result:', {
