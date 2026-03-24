@@ -125,28 +125,27 @@ async function bootstrap() {
       req.headers.host?.includes('ngrok') ||
       req.headers.origin?.includes('ngrok');
 
-    // NOTE:
-    // เดิมมีการตั้งค่า X-Frame-Options เป็น DENY/SAMEORIGIN ซึ่งทำให้ embed หน้า backend (เช่น PDF, Shared Drive)
-    // ผ่าน iframe จาก frontend (port 8080) ไม่ได้ และเกิด error "Refused to display ... X-Frame-Options 'DENY'".
-    // เพื่อให้ preview PDF/ไฟล์แนบใน Tasks และ Shared Drive ใช้งานได้ในทุกสภาพแวดล้อม
-    // เราจึงถอด X-Frame-Options ออก และใช้ Content-Security-Policy + auth แทนการกัน clickjacking
-
     // Prevent MIME type sniffing
     res.setHeader('X-Content-Type-Options', 'nosniff');
 
     // Enable XSS protection
     res.setHeader('X-XSS-Protection', '1; mode=block');
 
+    // IMPORTANT: ถอน X-Frame-Options ออกเพื่อให้ iframe ทำงานได้ (เช่น PDF preview)
+    res.removeHeader('X-Frame-Options');
+
     // Content Security Policy (relaxed for ngrok)
     const cspDirectives = isNgrok
       ? [
-          "default-src 'self' https://*.ngrok-free.app https://*.ngrok.io https://*.ngrok.app",
+          "default-src 'self' https://*.ngrok-free.app https://*.ngrok.io https://*.ngrok.app https://*.ngrok-free.dev",
           "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com",
           "img-src 'self' data: blob: https: http:",
           "media-src 'self' blob: https: http:",
-          "connect-src 'self' https://*.ngrok-free.app https://*.ngrok.io https://*.ngrok.app ws://*.ngrok-free.app wss://*.ngrok-free.app ws://*.ngrok.io wss://*.ngrok.io",
+          "frame-src 'self' blob: https: http:",
+          "child-src 'self' blob: https: http:",
+          "connect-src 'self' https://*.ngrok-free.app https://*.ngrok.io https://*.ngrok.app https://*.ngrok-free.dev ws://*.ngrok-free.app wss://*.ngrok-free.app ws://*.ngrok.io wss://*.ngrok.io ws://*.ngrok-free.dev wss://*.ngrok-free.dev",
         ].join('; ')
       : [
           "default-src 'self'",
@@ -155,7 +154,9 @@ async function bootstrap() {
           "font-src 'self' https://fonts.gstatic.com",
           "img-src 'self' data: blob: https: http:",
           "media-src 'self' blob: https: http:",
-          "connect-src 'self' ws://localhost:7880 wss://localhost:7880 ws: wss:",
+          "frame-src 'self' blob: https: http:",
+          "child-src 'self' blob: https: http:",
+          "connect-src 'self' ws://localhost:7880 wss://localhost:7880 ws: wss: http: https:",
         ].join('; ');
     res.setHeader('Content-Security-Policy', cspDirectives);
 
@@ -165,6 +166,11 @@ async function bootstrap() {
     // Allow ngrok browser warning bypass
     if (isNgrok) {
       res.setHeader('ngrok-skip-browser-warning', 'true');
+    }
+
+    // Log all requests reaching the backend (for debugging)
+    if (req.originalUrl.startsWith('/uploads')) {
+      logger.debug(`[DEBUG] Static File Request: ${req.method} ${req.originalUrl} - Host: ${req.headers.host}`);
     }
 
     next();

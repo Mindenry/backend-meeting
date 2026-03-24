@@ -712,6 +712,7 @@ export class EventsGateway
       this.server.to(`meeting:${data.meetingId}`).emit('meeting:chat:message', {
         id: data.message.id,
         sender: data.message.senderName,
+        senderId: data.message.senderId,
         time:
           data.message.time ||
           new Date().toLocaleTimeString('th-TH', {
@@ -719,6 +720,7 @@ export class EventsGateway
             minute: '2-digit',
           }),
         text: data.message.text,
+        attachments: data.message.attachments || [],
       });
       return { event: 'chat:sent' };
     }
@@ -746,17 +748,46 @@ export class EventsGateway
       mentions: data.message.mentions,
     });
 
+    // Normalize attachments from DB JSON — ensure each item has url, name, type
+    const rawAttachments = created.attachments;
+    let normalizedAttachments: Array<{ url: string; name: string; type: string }> = [];
+    if (Array.isArray(rawAttachments)) {
+      normalizedAttachments = rawAttachments.map((att: any) => {
+        const url = att?.url || '';
+        const name = att?.name || 'attachment';
+        let type = att?.type || '';
+        // Detect mime type from extension if missing
+        if (!type && name) {
+          const ext = name.split('.').pop()?.toLowerCase() || '';
+          const mimeMap: Record<string, string> = {
+            jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+            gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml',
+            mp4: 'video/mp4', webm: 'video/webm', ogg: 'video/ogg', mov: 'video/quicktime',
+            mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', flac: 'audio/flac',
+            pdf: 'application/pdf',
+            doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            txt: 'text/plain',
+          };
+          type = mimeMap[ext] || 'application/octet-stream';
+        }
+        return { url, name, type };
+      });
+    }
+
     // Broadcast to meeting room (MeetingRoom.tsx listens to this)
     this.server.to(`meeting:${data.meetingId}`).emit('meeting:chat:message', {
       id: created.id,
       sender: created.sender?.name || data.message.senderName,
+      senderId: data.message.senderId,
+      senderAvatar: created.sender?.avatar || undefined,
       time: new Date(created.createdAt).toLocaleTimeString('th-TH', {
         hour: '2-digit',
         minute: '2-digit',
       }),
       text: created.text,
       type: 'text',
-      attachments: created.attachments,
+      attachments: normalizedAttachments,
     });
 
     return { event: 'chat:sent', channelId: channel.id, messageId: created.id };
