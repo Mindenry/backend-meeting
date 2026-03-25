@@ -36,7 +36,9 @@ export class RecordingsUploadController {
     private readonly auditService: AuditService,
   ) {}
 
-  private async convertToMp4(inputBuffer: Buffer): Promise<Buffer | null> {
+  private async convertToMp4(
+    inputBuffer: Buffer,
+  ): Promise<{ buffer: Buffer | null; error?: string }> {
     const tempBase = `recording-${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     const inputPath = join(tmpdir(), `${tempBase}.webm`);
     const outputPath = join(tmpdir(), `${tempBase}.mp4`);
@@ -55,10 +57,17 @@ export class RecordingsUploadController {
           'veryfast',
           '-crf',
           '23',
+          '-pix_fmt',
+          'yuv420p',
           '-c:a',
           'aac',
+          '-b:a',
+          '128k',
           '-movflags',
           '+faststart',
+          '-map',
+          '0',
+          '-shortest',
           outputPath,
         ]);
 
@@ -74,15 +83,20 @@ export class RecordingsUploadController {
           }
           reject(
             new Error(
-              `ffmpeg exited with code ${code}${errorOutput ? `: ${errorOutput.slice(-300)}` : ''}`,
+              `ffmpeg exited with code ${code}${
+                errorOutput ? `: ${errorOutput.slice(-600)}` : ''
+              }`,
             ),
           );
         });
       });
 
-      return await fs.readFile(outputPath);
-    } catch {
-      return null;
+      return { buffer: await fs.readFile(outputPath) };
+    } catch (e: any) {
+      return {
+        buffer: null,
+        error: e?.message || 'Unknown ffmpeg conversion error',
+      };
     } finally {
       await fs.unlink(inputPath).catch(() => undefined);
       await fs.unlink(outputPath).catch(() => undefined);
@@ -316,9 +330,11 @@ export class RecordingsUploadController {
       }
     }
 
-    // Create meeting-specific folder (Quick -> Quick, others -> meeting title)
+    // Create meeting-specific folder:
+    // - Quick Huddle -> Personal (user-only recordings)
+    // - Others -> meeting title
     const meetingFolderName = isQuickHuddle
-      ? 'Quick'
+      ? 'Personal'
       : sanitizedTitle || 'Meeting';
     const meetingFolderPath = `/${parentFolderName}`;
 
@@ -356,7 +372,8 @@ export class RecordingsUploadController {
     }
 
     // Standardize final output to mp4 when ffmpeg is available
-    const convertedMp4 = await this.convertToMp4(file.buffer);
+    const conversion = await this.convertToMp4(file.buffer);
+    const convertedMp4 = conversion.buffer;
     const finalBuffer = convertedMp4 || file.buffer;
     const finalMimetype = convertedMp4
       ? 'video/mp4'
@@ -482,7 +499,9 @@ export class RecordingsUploadController {
       outputFormat: convertedMp4 ? 'mp4' : 'webm',
       message: convertedMp4
         ? undefined
-        : 'FFmpeg not available, recording stored as WebM',
+        : conversion.error
+          ? `FFmpeg conversion to mp4 failed: ${conversion.error}`
+          : 'FFmpeg conversion failed, recording stored as WebM',
     };
   }
 }
