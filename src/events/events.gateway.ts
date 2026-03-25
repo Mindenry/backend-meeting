@@ -7,7 +7,11 @@ import {
   MessageBody,
   ConnectedSocket,
 } from '@nestjs/websockets';
-import { ForbiddenException, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  ForbiddenException,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { PrismaService } from '../prisma/prisma.service';
 import { MessagesService } from '../messages/messages.service';
@@ -82,12 +86,19 @@ export class EventsGateway
   private quickHuddleHosts: Map<string, string> = new Map();
   // Periodic cleanup interval
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
+  // Grace period for reconnects - participants marked as disconnected but not removed immediately
+  private disconnectedParticipants: Map<
+    string,
+    { meetingId: string; peerId: string; disconnectedAt: Date }
+  > = new Map();
 
   onModuleInit() {
     // Periodic cleanup every 30 seconds to remove stale participants
+    // Also clean up disconnected participants after grace period (10 seconds)
     this.cleanupInterval = setInterval(() => {
       this.cleanupStaleParticipants();
-    }, 30000);
+      this.cleanupDisconnectedParticipants();
+    }, 10000); // Run every 10 seconds for faster cleanup
   }
 
   onModuleDestroy() {
@@ -110,20 +121,28 @@ export class EventsGateway
     const meetingInfo = this.socketMeetings.get(client.id);
     if (meetingInfo) {
       console.log(
-        `[Disconnect] Removing peer ${meetingInfo.peerId} from meeting ${meetingInfo.meetingId}`,
+        `[Disconnect] Peer ${meetingInfo.peerId} disconnected from meeting ${meetingInfo.meetingId} - marking for grace period`,
       );
-      await this.removeMeetingParticipant(
-        meetingInfo.meetingId,
-        meetingInfo.peerId,
-        client,
-      );
+
+      // Don't remove immediately - mark as disconnected and give grace period for reconnect
+      this.disconnectedParticipants.set(client.id, {
+        meetingId: meetingInfo.meetingId,
+        peerId: meetingInfo.peerId,
+        disconnectedAt: new Date(),
+      });
+
+      // Keep the participant in meetingParticipants for now
+      // They will be removed by cleanupDisconnectedParticipants if they don't rejoin
       this.socketMeetings.delete(client.id);
-      this.broadcastActiveRooms();
+
+      // Still broadcast to show the participant as "reconnecting" in UI
+      // Don't broadcast active rooms yet - wait for grace period
     }
 
     const disconnectedUserId = this.onlineUsers.get(client.id)?.userId;
     if (disconnectedUserId) {
-      this.userMeetings.delete(disconnectedUserId);
+      // Don't delete userMeetings immediately - keep for rejoin
+      // this.userMeetings.delete(disconnectedUserId);
     }
 
     // Clean up presence
@@ -237,7 +256,10 @@ export class EventsGateway
     this.socketMeetings.set(client.id, { meetingId, peerId });
 
     // Cache meeting title from DB (only once per meeting)
-    if (!this.meetingTitles.has(meetingId) && !meetingId.startsWith('quick-huddle')) {
+    if (
+      !this.meetingTitles.has(meetingId) &&
+      !meetingId.startsWith('quick-huddle')
+    ) {
       try {
         const meeting = await this.prisma.meeting.findUnique({
           where: { id: meetingId },
@@ -359,6 +381,14 @@ export class EventsGateway
       `[Leave] Peer ${data.peerId} leaving meeting ${data.meetingId}`,
     );
 
+    // Clear from disconnected participants if present
+    this.disconnectedParticipants.delete(client.id);
+    for (const [socketId, info] of this.disconnectedParticipants.entries()) {
+      if (info.peerId === data.peerId && info.meetingId === data.meetingId) {
+        this.disconnectedParticipants.delete(socketId);
+      }
+    }
+
     // Mark as properly left before removing
     const meetingInfo = this.socketMeetings.get(client.id);
     if (meetingInfo) {
@@ -401,6 +431,15 @@ export class EventsGateway
     console.log(
       `[Rejoin] Peer ${peerId} rejoining meeting ${meetingId} with new socket ${client.id}`,
     );
+
+    // Remove from disconnected participants if they were marked
+    this.disconnectedParticipants.delete(client.id);
+    // Also check by peerId in case socket ID changed
+    for (const [socketId, info] of this.disconnectedParticipants.entries()) {
+      if (info.peerId === peerId && info.meetingId === meetingId) {
+        this.disconnectedParticipants.delete(socketId);
+      }
+    }
 
     // Get existing participants
     const participants = this.meetingParticipants.get(meetingId) || [];
@@ -690,20 +729,61 @@ export class EventsGateway
 
   private cleanupStaleParticipants() {
     // Remove stale participants whose socket is no longer connected.
-    let changed = false;
-    for (const [
-      meetingId,
-      participants,
-    ] of this.meetingParticipants.entries()) {
-      const active = participants.filter((p) =>
-        this.server.sockets.sockets.has(p.socketId),
-      );
-      if (active.length !== participants.length) {
-        this.meetingParticipants.set(meetingId, active);
-        changed = true;
+    // This is now handled by cleanupDisconnectedParticipants with grace period
+    // Keep this as a safety net for truly orphaned entries
+  }
+
+  private cleanupDisconnectedParticipants() {
+    // Remove participants who have been disconnected for more than 15 seconds
+    // This gives time for socket reconnection
+    const GRACE_PERIOD_MS = 15000; // 15 seconds grace period
+    const now = new Date();
+    const toRemove: Array<{
+      socketId: string;
+      meetingId: string;
+      peerId: string;
+    }> = [];
+
+    for (const [socketId, info] of this.disconnectedParticipants.entries()) {
+      const elapsed = now.getTime() - info.disconnectedAt.getTime();
+      if (elapsed > GRACE_PERIOD_MS) {
+        toRemove.push({ socketId, ...info });
       }
     }
-    if (changed) {
+
+    if (toRemove.length > 0) {
+      console.log(
+        `[Cleanup] Removing ${toRemove.length} participants after grace period`,
+      );
+      for (const { socketId, meetingId, peerId } of toRemove) {
+        this.disconnectedParticipants.delete(socketId);
+
+        // Remove from meetingParticipants
+        const participants = this.meetingParticipants.get(meetingId) || [];
+        const updated = participants.filter((p) => p.peerId !== peerId);
+
+        if (updated.length === 0) {
+          this.meetingParticipants.delete(meetingId);
+          console.log(`[Cleanup] Meeting ${meetingId} is now empty, removed`);
+        } else {
+          this.meetingParticipants.set(meetingId, updated);
+          console.log(
+            `[Cleanup] Meeting ${meetingId} has ${updated.length} participants remaining`,
+          );
+        }
+
+        // Clean up userMeetings
+        for (const [userId, meetingInfo] of this.userMeetings.entries()) {
+          if (
+            meetingInfo.meetingId === meetingId &&
+            meetingInfo.peerId === peerId
+          ) {
+            this.userMeetings.delete(userId);
+          }
+        }
+      }
+
+      // Broadcast updated rooms after cleanup
       this.broadcastActiveRooms();
     }
   }
@@ -760,7 +840,9 @@ export class EventsGateway
     } else {
       const hostUserId = this.quickHuddleHosts.get(data.meetingId);
       if (!hostUserId || hostUserId !== requesterUserId) {
-        throw new ForbiddenException('Only quick huddle host can mute participants');
+        throw new ForbiddenException(
+          'Only quick huddle host can mute participants',
+        );
       }
     }
 
@@ -783,7 +865,9 @@ export class EventsGateway
     if (data.meetingId.startsWith('quick-huddle')) {
       const hostUserId = this.quickHuddleHosts.get(data.meetingId);
       if (!hostUserId || hostUserId !== requesterUserId) {
-        throw new ForbiddenException('Only quick huddle host can mute all participants');
+        throw new ForbiddenException(
+          'Only quick huddle host can mute all participants',
+        );
       }
       const participants = this.meetingParticipants.get(data.meetingId) || [];
       for (const participant of participants) {
@@ -792,7 +876,9 @@ export class EventsGateway
         if (!isHostParticipant) {
           this.server
             .to(`meeting:${data.meetingId}`)
-            .emit('meeting:participant:force_mute', { peerId: participant.peerId });
+            .emit('meeting:participant:force_mute', {
+              peerId: participant.peerId,
+            });
         }
       }
     } else {
@@ -810,7 +896,9 @@ export class EventsGateway
         if (!isHostParticipant) {
           this.server
             .to(`meeting:${data.meetingId}`)
-            .emit('meeting:participant:force_mute', { peerId: participant.peerId });
+            .emit('meeting:participant:force_mute', {
+              peerId: participant.peerId,
+            });
         }
       }
     }

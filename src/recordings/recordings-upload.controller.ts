@@ -124,18 +124,9 @@ export class RecordingsUploadController {
 
     // Handle Quick Huddle or regular meeting
     if (isQuickHuddle) {
-      // For Quick Huddle, get the user's first team
-      const userTeams = await this.prisma.teamMember.findFirst({
-        where: { userId: createdBy },
-        include: { team: true },
-      });
-
-      if (userTeams?.team) {
-        teamId = userTeams.team.id;
-        meetingTitle = 'Quick Huddle';
-      } else {
-        meetingTitle = 'Quick Huddle';
-      }
+      // For Quick Huddle, create/find a personal recordings folder for this user
+      // Do NOT use team's shared drive for Quick Huddle
+      meetingTitle = 'Quick Huddle';
     } else {
       // Get meeting details
       const meeting = await this.prisma.meeting.findUnique({
@@ -172,6 +163,44 @@ export class RecordingsUploadController {
             teamId = userTeams.team.id;
           }
         }
+      }
+    }
+
+    // For Quick Huddle, always create/find a personal folder for this user
+    // This ensures Quick Huddle recordings go to Personal, not Shared Drive
+    if (isQuickHuddle && !teamId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: createdBy },
+        select: { organizationId: true },
+      });
+
+      if (user?.organizationId) {
+        // Find or create a personal recordings team for this user
+        let personalTeam = await this.prisma.team.findFirst({
+          where: {
+            organizationId: user.organizationId,
+            name: `Personal Recordings`,
+          },
+        });
+
+        if (!personalTeam) {
+          personalTeam = await this.prisma.team.create({
+            data: {
+              name: 'Personal Recordings',
+              organizationId: user.organizationId,
+            },
+          });
+
+          await this.prisma.teamMember.create({
+            data: {
+              teamId: personalTeam.id,
+              userId: createdBy,
+              role: 'admin',
+            },
+          });
+        }
+
+        teamId = personalTeam.id;
       }
     }
 
@@ -288,8 +317,9 @@ export class RecordingsUploadController {
     }
 
     // Create meeting-specific folder (Quick -> Quick, others -> meeting title)
-    const meetingFolderName =
-      isQuickHuddle ? 'Quick' : sanitizedTitle || 'Meeting';
+    const meetingFolderName = isQuickHuddle
+      ? 'Quick'
+      : sanitizedTitle || 'Meeting';
     const meetingFolderPath = `/${parentFolderName}`;
 
     let meetingFolder = await this.prisma.driveEntry.findFirst({
