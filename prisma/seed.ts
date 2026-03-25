@@ -1751,8 +1751,6 @@ Contact support if you have urgent matters.`,
         actualStartTime: m.startTime,
         actualEndTime: m.endTime || new Date(m.startTime.getTime() + 60 * 60 * 1000),
         summary: 'Discussed project updates and blockers.',
-        aiSummary: 'The team aligned on the Q1 goals. No major blockers identified.',
-        transcript: 'Speaker 1: Hello. Speaker 2: Hi everyone. ...',
         teamId: engineeringTeam.id,
       }
     });

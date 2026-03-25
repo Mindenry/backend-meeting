@@ -120,8 +120,10 @@ export class RecordingsUploadController {
     let meetingTitle = 'Quick Huddle';
     let resolvedMeetingId: string | null = null;
 
+    const isQuickHuddle = (meetingId || '').startsWith('quick-huddle');
+
     // Handle Quick Huddle or regular meeting
-    if (meetingId === 'quick-huddle') {
+    if (isQuickHuddle) {
       // For Quick Huddle, get the user's first team
       const userTeams = await this.prisma.teamMember.findFirst({
         where: { userId: createdBy },
@@ -287,7 +289,7 @@ export class RecordingsUploadController {
 
     // Create meeting-specific folder (Quick -> Quick, others -> meeting title)
     const meetingFolderName =
-      meetingId === 'quick-huddle' ? 'Quick' : sanitizedTitle || 'Meeting';
+      isQuickHuddle ? 'Quick' : sanitizedTitle || 'Meeting';
     const meetingFolderPath = `/${parentFolderName}`;
 
     let meetingFolder = await this.prisma.driveEntry.findFirst({
@@ -370,10 +372,9 @@ export class RecordingsUploadController {
       const meetingCode = `recording-${createdBy.slice(0, 8)}-${nowForMeeting.getTime()}-${Math.round(Math.random() * 1e6)}`;
       const recordingMeeting = await this.prisma.meeting.create({
         data: {
-          title:
-            meetingId === 'quick-huddle'
-              ? `Quick Huddle Recording ${dateStr} ${timeStr}`
-              : `${meetingTitle} Recording ${dateStr} ${timeStr}`,
+          title: isQuickHuddle
+            ? `Quick Huddle Recording ${dateStr} ${timeStr}`
+            : `${meetingTitle} Recording ${dateStr} ${timeStr}`,
           startTime: nowForMeeting,
           endTime: nowForMeeting,
           actualStartTime: nowForMeeting,

@@ -139,8 +139,10 @@ export class MeetingsService {
     // Use "quick-huddle" or the actual meeting ID as the room name
     const roomName = meetingId || 'quick-huddle';
 
+    const isQuickHuddle = (meetingId || '').startsWith('quick-huddle');
+
     let isHost = false;
-    if (meetingId && meetingId !== 'quick-huddle') {
+    if (meetingId && !isQuickHuddle) {
       const meeting = await this.prisma.meeting.findUnique({
         where: { id: meetingId },
       });

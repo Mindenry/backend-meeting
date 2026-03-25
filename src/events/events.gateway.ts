@@ -7,7 +7,7 @@ import {
   MessageBody,
   ConnectedSocket,
 } from '@nestjs/websockets';
-import { OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { ForbiddenException, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { PrismaService } from '../prisma/prisma.service';
 import { MessagesService } from '../messages/messages.service';
@@ -78,6 +78,8 @@ export class EventsGateway
     string,
     { meetingId: string; peerId: string; peerName: string; state: any }
   > = new Map();
+  // Quick Huddle: meetingId -> hostUserId (first joiner becomes host)
+  private quickHuddleHosts: Map<string, string> = new Map();
   // Periodic cleanup interval
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -119,6 +121,11 @@ export class EventsGateway
       this.broadcastActiveRooms();
     }
 
+    const disconnectedUserId = this.onlineUsers.get(client.id)?.userId;
+    if (disconnectedUserId) {
+      this.userMeetings.delete(disconnectedUserId);
+    }
+
     // Clean up presence
     if (this.onlineUsers.has(client.id)) {
       this.onlineUsers.delete(client.id);
@@ -158,7 +165,7 @@ export class EventsGateway
 
     // Record leave time in database if userId is available
     const userInfo = this.onlineUsers.get(client.id);
-    if (userInfo?.userId && meetingId !== 'quick-huddle') {
+    if (userInfo?.userId && !meetingId.startsWith('quick-huddle')) {
       try {
         await this.participantsService.leaveMeeting(meetingId, userInfo.userId);
       } catch (error) {
@@ -167,6 +174,30 @@ export class EventsGateway
           `Failed to record leave time for user ${userInfo.userId} in meeting ${meetingId}:`,
           error,
         );
+      }
+    }
+
+    // Quick Huddle: if host left/disconnected, reassign to first remaining participant
+    if (meetingId.startsWith('quick-huddle')) {
+      const hostUserId = this.quickHuddleHosts.get(meetingId);
+      if (hostUserId && userInfo?.userId === hostUserId) {
+        let nextHostUserId: string | null = null;
+        for (const p of updated) {
+          const online = this.onlineUsers.get(p.socketId);
+          if (online?.userId) {
+            nextHostUserId = online.userId;
+            break;
+          }
+        }
+        if (nextHostUserId) {
+          this.quickHuddleHosts.set(meetingId, nextHostUserId);
+          this.server.to(`meeting:${meetingId}`).emit('meeting:host:set', {
+            meetingId,
+            hostUserId: nextHostUserId,
+          });
+        } else {
+          this.quickHuddleHosts.delete(meetingId);
+        }
       }
     }
 
@@ -206,7 +237,7 @@ export class EventsGateway
     this.socketMeetings.set(client.id, { meetingId, peerId });
 
     // Cache meeting title from DB (only once per meeting)
-    if (!this.meetingTitles.has(meetingId) && meetingId !== 'quick-huddle') {
+    if (!this.meetingTitles.has(meetingId) && !meetingId.startsWith('quick-huddle')) {
       try {
         const meeting = await this.prisma.meeting.findUnique({
           where: { id: meetingId },
@@ -223,7 +254,7 @@ export class EventsGateway
     // Record join time in database if userId is available and it's not a quick huddle
     const userInfo = this.onlineUsers.get(client.id);
     const actualUserId = userId || userInfo?.userId;
-    if (actualUserId && meetingId !== 'quick-huddle') {
+    if (actualUserId && !meetingId.startsWith('quick-huddle')) {
       try {
         await this.participantsService.joinMeeting(
           meetingId,
@@ -269,6 +300,24 @@ export class EventsGateway
         peerName,
         state: newParticipant.state,
       });
+    }
+
+    // Quick Huddle host assignment: first joiner becomes host
+    if (meetingId.startsWith('quick-huddle')) {
+      if (!this.quickHuddleHosts.has(meetingId) && actualUserId2) {
+        this.quickHuddleHosts.set(meetingId, actualUserId2);
+        // Broadcast host information to the room
+        this.server.to(`meeting:${meetingId}`).emit('meeting:host:set', {
+          meetingId,
+          hostUserId: actualUserId2,
+        });
+      } else {
+        // Inform new joiner who the current host is
+        const hostUserId = this.quickHuddleHosts.get(meetingId);
+        if (hostUserId) {
+          client.emit('meeting:host:set', { meetingId, hostUserId });
+        }
+      }
     }
 
     // Send existing participants to the new joiner
@@ -608,10 +657,9 @@ export class EventsGateway
       if (participants.length > 0) {
         // Use cached title, fallback to generic
         const cachedTitle = this.meetingTitles.get(meetingId);
-        const displayName =
-          meetingId === 'quick-huddle'
-            ? 'Quick Huddle'
-            : cachedTitle || `Meeting ${meetingId.slice(0, 8)}`;
+        const displayName = meetingId.startsWith('quick-huddle')
+          ? 'Quick Huddle'
+          : cachedTitle || `Meeting ${meetingId.slice(0, 8)}`;
 
         const activeParticipants = participants.map((p) => {
           const onlineInfo = this.onlineUsers.get(p.socketId);
@@ -691,14 +739,83 @@ export class EventsGateway
   }
 
   @SubscribeMessage('meeting:participant:mute')
-  handleForceMute(
+  async handleForceMute(
     @MessageBody() data: { meetingId: string; targetPeerId: string },
     @ConnectedSocket() client: Socket,
   ) {
+    const requesterUserId = this.onlineUsers.get(client.id)?.userId;
+    if (!requesterUserId) {
+      throw new ForbiddenException('User not authenticated');
+    }
+
+    const isQuickHuddle = data.meetingId.startsWith('quick-huddle');
+    if (!isQuickHuddle) {
+      const meeting = await this.prisma.meeting.findUnique({
+        where: { id: data.meetingId },
+        select: { hostId: true },
+      });
+      if (!meeting || meeting.hostId !== requesterUserId) {
+        throw new ForbiddenException('Only host can mute participants');
+      }
+    } else {
+      const hostUserId = this.quickHuddleHosts.get(data.meetingId);
+      if (!hostUserId || hostUserId !== requesterUserId) {
+        throw new ForbiddenException('Only quick huddle host can mute participants');
+      }
+    }
+
     this.server
       .to(`meeting:${data.meetingId}`)
       .emit('meeting:participant:force_mute', { peerId: data.targetPeerId });
     return { event: 'muted' };
+  }
+
+  @SubscribeMessage('meeting:participant:mute_all')
+  async handleMuteAll(
+    @MessageBody() data: { meetingId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const requesterUserId = this.onlineUsers.get(client.id)?.userId;
+    if (!requesterUserId) {
+      throw new ForbiddenException('User not authenticated');
+    }
+
+    if (data.meetingId.startsWith('quick-huddle')) {
+      const hostUserId = this.quickHuddleHosts.get(data.meetingId);
+      if (!hostUserId || hostUserId !== requesterUserId) {
+        throw new ForbiddenException('Only quick huddle host can mute all participants');
+      }
+      const participants = this.meetingParticipants.get(data.meetingId) || [];
+      for (const participant of participants) {
+        const info = this.onlineUsers.get(participant.socketId);
+        const isHostParticipant = info?.userId === hostUserId;
+        if (!isHostParticipant) {
+          this.server
+            .to(`meeting:${data.meetingId}`)
+            .emit('meeting:participant:force_mute', { peerId: participant.peerId });
+        }
+      }
+    } else {
+      const meeting = await this.prisma.meeting.findUnique({
+        where: { id: data.meetingId },
+        select: { hostId: true },
+      });
+      if (!meeting || meeting.hostId !== requesterUserId) {
+        throw new ForbiddenException('Only host can mute all participants');
+      }
+      const participants = this.meetingParticipants.get(data.meetingId) || [];
+      for (const participant of participants) {
+        const info = this.onlineUsers.get(participant.socketId);
+        const isHostParticipant = info?.userId === meeting.hostId;
+        if (!isHostParticipant) {
+          this.server
+            .to(`meeting:${data.meetingId}`)
+            .emit('meeting:participant:force_mute', { peerId: participant.peerId });
+        }
+      }
+    }
+
+    return { event: 'muted_all' };
   }
 
   @SubscribeMessage('meeting:recording:status')
