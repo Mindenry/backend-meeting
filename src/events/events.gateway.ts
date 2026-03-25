@@ -21,6 +21,8 @@ interface MeetingParticipant {
   peerId: string;
   name: string;
   avatar?: string;
+  // Captured from meeting:join payload so we don't rely solely on presence:online timing.
+  userId?: string;
   socketId: string;
   state: {
     isMuted: boolean;
@@ -302,6 +304,7 @@ export class EventsGateway
       peerId,
       name: peerName,
       avatar: userInfo?.avatar,
+      userId: userId || userInfo?.userId,
       socketId: client.id,
       state: state || {
         isMuted: false,
@@ -465,6 +468,7 @@ export class EventsGateway
       peerId,
       name: peerName,
       avatar: userInfo?.avatar,
+      userId: userId || userInfo?.userId,
       socketId: client.id,
       state: state || {
         isMuted: false,
@@ -693,22 +697,34 @@ export class EventsGateway
       // Use participants from map directly - don't filter by socket room
       // The socket room is for broadcasting, not for tracking presence
       // We only remove participants on explicit leave or disconnect
-      if (participants.length > 0) {
+      // BUT: filter by actual connected socket to avoid stale/grace participants
+      // causing "phantom" active rooms in the UI.
+      const activeParticipants = participants
+        .map((p) => {
+          // socket.io keeps disconnected sockets in our map during grace.
+          // Only consider participants whose socket is still connected.
+          if (!this.server.sockets.sockets.has(p.socketId)) return null;
+          const onlineInfo = this.onlineUsers.get(p.socketId);
+          return {
+            peerId: p.peerId,
+            name: p.name,
+            userId: p.userId ?? onlineInfo?.userId,
+            avatar: p.avatar || onlineInfo?.avatar,
+          };
+        })
+        .filter(Boolean) as Array<{
+        peerId: string;
+        name: string;
+        userId?: string;
+        avatar?: string;
+      }>;
+
+      if (activeParticipants.length > 0) {
         // Use cached title, fallback to generic
         const cachedTitle = this.meetingTitles.get(meetingId);
         const displayName = meetingId.startsWith('quick-huddle')
           ? 'Quick Huddle'
           : cachedTitle || `Meeting ${meetingId.slice(0, 8)}`;
-
-        const activeParticipants = participants.map((p) => {
-          const onlineInfo = this.onlineUsers.get(p.socketId);
-          return {
-            peerId: p.peerId,
-            name: p.name,
-            userId: onlineInfo?.userId,
-            avatar: p.avatar || onlineInfo?.avatar,
-          };
-        });
 
         console.log(
           `[ActiveRooms] Returning room ${meetingId} with ${activeParticipants.length} participants`,
