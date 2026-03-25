@@ -40,9 +40,10 @@ COPY package*.json ./
 # Install only production dependencies
 RUN npm ci --omit=dev --legacy-peer-deps
 
-# Copy prisma schema and generate client
+# Copy prisma schema and generate only Prisma Client
+# (skip optional dbml generator which is dev-only)
 COPY prisma ./prisma/
-RUN npx prisma generate
+RUN npx prisma generate --generator client
 
 # Copy built application
 COPY --from=builder /app/dist ./dist
