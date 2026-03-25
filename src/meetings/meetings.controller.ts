@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Request,
+  BadRequestException,
 } from '@nestjs/common';
 import { MeetingsService } from './meetings.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -96,9 +97,14 @@ export class MeetingsController {
   @Post(':id/participants')
   joinMeeting(
     @Param('id') meetingId: string,
-    @Body() body: { userId: string; role?: string },
+    @Body() body: { userId?: string; role?: string },
+    @Request() req: any,
   ) {
-    return this.meetingsService.joinMeeting(meetingId, body.userId, body.role);
+    const userId = (req?.user?.id as string | undefined) || body.userId;
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+    return this.meetingsService.joinMeeting(meetingId, userId, body.role);
   }
 
   @Get(':id/participants')

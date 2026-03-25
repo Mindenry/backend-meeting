@@ -7,5 +7,6 @@ import { EventsModule } from '../events/events.module';
   imports: [forwardRef(() => EventsModule)],
   providers: [DriveService],
   controllers: [DriveController],
+  exports: [DriveService],
 })
 export class DriveModule {}

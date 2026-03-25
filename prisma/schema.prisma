@@ -630,14 +630,17 @@ model MeetingRecording {
   duration      Int // in seconds
   transcription String? // Optional transcription text
   status        String   @default("processing") // processing, completed, failed
+  driveEntryId  String? // Link to Shared Drive entry
   createdBy     String
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  meeting   Meeting     @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  driveEntry DriveEntry? @relation(fields: [driveEntryId], references: [id], onDelete: SetNull)
 
   @@index([meetingId])
   @@index([status])
+  @@index([driveEntryId])
 }
 
 model MeetingMinutes {
@@ -797,6 +800,7 @@ model DriveEntry {
   createdBy User               @relation(fields: [createdById], references: [id])
   versions  DriveFileVersion[]
   permissions DrivePermission[]
+  recordings MeetingRecording[]
 
   @@index([teamId, path, name])
 }

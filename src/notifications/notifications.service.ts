@@ -113,7 +113,6 @@ export class NotificationsService {
     return notification;
   }
 
-
   async createForUsers(
     userIds: string[],
     data: {

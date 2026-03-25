@@ -27,7 +27,7 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
-# Install openssl for Prisma and curl for healthcheck
+# Install runtime tools needed by Prisma + healthcheck
 RUN apk add --no-cache openssl curl
 
 # Create non-root user
@@ -38,7 +38,7 @@ RUN addgroup -g 1001 -S nodejs && \
 COPY package*.json ./
 
 # Install only production dependencies
-RUN npm ci --only=production --legacy-peer-deps
+RUN npm ci --omit=dev --legacy-peer-deps
 
 # Copy prisma schema and generate client
 COPY prisma ./prisma/
@@ -47,8 +47,12 @@ RUN npx prisma generate
 # Copy built application
 COPY --from=builder /app/dist ./dist
 
-# Create logs directory
-RUN mkdir -p logs && chown -R nestjs:nodejs logs
+# Copy docker entrypoint (run migrations before app start)
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
+# Create writable directories
+RUN mkdir -p /app/logs /app/uploads /app/tmp && chown -R nestjs:nodejs /app
 
 # Switch to non-root user
 USER nestjs
@@ -59,6 +63,8 @@ EXPOSE 3000
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:3000/api/health || exit 1
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Start the application
 CMD ["node", "dist/main.js"]

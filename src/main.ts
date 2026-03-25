@@ -170,7 +170,9 @@ async function bootstrap() {
 
     // Log all requests reaching the backend (for debugging)
     if (req.originalUrl.startsWith('/uploads')) {
-      logger.debug(`[DEBUG] Static File Request: ${req.method} ${req.originalUrl} - Host: ${req.headers.host}`);
+      logger.debug(
+        `[DEBUG] Static File Request: ${req.method} ${req.originalUrl} - Host: ${req.headers.host}`,
+      );
     }
 
     next();
@@ -181,8 +183,18 @@ async function bootstrap() {
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   // Add LiveKit proxy here
+  const livekitBaseTarget = (() => {
+    const raw = process.env.LIVEKIT_URL?.trim();
+    if (!raw) return 'http://127.0.0.1:7880';
+
+    // LIVEKIT_URL may be ws://, wss://, http:// or https://
+    if (raw.startsWith('ws://')) return raw.replace('ws://', 'http://');
+    if (raw.startsWith('wss://')) return raw.replace('wss://', 'https://');
+    return raw;
+  })();
+
   const livekitProxy = createProxyMiddleware({
-    target: 'http://127.0.0.1:7880',
+    target: livekitBaseTarget,
     changeOrigin: true,
     ws: true,
   });
@@ -191,7 +203,7 @@ async function bootstrap() {
   app.use(
     '/twirp',
     createProxyMiddleware({
-      target: 'http://127.0.0.1:7880',
+      target: livekitBaseTarget,
       changeOrigin: true,
     }),
   );

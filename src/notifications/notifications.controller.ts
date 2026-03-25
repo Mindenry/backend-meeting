@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 // @ts-ignore - Optional Swagger decorators
 import {
@@ -31,38 +32,68 @@ export class NotificationsController {
     private readonly digestService: NotificationDigestService,
   ) {}
 
+  private getEffectiveUserId(req: any, requestedUserId?: string): string {
+    const authUserId = req?.user?.id as string | undefined;
+    if (!authUserId) {
+      throw new ForbiddenException('User not authenticated');
+    }
+
+    const role = String(req?.user?.role || '').toLowerCase();
+    const isAdmin = role === 'org_owner' || role === 'admin';
+
+    if (!requestedUserId || requestedUserId === authUserId) {
+      return authUserId;
+    }
+
+    if (!isAdmin) {
+      throw new ForbiddenException('Cannot access other user notifications');
+    }
+
+    return requestedUserId;
+  }
+
   @Get()
   findAll(
-    @Query('userId') userId: string,
+    @Request() req: any,
+    @Query('userId') userId?: string,
     @Query('unreadOnly') unreadOnly?: string,
     @Query('priority') priority?: string,
     @Query('grouped') grouped?: string,
   ) {
-    return this.notificationsService.findAll(userId, unreadOnly === 'true', {
-      priority,
-      grouped: grouped === 'true',
-    });
+    const effectiveUserId = this.getEffectiveUserId(req, userId);
+    return this.notificationsService.findAll(
+      effectiveUserId,
+      unreadOnly === 'true',
+      {
+        priority,
+        grouped: grouped === 'true',
+      },
+    );
   }
 
   @Get('user/:userId')
   getUserNotifications(
+    @Request() req: any,
     @Param('userId') userId: string,
     @Query('unreadOnly') unreadOnly?: string,
   ) {
+    const effectiveUserId = this.getEffectiveUserId(req, userId);
     return this.notificationsService.getUserNotifications(
-      userId,
+      effectiveUserId,
       unreadOnly === 'true',
     );
   }
 
   @Get('unread-count')
-  getUnreadCount(@Query('userId') userId: string) {
-    return this.notificationsService.getUnreadCount(userId);
+  getUnreadCount(@Request() req: any, @Query('userId') userId?: string) {
+    const effectiveUserId = this.getEffectiveUserId(req, userId);
+    return this.notificationsService.getUnreadCount(effectiveUserId);
   }
 
   @Get('user/:userId/unread-count')
-  getUnreadCountParam(@Param('userId') userId: string) {
-    return this.notificationsService.getUnreadCount(userId);
+  getUnreadCountParam(@Request() req: any, @Param('userId') userId: string) {
+    const effectiveUserId = this.getEffectiveUserId(req, userId);
+    return this.notificationsService.getUnreadCount(effectiveUserId);
   }
 
   @Post()
@@ -82,33 +113,47 @@ export class NotificationsController {
   }
 
   @Patch(':id/read')
-  markAsRead(@Param('id') id: string, @Query('userId') userId: string) {
-    return this.notificationsService.markAsRead(id, userId);
+  markAsRead(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Query('userId') userId?: string,
+  ) {
+    const effectiveUserId = this.getEffectiveUserId(req, userId);
+    return this.notificationsService.markAsRead(id, effectiveUserId);
   }
 
   @Patch('read-all')
-  markAllAsRead(@Query('userId') userId: string) {
-    return this.notificationsService.markAllAsRead(userId);
+  markAllAsRead(@Request() req: any, @Query('userId') userId?: string) {
+    const effectiveUserId = this.getEffectiveUserId(req, userId);
+    return this.notificationsService.markAllAsRead(effectiveUserId);
   }
 
   @Patch('user/:userId/read-all')
-  markAllAsReadParam(@Param('userId') userId: string) {
-    return this.notificationsService.markAllAsRead(userId);
+  markAllAsReadParam(@Request() req: any, @Param('userId') userId: string) {
+    const effectiveUserId = this.getEffectiveUserId(req, userId);
+    return this.notificationsService.markAllAsRead(effectiveUserId);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @Query('userId') userId: string) {
-    return this.notificationsService.remove(id, userId);
+  remove(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Query('userId') userId?: string,
+  ) {
+    const effectiveUserId = this.getEffectiveUserId(req, userId);
+    return this.notificationsService.remove(id, effectiveUserId);
   }
 
   // Preferences endpoints
   @Get('preferences')
-  getPreferences(@Query('userId') userId: string) {
-    return this.preferencesService.getPreferences(userId);
+  getPreferences(@Request() req: any, @Query('userId') userId?: string) {
+    const effectiveUserId = this.getEffectiveUserId(req, userId);
+    return this.preferencesService.getPreferences(effectiveUserId);
   }
 
   @Patch('preferences')
   updatePreferences(
+    @Request() req: any,
     @Query('userId') userId: string,
     @Body()
     data: {
@@ -129,24 +174,32 @@ export class NotificationsController {
       badgeEnabled?: boolean;
     },
   ) {
-    return this.preferencesService.updatePreferences(userId, data);
+    const effectiveUserId = this.getEffectiveUserId(req, userId);
+    return this.preferencesService.updatePreferences(effectiveUserId, data);
   }
 
   // Digest endpoints
   @Get('digests')
   getDigests(
+    @Request() req: any,
     @Query('userId') userId: string,
     @Query('limit') limit?: string,
     @Query('digestType') digestType?: string,
   ) {
-    return this.digestService.getUserDigests(userId, {
+    const effectiveUserId = this.getEffectiveUserId(req, userId);
+    return this.digestService.getUserDigests(effectiveUserId, {
       limit: limit ? parseInt(limit, 10) : undefined,
       digestType,
     });
   }
 
   @Patch('digests/:id/read')
-  markDigestAsRead(@Param('id') id: string, @Query('userId') userId: string) {
-    return this.digestService.markDigestAsRead(id, userId);
+  markDigestAsRead(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Query('userId') userId: string,
+  ) {
+    const effectiveUserId = this.getEffectiveUserId(req, userId);
+    return this.digestService.markDigestAsRead(id, effectiveUserId);
   }
 }

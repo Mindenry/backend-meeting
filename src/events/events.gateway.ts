@@ -26,6 +26,15 @@ interface MeetingParticipant {
   };
 }
 
+interface MeetingRecordingStatusPayload {
+  meetingId: string;
+  peerId: string;
+  userId?: string;
+  userName: string;
+  isRecording: boolean;
+  startedAt?: string;
+}
+
 @WebSocketGateway({
   cors: {
     origin: true, // Allow all origins
@@ -98,17 +107,16 @@ export class EventsGateway
 
     const meetingInfo = this.socketMeetings.get(client.id);
     if (meetingInfo) {
-      // DON'T remove participant on disconnect - keep them visible
-      // They will be removed only on explicit meeting:leave
-      // This ensures rooms stay visible permanently
       console.log(
-        `[Disconnect] Peer ${meetingInfo.peerId} socket disconnected but keeping them in meeting ${meetingInfo.meetingId}`,
+        `[Disconnect] Removing peer ${meetingInfo.peerId} from meeting ${meetingInfo.meetingId}`,
       );
-
-      // Just clean up the socket mapping, not the participant
+      await this.removeMeetingParticipant(
+        meetingInfo.meetingId,
+        meetingInfo.peerId,
+        client,
+      );
       this.socketMeetings.delete(client.id);
-
-      // DON'T broadcast - participant is still in room
+      this.broadcastActiveRooms();
     }
 
     // Clean up presence
@@ -633,12 +641,23 @@ export class EventsGateway
   }
 
   private cleanupStaleParticipants() {
-    // DISABLED - Don't remove participants automatically
-    // Participants are only removed when they explicitly leave (meeting:leave)
-    // This keeps them visible permanently so users can always see who's in which room
-    console.log(
-      '[Cleanup] Skipping stale participant cleanup - participants kept visible permanently',
-    );
+    // Remove stale participants whose socket is no longer connected.
+    let changed = false;
+    for (const [
+      meetingId,
+      participants,
+    ] of this.meetingParticipants.entries()) {
+      const active = participants.filter((p) =>
+        this.server.sockets.sockets.has(p.socketId),
+      );
+      if (active.length !== participants.length) {
+        this.meetingParticipants.set(meetingId, active);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.broadcastActiveRooms();
+    }
   }
 
   private broadcastActiveRooms() {
@@ -680,6 +699,26 @@ export class EventsGateway
       .to(`meeting:${data.meetingId}`)
       .emit('meeting:participant:force_mute', { peerId: data.targetPeerId });
     return { event: 'muted' };
+  }
+
+  @SubscribeMessage('meeting:recording:status')
+  handleMeetingRecordingStatus(
+    @MessageBody() data: MeetingRecordingStatusPayload,
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (!data?.meetingId || !data?.peerId || !data?.userName) {
+      return { event: 'meeting:recording:ignored' };
+    }
+
+    client.to(`meeting:${data.meetingId}`).emit('meeting:recording:status', {
+      peerId: data.peerId,
+      userId: data.userId,
+      userName: data.userName,
+      isRecording: !!data.isRecording,
+      startedAt: data.startedAt,
+    });
+
+    return { event: 'meeting:recording:broadcasted' };
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -750,7 +789,11 @@ export class EventsGateway
 
     // Normalize attachments from DB JSON — ensure each item has url, name, type
     const rawAttachments = created.attachments;
-    let normalizedAttachments: Array<{ url: string; name: string; type: string }> = [];
+    let normalizedAttachments: Array<{
+      url: string;
+      name: string;
+      type: string;
+    }> = [];
     if (Array.isArray(rawAttachments)) {
       normalizedAttachments = rawAttachments.map((att: any) => {
         const url = att?.url || '';
@@ -760,13 +803,26 @@ export class EventsGateway
         if (!type && name) {
           const ext = name.split('.').pop()?.toLowerCase() || '';
           const mimeMap: Record<string, string> = {
-            jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-            gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml',
-            mp4: 'video/mp4', webm: 'video/webm', ogg: 'video/ogg', mov: 'video/quicktime',
-            mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', flac: 'audio/flac',
+            jpg: 'image/jpeg',
+            jpeg: 'image/jpeg',
+            png: 'image/png',
+            gif: 'image/gif',
+            webp: 'image/webp',
+            bmp: 'image/bmp',
+            svg: 'image/svg+xml',
+            mp4: 'video/mp4',
+            webm: 'video/webm',
+            ogg: 'video/ogg',
+            mov: 'video/quicktime',
+            mp3: 'audio/mpeg',
+            wav: 'audio/wav',
+            m4a: 'audio/mp4',
+            flac: 'audio/flac',
             pdf: 'application/pdf',
-            doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            doc: 'application/msword',
+            docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            xls: 'application/vnd.ms-excel',
+            xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             txt: 'text/plain',
           };
           type = mimeMap[ext] || 'application/octet-stream';

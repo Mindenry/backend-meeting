@@ -10,6 +10,7 @@ import {
   UseInterceptors,
   BadRequestException,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 // @ts-ignore - Optional Swagger decorators
 import {
@@ -76,15 +77,28 @@ export class DriveController {
   async uploadFile(
     @Param('teamId') teamId: string,
     @UploadedFile() file: UploadedFileType | undefined,
-    @Body() body: { path?: string; createdById: string },
+    @Body() body: { path?: string; createdById?: string },
+    @Req() req: any,
   ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
 
+    // Security hardening: prefer authenticated user id over client-provided createdById
+    const createdById = (req?.user?.id as string | undefined) || body.createdById;
+    if (!createdById) {
+      throw new BadRequestException('Unable to determine uploader identity');
+    }
+
+    // Enforce per-file upload limit 50MB
+    const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      throw new BadRequestException('File size exceeds 50MB limit');
+    }
+
     const { entry, version, url } = await this.driveService.saveFileVersion({
       teamId,
-      createdById: body.createdById,
+      createdById,
       originalName: file.originalname,
       path: body.path || '/',
       storageKey: file.filename,

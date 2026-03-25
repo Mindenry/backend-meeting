@@ -306,7 +306,9 @@ export class DriveService {
       include: {
         permissions: {
           include: {
-            user: { select: { id: true, name: true, email: true, avatar: true } },
+            user: {
+              select: { id: true, name: true, email: true, avatar: true },
+            },
           },
         },
       },

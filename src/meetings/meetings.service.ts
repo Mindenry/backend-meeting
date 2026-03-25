@@ -19,6 +19,8 @@ import { AccessToken } from 'livekit-server-sdk';
 
 @Injectable()
 export class MeetingsService {
+  private static readonly MAX_PARTICIPANTS_PER_ROOM = 15;
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => EventsGateway))
@@ -166,8 +168,8 @@ export class MeetingsService {
       metadata: user?.avatar || '',
     });
 
-    at.addGrant({ 
-      roomJoin: true, 
+    at.addGrant({
+      roomJoin: true,
       room: roomName,
       canUpdateOwnMetadata: true,
       roomAdmin: isHost,
@@ -477,6 +479,29 @@ export class MeetingsService {
     });
     if (!meeting) {
       throw new NotFoundException('Meeting not found');
+    }
+
+    const existingParticipant = await this.prisma.meetingParticipant.findUnique({
+      where: {
+        meetingId_userId: { meetingId, userId },
+      },
+    });
+
+    // Enforce max participant limit per room (up to 15)
+    // Count active participants only (not left yet)
+    if (!existingParticipant || existingParticipant.leftAt !== null) {
+      const activeCount = await this.prisma.meetingParticipant.count({
+        where: {
+          meetingId,
+          leftAt: null,
+        },
+      });
+
+      if (activeCount >= MeetingsService.MAX_PARTICIPANTS_PER_ROOM) {
+        throw new BadRequestException(
+          `Meeting participant limit exceeded (max ${MeetingsService.MAX_PARTICIPANTS_PER_ROOM} people per room)`,
+        );
+      }
     }
 
     const participant = await this.prisma.meetingParticipant.upsert({

@@ -98,9 +98,11 @@ export class UsersService {
 
   async changePassword(id: string, passwords: any) {
     const { currentPassword, newPassword } = passwords;
-    
+
     if (!currentPassword || !newPassword) {
-      throw new BadRequestException('รหัสผ่านปัจจุบันและรหัสผ่านใหม่จำเป็นต้องระบุ');
+      throw new BadRequestException(
+        'รหัสผ่านปัจจุบันและรหัสผ่านใหม่จำเป็นต้องระบุ',
+      );
     }
 
     const user = await this.prisma.user.findUnique({ where: { id } });
