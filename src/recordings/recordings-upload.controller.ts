@@ -8,6 +8,7 @@ import {
   UploadedFile,
   BadRequestException,
   Request,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -28,6 +29,8 @@ import { AuditService } from '../common/audit.service';
 @Controller('recordings')
 @UseGuards(JwtAuthGuard)
 export class RecordingsUploadController {
+  private readonly logger = new Logger(RecordingsUploadController.name);
+
   constructor(
     private readonly recordingsService: RecordingsService,
     private readonly driveService: DriveService,
@@ -38,7 +41,13 @@ export class RecordingsUploadController {
 
   private async convertToMp4(
     inputBuffer: Buffer,
-  ): Promise<{ buffer: Buffer | null; error?: string; ffmpegAvailable?: boolean }> {
+  ): Promise<{
+    buffer: Buffer | null;
+    error?: string;
+    ffmpegAvailable?: boolean;
+    diagnostics?: string[];
+    usedCommand?: string;
+  }> {
     const tempBase = `recording-${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     const inputPath = join(tmpdir(), `${tempBase}.webm`);
     const outputPath = join(tmpdir(), `${tempBase}.mp4`);
@@ -70,8 +79,8 @@ export class RecordingsUploadController {
     const runFfmpeg = async (
       command: string,
       label: string,
-    ): Promise<{ success: boolean; error?: string }> => {
-      console.log(`[Recording] Trying FFmpeg (${label}): ${command}`);
+    ): Promise<{ success: boolean; error?: string; stderrTail?: string }> => {
+      this.logger.log(`[Recording] Trying FFmpeg (${label}): ${command}`);
       return new Promise<{ success: boolean; error?: string }>((resolve) => {
         const ffmpeg = spawn(command, ffmpegArgs);
 
@@ -81,7 +90,11 @@ export class RecordingsUploadController {
         });
 
         ffmpeg.on('error', (err) => {
-          resolve({ success: false, error: `Spawn error: ${err.message}` });
+          resolve({
+            success: false,
+            error: `Spawn error: ${err.message}`,
+            stderrTail: errorOutput.slice(-500),
+          });
         });
 
         ffmpeg.on('close', (code) => {
@@ -91,6 +104,7 @@ export class RecordingsUploadController {
             resolve({
               success: false,
               error: `Exit code ${code}: ${errorOutput.slice(-300) || 'Unknown error'}`,
+              stderrTail: errorOutput.slice(-500),
             });
           }
         });
@@ -99,7 +113,7 @@ export class RecordingsUploadController {
 
     try {
       await fs.writeFile(inputPath, inputBuffer);
-      console.log(`[Recording] Starting FFmpeg conversion: ${inputPath} -> ${outputPath}`);
+      this.logger.log(`[Recording] Starting FFmpeg conversion: ${inputPath} -> ${outputPath}`);
 
       const attemptedCommands: Array<{ command: string; label: string }> = [];
 
@@ -123,30 +137,40 @@ export class RecordingsUploadController {
 
       let lastError = 'FFmpeg command not found';
       let success = false;
+      let usedCommand: string | undefined;
+      const diagnostics: string[] = [];
 
       for (const candidate of attemptedCommands) {
         const result = await runFfmpeg(candidate.command, candidate.label);
         if (result.success) {
           success = true;
+          usedCommand = `${candidate.label}:${candidate.command}`;
+          diagnostics.push(`SUCCESS ${usedCommand}`);
           break;
         }
+        const stderrInfo = result.stderrTail
+          ? ` | stderr=${result.stderrTail.replace(/\s+/g, ' ').slice(-280)}`
+          : '';
         lastError = `${candidate.label} (${candidate.command}) failed: ${result.error || 'Unknown error'}`;
-        console.warn(`[Recording] ${lastError}`);
+        const diagnosticLine = `${lastError}${stderrInfo}`;
+        diagnostics.push(diagnosticLine);
+        this.logger.warn(`[Recording] ${diagnosticLine}`);
       }
 
       if (success) {
         const outputBuffer = await fs.readFile(outputPath);
-        console.log(`[Recording] MP4 file created: ${outputBuffer.length} bytes`);
-        return { buffer: outputBuffer, ffmpegAvailable: true };
+        this.logger.log(`[Recording] MP4 file created: ${outputBuffer.length} bytes`);
+        return { buffer: outputBuffer, ffmpegAvailable: true, diagnostics, usedCommand };
       }
 
-      return { buffer: null, error: lastError, ffmpegAvailable: false };
+      return { buffer: null, error: lastError, ffmpegAvailable: false, diagnostics };
     } catch (e: any) {
-      console.error(`[Recording] Conversion error: ${e?.message}`);
+      this.logger.error(`[Recording] Conversion error: ${e?.message}`);
       return {
         buffer: null,
         error: e?.message || 'Unknown ffmpeg conversion error',
         ffmpegAvailable: false,
+        diagnostics: [e?.stack || e?.message || 'Unknown error'],
       };
     } finally {
       await fs.unlink(inputPath).catch(() => undefined);
@@ -423,14 +447,14 @@ export class RecordingsUploadController {
     }
 
     // Standardize final output to mp4 when ffmpeg is available
-    console.log('[Recording] Starting MP4 conversion...');
+    this.logger.log('[Recording] Starting MP4 conversion...');
     const conversion = await this.convertToMp4(file.buffer);
     const convertedMp4 = conversion.buffer;
     
     if (convertedMp4) {
-      console.log(`[Recording] Conversion successful: ${file.buffer.length} bytes -> ${convertedMp4.length} bytes (MP4)`);
+      this.logger.log(`[Recording] Conversion successful: ${file.buffer.length} bytes -> ${convertedMp4.length} bytes (MP4)`);
     } else {
-      console.warn(`[Recording] Conversion failed, keeping original format. Error: ${conversion.error || 'Unknown'}`);
+      this.logger.warn(`[Recording] Conversion failed, keeping original format. Error: ${conversion.error || 'Unknown'}`);
     }
     
     const finalBuffer = convertedMp4 || file.buffer;
@@ -438,7 +462,7 @@ export class RecordingsUploadController {
       ? 'video/mp4'
       : file.mimetype || 'video/webm';
     const finalName = `${dateStr}_${timeStr}${convertedMp4 ? '.mp4' : '.webm'}`;
-    console.log(`[Recording] Final file: ${finalName} (${finalMimetype}, ${finalBuffer.length} bytes)`);
+    this.logger.log(`[Recording] Final file: ${finalName} (${finalMimetype}, ${finalBuffer.length} bytes)`);
 
     // Upload file to local storage directly (skip Cloudinary for speed)
     const storageFile: StorageUploadedFile = {
@@ -560,6 +584,8 @@ export class RecordingsUploadController {
         : conversion.error
           ? `FFmpeg conversion to mp4 failed: ${conversion.error}`
           : 'FFmpeg conversion failed, recording stored as WebM',
+      conversionDiagnostics: conversion.diagnostics,
+      ffmpegCommandUsed: conversion.usedCommand,
     };
   }
 }
