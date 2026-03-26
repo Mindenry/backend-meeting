@@ -3,15 +3,8 @@ FROM node:20-bookworm-slim AS builder
 
 WORKDIR /app
 
-# Install dependencies for native modules + ffmpeg (x264/aac support for mp4 conversion)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    make \
-    g++ \
-    openssl \
-    ffmpeg \
-    ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+# Keep builder stage lean to avoid Railway build timeout
+# (ffmpeg is only required in production runtime stage)
 
 # Copy package files
 COPY package*.json ./
@@ -49,8 +42,11 @@ RUN groupadd -g 1001 nodejs && \
 # Copy package files
 COPY package*.json ./
 
-# Install only production dependencies
-RUN npm ci --omit=dev --legacy-peer-deps
+# Reuse already-installed modules from builder to speed up image build
+COPY --from=builder /app/node_modules ./node_modules
+
+# Prune dev dependencies for production
+RUN npm prune --omit=dev
 
 # Copy prisma schema and generate only Prisma Client
 # (skip optional dbml generator which is dev-only)
