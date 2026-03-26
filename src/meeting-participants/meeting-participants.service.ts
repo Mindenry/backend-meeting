@@ -4,29 +4,18 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { verifyPassword } from '../auth/password';
 
 @Injectable()
 export class MeetingParticipantsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async joinMeeting(meetingId: string, userId: string, password?: string) {
+  async joinMeeting(meetingId: string, userId: string) {
     const meeting = await this.prisma.meeting.findUnique({
       where: { id: meetingId },
     });
 
     if (!meeting) {
       throw new NotFoundException('Meeting not found');
-    }
-
-    // Security checks (skip for host)
-    if (meeting.hostId !== userId) {
-      if (
-        meeting.password &&
-        (!password || !verifyPassword(password, meeting.password))
-      ) {
-        throw new BadRequestException('Invalid meeting password');
-      }
     }
 
     // Check if already a participant

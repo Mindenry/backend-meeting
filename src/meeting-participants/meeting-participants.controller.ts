@@ -23,7 +23,7 @@ export class MeetingParticipantsController {
   async joinMeeting(
     @Param('meetingId') meetingId: string,
     @Body()
-    body: { userId: string; password?: string },
+    body: { userId: string },
   ) {
     try {
       if (!body.userId) {
@@ -32,7 +32,6 @@ export class MeetingParticipantsController {
       return await this.participantsService.joinMeeting(
         meetingId,
         body.userId,
-        body.password,
       );
     } catch (error) {
       console.error('Error joining meeting:', error);

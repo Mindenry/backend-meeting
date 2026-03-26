@@ -14,7 +14,6 @@ import { AuditService } from '../common/audit.service';
 import { WorkflowsService } from '../workflows/workflows.service';
 import { CacheHelperService } from '../common/cache/cache-helper.service';
 import { randomBytes } from 'crypto';
-import { hashPassword } from '../auth/password';
 import { AccessToken } from 'livekit-server-sdk';
 
 @Injectable()
@@ -178,7 +177,6 @@ export class MeetingsService {
     description?: string;
     startTime: Date;
     endTime?: Date;
-    password?: string;
     allowScreenShare?: boolean;
     status?: string;
     teamId?: string | null;
@@ -198,7 +196,6 @@ export class MeetingsService {
     const meeting = await this.prisma.meeting.create({
       data: {
         ...data,
-        password: data.password ? hashPassword(data.password) : undefined,
         meetingCode,
         status: data.status || (data.isInstant ? 'live' : 'scheduled'),
         actualStartTime: data.isInstant ? new Date() : undefined,
@@ -615,7 +612,6 @@ export class MeetingsService {
             startTime: currentDate,
             endTime: instanceEndTime,
             meetingCode,
-            password: template.password,
             allowScreenShare: template.allowScreenShare,
             status: 'scheduled',
             teamId: template.teamId,
