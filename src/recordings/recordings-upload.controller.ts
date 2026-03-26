@@ -81,7 +81,7 @@ export class RecordingsUploadController {
       label: string,
     ): Promise<{ success: boolean; error?: string; stderrTail?: string }> => {
       this.logger.log(`[Recording] Trying FFmpeg (${label}): ${command}`);
-      return new Promise<{ success: boolean; error?: string }>((resolve) => {
+      return new Promise<{ success: boolean; error?: string; stderrTail?: string }>((resolve) => {
         const ffmpeg = spawn(command, ffmpegArgs);
 
         let errorOutput = '';
