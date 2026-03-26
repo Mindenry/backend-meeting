@@ -179,7 +179,6 @@ export class MeetingsService {
     startTime: Date;
     endTime?: Date;
     password?: string;
-    waitingRoom?: boolean;
     allowScreenShare?: boolean;
     status?: string;
     teamId?: string | null;
@@ -333,7 +332,7 @@ export class MeetingsService {
     return updatedMeeting;
   }
 
-  async endMeeting(id: string, summary?: string) {
+  async endMeeting(id: string) {
     const meeting = await this.prisma.meeting.findUnique({ where: { id } });
     if (!meeting) throw new NotFoundException('Meeting not found');
 
@@ -342,7 +341,6 @@ export class MeetingsService {
       data: {
         status: 'ended',
         actualEndTime: new Date(),
-        summary,
       },
       include: {
         team: true,
@@ -359,7 +357,6 @@ export class MeetingsService {
             },
           },
         },
-        minutes: true,
         recordings: true,
       },
     });
@@ -375,13 +372,11 @@ export class MeetingsService {
         startTime: updatedMeeting.startTime,
         actualStartTime: updatedMeeting.actualStartTime,
         actualEndTime: updatedMeeting.actualEndTime,
-        summary: updatedMeeting.summary,
         participants: updatedMeeting.participants.map((p) => ({
           userId: p.userId,
           name: p.user.name,
           email: p.user.email,
         })),
-        hasMinutes: updatedMeeting.minutes.length > 0,
         hasRecordings: updatedMeeting.recordings.length > 0,
       });
     } catch (err) {
@@ -407,7 +402,6 @@ export class MeetingsService {
       description?: string;
       startTime: Date;
       endTime: Date;
-      waitingRoom: boolean;
       allowScreenShare: boolean;
       status: string;
       teamId?: string | null;
@@ -573,26 +567,6 @@ export class MeetingsService {
     });
   }
 
-  async lockMeeting(id: string) {
-    const meeting = await this.prisma.meeting.findUnique({ where: { id } });
-    if (!meeting) throw new NotFoundException('Meeting not found');
-
-    return this.prisma.meeting.update({
-      where: { id },
-      data: { isLocked: true },
-    });
-  }
-
-  async unlockMeeting(id: string) {
-    const meeting = await this.prisma.meeting.findUnique({ where: { id } });
-    if (!meeting) throw new NotFoundException('Meeting not found');
-
-    return this.prisma.meeting.update({
-      where: { id },
-      data: { isLocked: false },
-    });
-  }
-
   /**
    * Generate recurring meeting instances from a template
    */
@@ -642,7 +616,6 @@ export class MeetingsService {
             endTime: instanceEndTime,
             meetingCode,
             password: template.password,
-            waitingRoom: template.waitingRoom,
             allowScreenShare: template.allowScreenShare,
             status: 'scheduled',
             teamId: template.teamId,

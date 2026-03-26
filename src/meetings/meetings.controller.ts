@@ -131,17 +131,7 @@ export class MeetingsController {
   }
 
   @Post(':id/end')
-  endMeeting(@Param('id') id: string, @Body() body: { summary?: string }) {
-    return this.meetingsService.endMeeting(id, body.summary);
-  }
-
-  @Post(':id/lock')
-  lockMeeting(@Param('id') id: string) {
-    return this.meetingsService.lockMeeting(id);
-  }
-
-  @Post(':id/unlock')
-  unlockMeeting(@Param('id') id: string) {
-    return this.meetingsService.unlockMeeting(id);
+  endMeeting(@Param('id') id: string) {
+    return this.meetingsService.endMeeting(id);
   }
 }

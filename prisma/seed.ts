@@ -27,7 +27,7 @@ async function main() {
     'directMessage', 'messageReaction', 'thread', 'notificationPreference',
     'notificationDigest', 'refreshToken', 'documentFolder', 'document',
     'documentVersion', 'documentPermission', 'meetingRecording',
-    'meetingMinutes', 'reminderRecipient', 'reminder', 'standupEntry',
+    'reminderRecipient', 'reminder', 'standupEntry',
     'driveFileVersion', 'driveEntry', 'subtask', 'taskAttachment',
     'meetingReminder', 'workflowRun', 'workflow', 'wikiArticleVersion',
     'wikiComment', 'taskTemplate', 'taskWatcher', 'issueLink',
@@ -57,7 +57,6 @@ async function main() {
       domain: 'acme.com',
       allowedDomains: ['acme.com', 'acme.co.th'],
       settings: {
-        requireWaitingRoom: true,
         allowScreenShare: true,
         maxMeetingDuration: 120, // minutes
         passwordPolicy: {
@@ -275,9 +274,7 @@ async function main() {
         startTime: new Date(today.getTime() + 10 * 60 * 60 * 1000), // 10:00 AM today
         endTime: new Date(today.getTime() + 11 * 60 * 60 * 1000), // 11:00 AM
         meetingCode: generateMeetingCode(),
-        waitingRoom: true,
         allowScreenShare: true,
-        isLocked: false,
         status: 'scheduled',
         hostId: users[0].id,
         teamId: engineeringTeam.id,
@@ -290,9 +287,7 @@ async function main() {
         startTime: new Date(today.getTime() + 14 * 60 * 60 * 1000), // 2:00 PM today
         endTime: new Date(today.getTime() + 14 * 60 * 60 * 1000 + 45 * 60 * 1000), // 2:45 PM
         meetingCode: generateMeetingCode(),
-        waitingRoom: false,
         allowScreenShare: true,
-        isLocked: false,
         status: 'scheduled',
         hostId: users[1].id,
         teamId: designTeam.id,
@@ -305,9 +300,7 @@ async function main() {
         startTime: new Date(today.getTime() + 16 * 60 * 60 * 1000 + 30 * 60 * 1000), // 4:30 PM today
         endTime: new Date(today.getTime() + 17 * 60 * 60 * 1000), // 5:00 PM
         meetingCode: generateMeetingCode(),
-        waitingRoom: false,
         allowScreenShare: false,
-        isLocked: false,
         status: 'scheduled',
         hostId: users[0].id,
         teamId: null,
@@ -320,13 +313,10 @@ async function main() {
         startTime: new Date(today.getTime() - 24 * 60 * 60 * 1000 + 10 * 60 * 60 * 1000), // 10:00 AM yesterday
         endTime: new Date(today.getTime() - 24 * 60 * 60 * 1000 + 10 * 60 * 60 * 1000 + 15 * 60 * 1000), // 10:15 AM
         meetingCode: generateMeetingCode(),
-        waitingRoom: false,
         allowScreenShare: false,
-        isLocked: false,
         status: 'ended',
         actualStartTime: new Date(today.getTime() - 24 * 60 * 60 * 1000 + 10 * 60 * 60 * 1000),
         actualEndTime: new Date(today.getTime() - 24 * 60 * 60 * 1000 + 10 * 60 * 60 * 1000 + 15 * 60 * 1000),
-        summary: 'Discussed sprint progress. All tasks on track.',
         hostId: users[0].id,
         teamId: engineeringTeam.id,
       },
@@ -338,13 +328,10 @@ async function main() {
         startTime: new Date(today.getTime() - 24 * 60 * 60 * 1000 + 15 * 60 * 60 * 1000), // 3:00 PM yesterday
         endTime: new Date(today.getTime() - 24 * 60 * 60 * 1000 + 16 * 60 * 60 * 1000), // 4:00 PM
         meetingCode: generateMeetingCode(),
-        waitingRoom: true,
         allowScreenShare: true,
-        isLocked: false,
         status: 'ended',
         actualStartTime: new Date(today.getTime() - 24 * 60 * 60 * 1000 + 15 * 60 * 60 * 1000),
         actualEndTime: new Date(today.getTime() - 24 * 60 * 60 * 1000 + 16 * 60 * 60 * 1000),
-        summary: 'Presented new features. Client feedback positive.',
         hostId: users[1].id,
         teamId: designTeam.id,
       },
@@ -356,9 +343,7 @@ async function main() {
         startTime: new Date(today.getTime() + 9 * 60 * 60 * 1000), // 9:00 AM today
         endTime: new Date(today.getTime() + 10 * 60 * 60 * 1000), // 10:00 AM
         meetingCode: generateMeetingCode(),
-        waitingRoom: true,
         allowScreenShare: true,
-        isLocked: false,
         status: 'live',
         actualStartTime: new Date(today.getTime() + 9 * 60 * 60 * 1000),
         hostId: users[2].id,
@@ -383,7 +368,6 @@ async function main() {
         isMuted: false,
         isVideoOn: true,
         isSharing: false,
-        waitingRoom: false,
       },
     }),
     prisma.meetingParticipant.create({
@@ -396,7 +380,6 @@ async function main() {
         isMuted: false,
         isVideoOn: true,
         isSharing: false,
-        waitingRoom: false,
       },
     }),
     // Participants for live meeting
@@ -409,7 +392,6 @@ async function main() {
         isMuted: false,
         isVideoOn: true,
         isSharing: true,
-        waitingRoom: false,
       },
     }),
     prisma.meetingParticipant.create({
@@ -421,20 +403,6 @@ async function main() {
         isMuted: true,
         isVideoOn: false,
         isSharing: false,
-        waitingRoom: false,
-      },
-    }),
-    // Waiting room participants
-    prisma.meetingParticipant.create({
-      data: {
-        meetingId: meetings[5].id,
-        userId: users[5].id,
-        joinedAt: new Date(today.getTime() + 9 * 60 * 60 * 1000 + 5 * 60 * 1000),
-        handRaised: false,
-        isMuted: true,
-        isVideoOn: false,
-        isSharing: false,
-        waitingRoom: true, // In waiting room
       },
     }),
   ]);
@@ -1478,15 +1446,6 @@ Contact support if you have urgent matters.`,
       createdBy: users[0].id,
     }
   });
-  
-  await prisma.meetingMinutes.create({
-    data: {
-      title: 'Standup Minutes',
-      meetingId: meetings[3].id,
-      content: 'We discussed X, Y, Z.',
-      createdBy: users[0].id,
-    }
-  });
 
   // 31. Reminders
   const reminder = await prisma.reminder.create({
@@ -1750,7 +1709,6 @@ Contact support if you have urgent matters.`,
       data: {
         actualStartTime: m.startTime,
         actualEndTime: m.endTime || new Date(m.startTime.getTime() + 60 * 60 * 1000),
-        summary: 'Discussed project updates and blockers.',
         teamId: engineeringTeam.id,
       }
     });
@@ -1797,13 +1755,6 @@ Contact support if you have urgent matters.`,
 
   await prisma.documentFolder.updateMany({
     data: { description: 'Main folder for project documentation.' }
-  });
-
-  await prisma.meetingMinutes.updateMany({
-    data: {
-      actionItems: ['Fix login bug', 'Update schema'],
-      decisions: ['Use PostgreSQL', 'Deploy to AWS']
-    }
   });
 
   await prisma.sprint.updateMany({

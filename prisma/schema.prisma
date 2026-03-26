@@ -81,10 +81,10 @@ model User {
   createdFolders          DocumentFolder[]        @relation("CreatedFolders")
   createdReminders        Reminder[]              @relation("CreatedReminders")
   reminderRecipients      ReminderRecipient[]
-  meetingMinutes          MeetingMinutes[]        @relation("CreatedMinutes")
   workflows               Workflow[]              @relation("WorkflowCreator")
   workflowRuns            WorkflowRun[]
   standupEntries          StandupEntry[]
+  createdMinutes          MeetingMinutes[]        @relation("MinutesCreator")
   notificationPreferences NotificationPreference? @relation("NotificationPreferences")
   notificationDigests     NotificationDigest[]    @relation("NotificationDigests")
   // New features
@@ -151,14 +151,10 @@ model Meeting {
   startTime        DateTime
   endTime          DateTime?
   meetingCode      String    @unique // Unique meeting code/ID
-  password         String? // Meeting password (hashed or plain)
-  waitingRoom      Boolean   @default(true)
   allowScreenShare Boolean   @default(true)
-  isLocked         Boolean   @default(false)
   status           String    @default("scheduled") // scheduled, live, ended
   actualStartTime  DateTime?
   actualEndTime    DateTime?
-  summary          String? // Post-meeting summary
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -179,9 +175,9 @@ model Meeting {
   host         User                 @relation("HostedMeetings", fields: [hostId], references: [id])
   tasks        Task[]
   recordings   MeetingRecording[]
-  minutes      MeetingMinutes[]
   participants MeetingParticipant[]
   reminders    MeetingReminder[]
+  minutes      MeetingMinutes[]
 
   @@index([hostId, startTime])
   @@index([teamId, startTime])
@@ -628,7 +624,6 @@ model MeetingRecording {
   fileUrl       String
   fileSize      Int // in bytes
   duration      Int // in seconds
-  transcription String? // Optional transcription text
   status        String   @default("processing") // processing, completed, failed
   driveEntryId  String? // Link to Shared Drive entry
   createdBy     String
@@ -647,20 +642,21 @@ model MeetingMinutes {
   id          String   @id @default(uuid())
   meetingId   String
   title       String
-  content     String // Markdown or rich text
-  actionItems Json? // Array of { id, task, assignee, dueDate, status }
+  content     String // Markdown content
+  actionItems Json? // Array of action items
   decisions   Json? // Array of decisions made
-  attendees   String[] // User IDs who attended
+  attendees   String[] // User IDs of attendees
   createdBy   String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  creator User    @relation("CreatedMinutes", fields: [createdBy], references: [id])
+  creator User   @relation("MinutesCreator", fields: [createdBy], references: [id])
 
   @@index([meetingId])
   @@index([createdBy])
 }
+
 
 model MeetingParticipant {
   id          String    @id @default(uuid())
@@ -674,7 +670,6 @@ model MeetingParticipant {
   isMuted     Boolean   @default(false)
   isVideoOn   Boolean   @default(false)
   isSharing   Boolean   @default(false)
-  waitingRoom Boolean   @default(true) // true if in waiting room, false if admitted
 
   meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)

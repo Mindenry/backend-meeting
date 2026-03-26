@@ -41,15 +41,6 @@ export class UpdateMeetingDto {
   endTime?: string;
 
   @ApiPropertyOptional({
-    description: 'Enable waiting room',
-    example: false,
-    type: Boolean,
-  })
-  @IsOptional()
-  @IsBoolean()
-  waitingRoom?: boolean;
-
-  @ApiPropertyOptional({
     description: 'Allow screen sharing',
     example: false,
     type: Boolean,

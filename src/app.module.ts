@@ -21,7 +21,6 @@ import { ReactionsModule } from './reactions/reactions.module';
 import { ThreadsModule } from './threads/threads.module';
 import { DocumentsModule } from './documents/documents.module';
 import { RecordingsModule } from './recordings/recordings.module';
-import { MinutesModule } from './minutes/minutes.module';
 import { TimeTrackingModule } from './time-tracking/time-tracking.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { ReportsModule } from './reports/reports.module';
@@ -110,7 +109,6 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     ThreadsModule,
     DocumentsModule,
     RecordingsModule,
-    MinutesModule,
     TimeTrackingModule,
     RemindersModule,
     WorkflowsModule,

@@ -21,10 +21,6 @@ export class MeetingParticipantsService {
 
     // Security checks (skip for host)
     if (meeting.hostId !== userId) {
-      if (meeting.isLocked) {
-        throw new BadRequestException('Meeting is locked');
-      }
-
       if (
         meeting.password &&
         (!password || !verifyPassword(password, meeting.password))
@@ -55,7 +51,6 @@ export class MeetingParticipantsService {
         data: {
           joinedAt: new Date(),
           leftAt: null,
-          waitingRoom: false,
         },
         include: {
           user: {
@@ -75,7 +70,6 @@ export class MeetingParticipantsService {
       data: {
         meetingId,
         userId,
-        waitingRoom: false,
       },
       include: {
         user: {
@@ -131,7 +125,6 @@ export class MeetingParticipantsService {
       where: {
         meetingId,
         leftAt: null,
-        waitingRoom: false,
       },
       include: {
         user: {
