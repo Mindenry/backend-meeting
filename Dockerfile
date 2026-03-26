@@ -4,7 +4,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Install dependencies for native modules
-RUN apk add --no-cache python3 make g++ openssl
+RUN apk add --no-cache python3 make g++ openssl ffmpeg
 
 # Copy package files
 COPY package*.json ./
@@ -27,8 +27,8 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
-# Install runtime tools needed by Prisma + healthcheck
-RUN apk add --no-cache openssl curl
+# Install runtime tools needed by Prisma + healthcheck + ffmpeg for video conversion
+RUN apk add --no-cache openssl curl ffmpeg
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \

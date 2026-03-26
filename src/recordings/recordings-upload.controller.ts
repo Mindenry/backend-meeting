@@ -38,27 +38,31 @@ export class RecordingsUploadController {
 
   private async convertToMp4(
     inputBuffer: Buffer,
-  ): Promise<{ buffer: Buffer | null; error?: string }> {
+  ): Promise<{ buffer: Buffer | null; error?: string; ffmpegAvailable?: boolean }> {
     const tempBase = `recording-${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     const inputPath = join(tmpdir(), `${tempBase}.webm`);
     const outputPath = join(tmpdir(), `${tempBase}.mp4`);
 
     try {
       await fs.writeFile(inputPath, inputBuffer);
+      console.log(`[Recording] Starting FFmpeg conversion: ${inputPath} -> ${outputPath}`);
 
-      await new Promise<void>(async (resolve, reject) => {
+      const result = await new Promise<{ success: boolean; error?: string }>(async (resolve) => {
         // Prefer bundled ffmpeg binary (ffmpeg-static) to ensure conversion works in production.
         // Fallback to system ffmpeg when package is unavailable.
         let ffmpegCommand = 'ffmpeg';
+        let ffmpegAvailable = false;
         try {
           const ffmpegStaticModule = await import('ffmpeg-static');
           const resolved =
             (ffmpegStaticModule as any)?.default || (ffmpegStaticModule as any);
           if (typeof resolved === 'string' && resolved.length > 0) {
             ffmpegCommand = resolved;
+            ffmpegAvailable = true;
+            console.log(`[Recording] Using ffmpeg-static: ${ffmpegCommand}`);
           }
         } catch {
-          // ffmpeg-static not available, keep system ffmpeg fallback
+          console.log('[Recording] ffmpeg-static not available, trying system ffmpeg');
         }
 
         const ffmpeg = spawn(ffmpegCommand, [
@@ -85,31 +89,48 @@ export class RecordingsUploadController {
           outputPath,
         ]);
 
-        let errorOutput = '';
+        let errorOutput = ''
+        let stdoutOutput = '';
+        
+        ffmpeg.stdout.on('data', (chunk) => {
+          stdoutOutput += chunk.toString();
+        });
         ffmpeg.stderr.on('data', (chunk) => {
           errorOutput += chunk.toString();
         });
-        ffmpeg.on('error', (err) => reject(err));
+        
+        ffmpeg.on('error', (err) => {
+          console.error(`[Recording] FFmpeg spawn error: ${err.message}`);
+          resolve({ success: false, error: `FFmpeg not found: ${err.message}` });
+        });
+        
         ffmpeg.on('close', (code) => {
           if (code === 0) {
-            resolve();
-            return;
+            console.log(`[Recording] FFmpeg conversion completed successfully`);
+            resolve({ success: true });
+          } else {
+            console.error(`[Recording] FFmpeg exited with code ${code}: ${errorOutput.slice(-500)}`);
+            resolve({ 
+              success: false, 
+              error: `FFmpeg exited with code ${code}: ${errorOutput.slice(-300) || 'Unknown error'}` 
+            });
           }
-          reject(
-            new Error(
-              `ffmpeg exited with code ${code}${
-                errorOutput ? `: ${errorOutput.slice(-600)}` : ''
-              }`,
-            ),
-          );
         });
       });
 
-      return { buffer: await fs.readFile(outputPath) };
+      if (result.success) {
+        const outputBuffer = await fs.readFile(outputPath);
+        console.log(`[Recording] MP4 file created: ${outputBuffer.length} bytes`);
+        return { buffer: outputBuffer, ffmpegAvailable: true };
+      } else {
+        return { buffer: null, error: result.error, ffmpegAvailable: true };
+      }
     } catch (e: any) {
+      console.error(`[Recording] Conversion error: ${e?.message}`);
       return {
         buffer: null,
         error: e?.message || 'Unknown ffmpeg conversion error',
+        ffmpegAvailable: false,
       };
     } finally {
       await fs.unlink(inputPath).catch(() => undefined);
@@ -386,13 +407,22 @@ export class RecordingsUploadController {
     }
 
     // Standardize final output to mp4 when ffmpeg is available
+    console.log('[Recording] Starting MP4 conversion...');
     const conversion = await this.convertToMp4(file.buffer);
     const convertedMp4 = conversion.buffer;
+    
+    if (convertedMp4) {
+      console.log(`[Recording] Conversion successful: ${file.buffer.length} bytes -> ${convertedMp4.length} bytes (MP4)`);
+    } else {
+      console.warn(`[Recording] Conversion failed, keeping original format. Error: ${conversion.error || 'Unknown'}`);
+    }
+    
     const finalBuffer = convertedMp4 || file.buffer;
     const finalMimetype = convertedMp4
       ? 'video/mp4'
       : file.mimetype || 'video/webm';
     const finalName = `${dateStr}_${timeStr}${convertedMp4 ? '.mp4' : '.webm'}`;
+    console.log(`[Recording] Final file: ${finalName} (${finalMimetype}, ${finalBuffer.length} bytes)`);
 
     // Upload file to local storage directly (skip Cloudinary for speed)
     const storageFile: StorageUploadedFile = {

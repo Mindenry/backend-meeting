@@ -18,10 +18,11 @@ import {
   ApiBearerAuth,
 } from '../common/decorators/swagger.decorators';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { diskStorage, memoryStorage } from 'multer';
 import { extname } from 'path';
 import { DriveService } from './drive.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { StorageService } from '../storage/storage.service';
 
 // Mirror the uploaded file type used by UploadController
 interface UploadedFileType {
@@ -36,12 +37,84 @@ interface UploadedFileType {
   buffer?: Buffer;
 }
 
+// Common MIME types for better detection
+const MIME_TYPE_MAP: Record<string, string> = {
+  // Images
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+  // Videos
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+  avi: 'video/x-msvideo',
+  mkv: 'video/x-matroska',
+  wmv: 'video/x-ms-wmv',
+  flv: 'video/x-flv',
+  // Audio
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  m4a: 'audio/mp4',
+  flac: 'audio/flac',
+  aac: 'audio/aac',
+  // Documents
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  txt: 'text/plain',
+  rtf: 'application/rtf',
+  // Archives
+  zip: 'application/zip',
+  rar: 'application/vnd.rar',
+  '7z': 'application/x-7z-compressed',
+  tar: 'application/x-tar',
+  gz: 'application/gzip',
+  // Code/Dev
+  json: 'application/json',
+  xml: 'application/xml',
+  html: 'text/html',
+  css: 'text/css',
+  js: 'application/javascript',
+  ts: 'application/typescript',
+  py: 'text/x-python',
+  java: 'text/x-java-source',
+  c: 'text/x-c',
+  cpp: 'text/x-c++',
+  h: 'text/x-c',
+  md: 'text/markdown',
+  yml: 'application/x-yaml',
+  yaml: 'application/x-yaml',
+  // Other
+  exe: 'application/vnd.microsoft.portable-executable',
+  dmg: 'application/x-apple-diskimage',
+  iso: 'application/x-iso9660-image',
+};
+
+// Get MIME type from file extension
+function getMimeType(filename: string, fallback?: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  return MIME_TYPE_MAP[ext] || fallback || 'application/octet-stream';
+}
+
 @ApiTags('drive')
 @Controller('drive')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class DriveController {
-  constructor(private readonly driveService: DriveService) {}
+  constructor(
+    private readonly driveService: DriveService,
+    private readonly storageService: StorageService,
+  ) {}
 
   @Get('teams/:teamId')
   listEntries(@Param('teamId') teamId: string, @Query('path') path?: string) {
@@ -72,6 +145,9 @@ export class DriveController {
           callback(null, `${uniqueSuffix}${extname(file.originalname)}`);
         },
       }),
+      limits: {
+        fileSize: 500 * 1024 * 1024, // 500MB - support larger files like Google Drive
+      },
     }),
   )
   async uploadFile(
@@ -91,11 +167,15 @@ export class DriveController {
       throw new BadRequestException('Unable to determine uploader identity');
     }
 
-    // Enforce per-file upload limit 50MB
-    const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+    // Enforce per-file upload limit 500MB (like Google Drive)
+    const MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024;
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      throw new BadRequestException('File size exceeds 50MB limit');
+      throw new BadRequestException('File size exceeds 500MB limit');
     }
+
+    // Use our MIME type detection for better accuracy (like Google Drive)
+    const detectedMimeType = getMimeType(file.originalname, file.mimetype);
+    console.log(`[Drive] Uploading file: ${file.originalname} (${detectedMimeType}, ${file.size} bytes)`);
 
     const { entry, version, url } = await this.driveService.saveFileVersion({
       teamId,
@@ -104,7 +184,7 @@ export class DriveController {
       path: body.path || '/',
       storageKey: file.filename,
       size: file.size,
-      mimeType: file.mimetype,
+      mimeType: detectedMimeType,
     });
 
     return {
