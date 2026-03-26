@@ -31,6 +31,58 @@ import { AuditService } from '../common/audit.service';
 export class RecordingsUploadController {
   private readonly logger = new Logger(RecordingsUploadController.name);
 
+  private async probeMedia(filePath: string): Promise<{
+    hasVideo: boolean;
+    hasAudio: boolean;
+    videoCodec?: string;
+    width?: number;
+    height?: number;
+  }> {
+    return new Promise((resolve) => {
+      const ffprobe = spawn('ffprobe', [
+        '-v',
+        'error',
+        '-print_format',
+        'json',
+        '-show_streams',
+        filePath,
+      ]);
+
+      let stdout = '';
+      ffprobe.stdout.on('data', (chunk) => {
+        stdout += chunk.toString();
+      });
+
+      ffprobe.on('error', () => {
+        resolve({ hasVideo: false, hasAudio: false });
+      });
+
+      ffprobe.on('close', (code) => {
+        if (code !== 0) {
+          resolve({ hasVideo: false, hasAudio: false });
+          return;
+        }
+
+        try {
+          const parsed = JSON.parse(stdout || '{}');
+          const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+          const video = streams.find((s: any) => s.codec_type === 'video');
+          const audio = streams.find((s: any) => s.codec_type === 'audio');
+
+          resolve({
+            hasVideo: !!video,
+            hasAudio: !!audio,
+            videoCodec: video?.codec_name,
+            width: video?.width,
+            height: video?.height,
+          });
+        } catch {
+          resolve({ hasVideo: false, hasAudio: false });
+        }
+      });
+    });
+  }
+
   constructor(
     private readonly recordingsService: RecordingsService,
     private readonly driveService: DriveService,
@@ -47,6 +99,8 @@ export class RecordingsUploadController {
     ffmpegAvailable?: boolean;
     diagnostics?: string[];
     usedCommand?: string;
+    sourceHasVideo?: boolean;
+    outputHasVideo?: boolean;
   }> {
     const tempBase = `recording-${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     const inputPath = join(tmpdir(), `${tempBase}.webm`);
@@ -65,6 +119,10 @@ export class RecordingsUploadController {
           'veryfast',
           '-crf',
           '23',
+          '-profile:v',
+          'high',
+          '-level',
+          '4.1',
           '-pix_fmt',
           'yuv420p',
           '-c:a',
@@ -82,19 +140,27 @@ export class RecordingsUploadController {
         ],
       },
       {
-        name: 'mpeg4-aac-fallback',
+        name: 'h264-baseline-fallback',
         args: [
           '-y',
           '-i',
           inputPath,
           '-c:v',
-          'mpeg4',
-          '-q:v',
-          '5',
+          'libx264',
+          '-preset',
+          'ultrafast',
+          '-crf',
+          '28',
+          '-profile:v',
+          'baseline',
+          '-level',
+          '3.1',
+          '-pix_fmt',
+          'yuv420p',
           '-c:a',
           'aac',
           '-b:a',
-          '128k',
+          '96k',
           '-movflags',
           '+faststart',
           '-map',
@@ -150,6 +216,12 @@ export class RecordingsUploadController {
       await fs.writeFile(inputPath, inputBuffer);
       this.logger.log(`[Recording] Starting FFmpeg conversion: ${inputPath} -> ${outputPath}`);
 
+      const sourceProbe = await this.probeMedia(inputPath);
+      const sourceHasVideo = sourceProbe.hasVideo;
+      this.logger.log(
+        `[Recording] Source probe: hasVideo=${sourceProbe.hasVideo}, hasAudio=${sourceProbe.hasAudio}, codec=${sourceProbe.videoCodec || 'unknown'}, size=${sourceProbe.width || 0}x${sourceProbe.height || 0}`,
+      );
+
       const attemptedCommands: Array<{ command: string; label: string }> = [];
 
       if (process.env.FFMPEG_PATH) {
@@ -204,12 +276,46 @@ export class RecordingsUploadController {
       }
 
       if (success) {
+        const outputProbe = await this.probeMedia(outputPath);
         const outputBuffer = await fs.readFile(outputPath);
-        this.logger.log(`[Recording] MP4 file created: ${outputBuffer.length} bytes`);
-        return { buffer: outputBuffer, ffmpegAvailable: true, diagnostics, usedCommand };
+        this.logger.log(
+          `[Recording] MP4 file created: ${outputBuffer.length} bytes | output hasVideo=${outputProbe.hasVideo}, hasAudio=${outputProbe.hasAudio}`,
+        );
+
+        if (!sourceHasVideo || !outputProbe.hasVideo) {
+          const reason = !sourceHasVideo
+            ? 'Source recording has no video stream'
+            : 'Converted mp4 has no video stream';
+          diagnostics.push(reason);
+          return {
+            buffer: null,
+            error: reason,
+            ffmpegAvailable: true,
+            diagnostics,
+            usedCommand,
+            sourceHasVideo,
+            outputHasVideo: outputProbe.hasVideo,
+          };
+        }
+
+        return {
+          buffer: outputBuffer,
+          ffmpegAvailable: true,
+          diagnostics,
+          usedCommand,
+          sourceHasVideo,
+          outputHasVideo: outputProbe.hasVideo,
+        };
       }
 
-      return { buffer: null, error: lastError, ffmpegAvailable: false, diagnostics };
+      return {
+        buffer: null,
+        error: lastError,
+        ffmpegAvailable: false,
+        diagnostics,
+        sourceHasVideo,
+        outputHasVideo: false,
+      };
     } catch (e: any) {
       this.logger.error(`[Recording] Conversion error: ${e?.message}`);
       return {
@@ -217,6 +323,8 @@ export class RecordingsUploadController {
         error: e?.message || 'Unknown ffmpeg conversion error',
         ffmpegAvailable: false,
         diagnostics: [e?.stack || e?.message || 'Unknown error'],
+        sourceHasVideo: false,
+        outputHasVideo: false,
       };
     } finally {
       await fs.unlink(inputPath).catch(() => undefined);
@@ -496,12 +604,15 @@ export class RecordingsUploadController {
     this.logger.log('[Recording] Starting MP4 conversion...');
     const conversion = await this.convertToMp4(file.buffer);
     const convertedMp4 = conversion.buffer;
-    
+
     if (convertedMp4) {
       this.logger.log(`[Recording] Conversion successful: ${file.buffer.length} bytes -> ${convertedMp4.length} bytes (MP4)`);
     } else {
       this.logger.warn(`[Recording] Conversion failed, keeping original format. Error: ${conversion.error || 'Unknown'}`);
     }
+
+    const outputFormat = convertedMp4 ? 'mp4' : 'webm';
+    const outputStatus = convertedMp4 ? 'converted' : 'fallback';
     
     const finalBuffer = convertedMp4 || file.buffer;
     const fileExt = (file.originalname || '').split('.').pop()?.toLowerCase();
@@ -634,7 +745,8 @@ export class RecordingsUploadController {
         fullPath: filePath,
         teamId: teamId,
       },
-      outputFormat: convertedMp4 ? 'mp4' : 'webm',
+      outputFormat,
+      outputStatus,
       message: convertedMp4
         ? undefined
         : conversion.error
@@ -642,6 +754,8 @@ export class RecordingsUploadController {
           : 'FFmpeg conversion failed, recording stored as WebM',
       conversionDiagnostics: conversion.diagnostics,
       ffmpegCommandUsed: conversion.usedCommand,
+      sourceHasVideo: conversion.sourceHasVideo,
+      outputHasVideo: conversion.outputHasVideo,
     };
   }
 }
