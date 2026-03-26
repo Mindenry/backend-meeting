@@ -43,88 +43,104 @@ export class RecordingsUploadController {
     const inputPath = join(tmpdir(), `${tempBase}.webm`);
     const outputPath = join(tmpdir(), `${tempBase}.mp4`);
 
-    try {
-      await fs.writeFile(inputPath, inputBuffer);
-      console.log(`[Recording] Starting FFmpeg conversion: ${inputPath} -> ${outputPath}`);
+    const ffmpegArgs = [
+      '-y',
+      '-i',
+      inputPath,
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-crf',
+      '23',
+      '-pix_fmt',
+      'yuv420p',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '128k',
+      '-movflags',
+      '+faststart',
+      '-map',
+      '0',
+      '-shortest',
+      outputPath,
+    ];
 
-      const result = await new Promise<{ success: boolean; error?: string }>(async (resolve) => {
-        // Prefer bundled ffmpeg binary (ffmpeg-static) to ensure conversion works in production.
-        // Fallback to system ffmpeg when package is unavailable.
-        let ffmpegCommand = 'ffmpeg';
-        let ffmpegAvailable = false;
-        try {
-          const ffmpegStaticModule = await import('ffmpeg-static');
-          const resolved =
-            (ffmpegStaticModule as any)?.default || (ffmpegStaticModule as any);
-          if (typeof resolved === 'string' && resolved.length > 0) {
-            ffmpegCommand = resolved;
-            ffmpegAvailable = true;
-            console.log(`[Recording] Using ffmpeg-static: ${ffmpegCommand}`);
-          }
-        } catch {
-          console.log('[Recording] ffmpeg-static not available, trying system ffmpeg');
-        }
+    const runFfmpeg = async (
+      command: string,
+      label: string,
+    ): Promise<{ success: boolean; error?: string }> => {
+      console.log(`[Recording] Trying FFmpeg (${label}): ${command}`);
+      return new Promise<{ success: boolean; error?: string }>((resolve) => {
+        const ffmpeg = spawn(command, ffmpegArgs);
 
-        const ffmpeg = spawn(ffmpegCommand, [
-          '-y',
-          '-i',
-          inputPath,
-          '-c:v',
-          'libx264',
-          '-preset',
-          'veryfast',
-          '-crf',
-          '23',
-          '-pix_fmt',
-          'yuv420p',
-          '-c:a',
-          'aac',
-          '-b:a',
-          '128k',
-          '-movflags',
-          '+faststart',
-          '-map',
-          '0',
-          '-shortest',
-          outputPath,
-        ]);
-
-        let errorOutput = ''
-        let stdoutOutput = '';
-        
-        ffmpeg.stdout.on('data', (chunk) => {
-          stdoutOutput += chunk.toString();
-        });
+        let errorOutput = '';
         ffmpeg.stderr.on('data', (chunk) => {
           errorOutput += chunk.toString();
         });
-        
+
         ffmpeg.on('error', (err) => {
-          console.error(`[Recording] FFmpeg spawn error: ${err.message}`);
-          resolve({ success: false, error: `FFmpeg not found: ${err.message}` });
+          resolve({ success: false, error: `Spawn error: ${err.message}` });
         });
-        
+
         ffmpeg.on('close', (code) => {
           if (code === 0) {
-            console.log(`[Recording] FFmpeg conversion completed successfully`);
             resolve({ success: true });
           } else {
-            console.error(`[Recording] FFmpeg exited with code ${code}: ${errorOutput.slice(-500)}`);
-            resolve({ 
-              success: false, 
-              error: `FFmpeg exited with code ${code}: ${errorOutput.slice(-300) || 'Unknown error'}` 
+            resolve({
+              success: false,
+              error: `Exit code ${code}: ${errorOutput.slice(-300) || 'Unknown error'}`,
             });
           }
         });
       });
+    };
 
-      if (result.success) {
+    try {
+      await fs.writeFile(inputPath, inputBuffer);
+      console.log(`[Recording] Starting FFmpeg conversion: ${inputPath} -> ${outputPath}`);
+
+      const attemptedCommands: Array<{ command: string; label: string }> = [];
+
+      if (process.env.FFMPEG_PATH) {
+        attemptedCommands.push({ command: process.env.FFMPEG_PATH, label: 'FFMPEG_PATH' });
+      }
+
+      // Use system ffmpeg first (works reliably in Railway Docker image)
+      attemptedCommands.push({ command: 'ffmpeg', label: 'system' });
+
+      try {
+        const ffmpegStaticModule = await import('ffmpeg-static');
+        const resolved =
+          (ffmpegStaticModule as any)?.default || (ffmpegStaticModule as any);
+        if (typeof resolved === 'string' && resolved.length > 0) {
+          attemptedCommands.push({ command: resolved, label: 'ffmpeg-static' });
+        }
+      } catch {
+        // no-op
+      }
+
+      let lastError = 'FFmpeg command not found';
+      let success = false;
+
+      for (const candidate of attemptedCommands) {
+        const result = await runFfmpeg(candidate.command, candidate.label);
+        if (result.success) {
+          success = true;
+          break;
+        }
+        lastError = `${candidate.label} (${candidate.command}) failed: ${result.error || 'Unknown error'}`;
+        console.warn(`[Recording] ${lastError}`);
+      }
+
+      if (success) {
         const outputBuffer = await fs.readFile(outputPath);
         console.log(`[Recording] MP4 file created: ${outputBuffer.length} bytes`);
         return { buffer: outputBuffer, ffmpegAvailable: true };
-      } else {
-        return { buffer: null, error: result.error, ffmpegAvailable: true };
       }
+
+      return { buffer: null, error: lastError, ffmpegAvailable: false };
     } catch (e: any) {
       console.error(`[Recording] Conversion error: ${e?.message}`);
       return {
