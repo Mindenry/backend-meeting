@@ -483,11 +483,13 @@ export class MeetingsService {
       throw new NotFoundException('Meeting not found');
     }
 
-    const existingParticipant = await this.prisma.meetingParticipant.findUnique({
-      where: {
-        meetingId_userId: { meetingId, userId },
+    const existingParticipant = await this.prisma.meetingParticipant.findUnique(
+      {
+        where: {
+          meetingId_userId: { meetingId, userId },
+        },
       },
-    });
+    );
 
     // Enforce max participant limit per room (up to 15)
     // Count active participants only (not left yet)

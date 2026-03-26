@@ -85,7 +85,8 @@ export class DriveController {
     }
 
     // Security hardening: prefer authenticated user id over client-provided createdById
-    const createdById = (req?.user?.id as string | undefined) || body.createdById;
+    const createdById =
+      (req?.user?.id as string | undefined) || body.createdById;
     if (!createdById) {
       throw new BadRequestException('Unable to determine uploader identity');
     }

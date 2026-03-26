@@ -299,7 +299,7 @@ export class EventsGateway
     // Get existing participants
     const participants = this.meetingParticipants.get(meetingId) || [];
 
-    // Add new participant
+    // Add or update participant (protect against duplicate join events)
     const newParticipant: MeetingParticipant = {
       peerId,
       name: peerName,
@@ -313,7 +313,14 @@ export class EventsGateway
         isHandRaised: false,
       },
     };
-    participants.push(newParticipant);
+
+    const existingIndex = participants.findIndex((p) => p.peerId === peerId);
+    if (existingIndex >= 0) {
+      participants[existingIndex] = newParticipant;
+    } else {
+      participants.push(newParticipant);
+    }
+
     this.meetingParticipants.set(meetingId, participants);
 
     // Track user -> meeting for rejoin on reconnect
@@ -699,25 +706,26 @@ export class EventsGateway
       // We only remove participants on explicit leave or disconnect
       // BUT: filter by actual connected socket to avoid stale/grace participants
       // causing "phantom" active rooms in the UI.
-      const activeParticipants = participants
-        .map((p) => {
-          // socket.io keeps disconnected sockets in our map during grace.
-          // Only consider participants whose socket is still connected.
-          if (!this.server.sockets.sockets.has(p.socketId)) return null;
-          const onlineInfo = this.onlineUsers.get(p.socketId);
-          return {
-            peerId: p.peerId,
-            name: p.name,
-            userId: p.userId ?? onlineInfo?.userId,
-            avatar: p.avatar || onlineInfo?.avatar,
-          };
-        })
-        .filter(Boolean) as Array<{
-        peerId: string;
-        name: string;
-        userId?: string;
-        avatar?: string;
-      }>;
+      const uniqueParticipants = new Map<
+        string,
+        { peerId: string; name: string; userId?: string; avatar?: string }
+      >();
+
+      participants.forEach((p) => {
+        // socket.io keeps disconnected sockets in our map during grace.
+        // Only consider participants whose socket is still connected.
+        if (!this.server.sockets.sockets.has(p.socketId)) return;
+
+        const onlineInfo = this.onlineUsers.get(p.socketId);
+        uniqueParticipants.set(p.peerId, {
+          peerId: p.peerId,
+          name: p.name,
+          userId: p.userId ?? onlineInfo?.userId,
+          avatar: p.avatar || onlineInfo?.avatar,
+        });
+      });
+
+      const activeParticipants = Array.from(uniqueParticipants.values());
 
       if (activeParticipants.length > 0) {
         // Use cached title, fallback to generic
