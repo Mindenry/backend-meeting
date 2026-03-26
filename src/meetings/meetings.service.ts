@@ -148,16 +148,6 @@ export class MeetingsService {
       });
       if (meeting) {
         isHost = meeting.hostId === userId;
-        if (!isHost && meeting.waitingRoom) {
-          const participant = await this.prisma.meetingParticipant.findUnique({
-            where: {
-              meetingId_userId: { meetingId, userId },
-            },
-          });
-          if (participant?.waitingRoom) {
-            throw new BadRequestException('Guest is in waiting room');
-          }
-        }
       }
     }
 

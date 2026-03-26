@@ -46,8 +46,22 @@ export class RecordingsUploadController {
     try {
       await fs.writeFile(inputPath, inputBuffer);
 
-      await new Promise<void>((resolve, reject) => {
-        const ffmpeg = spawn('ffmpeg', [
+      await new Promise<void>(async (resolve, reject) => {
+        // Prefer bundled ffmpeg binary (ffmpeg-static) to ensure conversion works in production.
+        // Fallback to system ffmpeg when package is unavailable.
+        let ffmpegCommand = 'ffmpeg';
+        try {
+          const ffmpegStaticModule = await import('ffmpeg-static');
+          const resolved =
+            (ffmpegStaticModule as any)?.default || (ffmpegStaticModule as any);
+          if (typeof resolved === 'string' && resolved.length > 0) {
+            ffmpegCommand = resolved;
+          }
+        } catch {
+          // ffmpeg-static not available, keep system ffmpeg fallback
+        }
+
+        const ffmpeg = spawn(ffmpegCommand, [
           '-y',
           '-i',
           inputPath,

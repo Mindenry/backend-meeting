@@ -10,12 +10,7 @@ import { verifyPassword } from '../auth/password';
 export class MeetingParticipantsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async joinMeeting(
-    meetingId: string,
-    userId: string,
-    password?: string,
-    skipWaitingRoom: boolean = false,
-  ) {
+  async joinMeeting(meetingId: string, userId: string, password?: string) {
     const meeting = await this.prisma.meeting.findUnique({
       where: { id: meetingId },
     });
@@ -25,7 +20,7 @@ export class MeetingParticipantsService {
     }
 
     // Security checks (skip for host)
-    if (meeting.hostId !== userId && !skipWaitingRoom) {
+    if (meeting.hostId !== userId) {
       if (meeting.isLocked) {
         throw new BadRequestException('Meeting is locked');
       }
@@ -60,10 +55,7 @@ export class MeetingParticipantsService {
         data: {
           joinedAt: new Date(),
           leftAt: null,
-          waitingRoom:
-            meeting.waitingRoom &&
-            !skipWaitingRoom &&
-            meeting.hostId !== userId,
+          waitingRoom: false,
         },
         include: {
           user: {
@@ -83,8 +75,7 @@ export class MeetingParticipantsService {
       data: {
         meetingId,
         userId,
-        waitingRoom:
-          meeting.waitingRoom && !skipWaitingRoom && meeting.hostId !== userId,
+        waitingRoom: false,
       },
       include: {
         user: {
@@ -126,10 +117,7 @@ export class MeetingParticipantsService {
     });
   }
 
-  async getParticipants(
-    meetingId: string,
-    includeWaitingRoom: boolean = false,
-  ) {
+  async getParticipants(meetingId: string) {
     // Check if meeting exists first
     const meeting = await this.prisma.meeting.findUnique({
       where: { id: meetingId },
@@ -143,82 +131,6 @@ export class MeetingParticipantsService {
       where: {
         meetingId,
         leftAt: null,
-        waitingRoom: includeWaitingRoom ? undefined : false,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            avatar: true,
-          },
-        },
-      },
-      orderBy: {
-        joinedAt: 'asc',
-      },
-    });
-  }
-
-  async getWaitingRoom(meetingId: string) {
-    // Check if meeting exists first
-    const meeting = await this.prisma.meeting.findUnique({
-      where: { id: meetingId },
-    });
-
-    if (!meeting) {
-      throw new NotFoundException('Meeting not found');
-    }
-
-    return this.prisma.meetingParticipant.findMany({
-      where: {
-        meetingId,
-        waitingRoom: true,
-        leftAt: null,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            avatar: true,
-          },
-        },
-      },
-      orderBy: {
-        joinedAt: 'asc',
-      },
-    });
-  }
-
-  async admitParticipant(meetingId: string, userId: string) {
-    const participant = await this.prisma.meetingParticipant.findUnique({
-      where: {
-        meetingId_userId: {
-          meetingId,
-          userId,
-        },
-      },
-    });
-
-    if (!participant) {
-      throw new NotFoundException('Participant not found');
-    }
-
-    if (!participant.waitingRoom) {
-      throw new BadRequestException('Participant is not in waiting room');
-    }
-
-    return this.prisma.meetingParticipant.update({
-      where: {
-        meetingId_userId: {
-          meetingId,
-          userId,
-        },
-      },
-      data: {
         waitingRoom: false,
       },
       include: {
@@ -231,32 +143,8 @@ export class MeetingParticipantsService {
           },
         },
       },
-    });
-  }
-
-  async denyParticipant(meetingId: string, userId: string) {
-    const participant = await this.prisma.meetingParticipant.findUnique({
-      where: {
-        meetingId_userId: {
-          meetingId,
-          userId,
-        },
-      },
-    });
-
-    if (!participant) {
-      throw new NotFoundException('Participant not found');
-    }
-
-    return this.prisma.meetingParticipant.update({
-      where: {
-        meetingId_userId: {
-          meetingId,
-          userId,
-        },
-      },
-      data: {
-        leftAt: new Date(),
+      orderBy: {
+        joinedAt: 'asc',
       },
     });
   }
@@ -290,29 +178,6 @@ export class MeetingParticipantsService {
         },
       },
     });
-  }
-
-  async muteAll(meetingId: string, hostId: string) {
-    const meeting = await this.prisma.meeting.findUnique({
-      where: { id: meetingId },
-    });
-
-    if (!meeting || meeting.hostId !== hostId) {
-      throw new BadRequestException('Only host can mute all participants');
-    }
-
-    await this.prisma.meetingParticipant.updateMany({
-      where: {
-        meetingId,
-        userId: { not: hostId },
-        leftAt: null,
-      },
-      data: {
-        isMuted: true,
-      },
-    });
-
-    return { success: true };
   }
 
   async removeParticipant(meetingId: string, userId: string, hostId: string) {

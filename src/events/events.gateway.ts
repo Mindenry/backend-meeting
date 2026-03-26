@@ -284,7 +284,6 @@ export class EventsGateway
           meetingId,
           actualUserId,
           undefined,
-          true,
         );
       } catch (error) {
         // Silently fail if meeting doesn't exist or user is not authorized
@@ -888,60 +887,6 @@ export class EventsGateway
       .to(`meeting:${data.meetingId}`)
       .emit('meeting:participant:force_mute', { peerId: data.targetPeerId });
     return { event: 'muted' };
-  }
-
-  @SubscribeMessage('meeting:participant:mute_all')
-  async handleMuteAll(
-    @MessageBody() data: { meetingId: string },
-    @ConnectedSocket() client: Socket,
-  ) {
-    const requesterUserId = this.onlineUsers.get(client.id)?.userId;
-    if (!requesterUserId) {
-      throw new ForbiddenException('User not authenticated');
-    }
-
-    if (data.meetingId.startsWith('quick-huddle')) {
-      const hostUserId = this.quickHuddleHosts.get(data.meetingId);
-      if (!hostUserId || hostUserId !== requesterUserId) {
-        throw new ForbiddenException(
-          'Only quick huddle host can mute all participants',
-        );
-      }
-      const participants = this.meetingParticipants.get(data.meetingId) || [];
-      for (const participant of participants) {
-        const info = this.onlineUsers.get(participant.socketId);
-        const isHostParticipant = info?.userId === hostUserId;
-        if (!isHostParticipant) {
-          this.server
-            .to(`meeting:${data.meetingId}`)
-            .emit('meeting:participant:force_mute', {
-              peerId: participant.peerId,
-            });
-        }
-      }
-    } else {
-      const meeting = await this.prisma.meeting.findUnique({
-        where: { id: data.meetingId },
-        select: { hostId: true },
-      });
-      if (!meeting || meeting.hostId !== requesterUserId) {
-        throw new ForbiddenException('Only host can mute all participants');
-      }
-      const participants = this.meetingParticipants.get(data.meetingId) || [];
-      for (const participant of participants) {
-        const info = this.onlineUsers.get(participant.socketId);
-        const isHostParticipant = info?.userId === meeting.hostId;
-        if (!isHostParticipant) {
-          this.server
-            .to(`meeting:${data.meetingId}`)
-            .emit('meeting:participant:force_mute', {
-              peerId: participant.peerId,
-            });
-        }
-      }
-    }
-
-    return { event: 'muted_all' };
   }
 
   @SubscribeMessage('meeting:recording:status')

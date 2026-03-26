@@ -6,7 +6,6 @@ import {
   Param,
   Patch,
   Delete,
-  Query,
   BadRequestException,
   UseGuards,
 } from '@nestjs/common';
@@ -24,7 +23,7 @@ export class MeetingParticipantsController {
   async joinMeeting(
     @Param('meetingId') meetingId: string,
     @Body()
-    body: { userId: string; password?: string; skipWaitingRoom?: boolean },
+    body: { userId: string; password?: string },
   ) {
     try {
       if (!body.userId) {
@@ -34,7 +33,6 @@ export class MeetingParticipantsController {
         meetingId,
         body.userId,
         body.password,
-        body.skipWaitingRoom,
       );
     } catch (error) {
       console.error('Error joining meeting:', error);
@@ -51,40 +49,13 @@ export class MeetingParticipantsController {
   }
 
   @Get()
-  async getParticipants(
-    @Param('meetingId') meetingId: string,
-    @Query('includeWaitingRoom') includeWaitingRoom?: string,
-  ) {
+  async getParticipants(@Param('meetingId') meetingId: string) {
     try {
-      return await this.participantsService.getParticipants(
-        meetingId,
-        includeWaitingRoom === 'true',
-      );
+      return await this.participantsService.getParticipants(meetingId);
     } catch (error) {
       console.error('Error getting participants:', error);
       throw error;
     }
-  }
-
-  @Get('waiting-room')
-  async getWaitingRoom(@Param('meetingId') meetingId: string) {
-    return this.participantsService.getWaitingRoom(meetingId);
-  }
-
-  @Post(':userId/admit')
-  async admitParticipant(
-    @Param('meetingId') meetingId: string,
-    @Param('userId') userId: string,
-  ) {
-    return this.participantsService.admitParticipant(meetingId, userId);
-  }
-
-  @Post(':userId/deny')
-  async denyParticipant(
-    @Param('meetingId') meetingId: string,
-    @Param('userId') userId: string,
-  ) {
-    return this.participantsService.denyParticipant(meetingId, userId);
   }
 
   @Patch(':userId/status')
@@ -104,14 +75,6 @@ export class MeetingParticipantsController {
       userId,
       body,
     );
-  }
-
-  @Post('mute-all')
-  async muteAll(
-    @Param('meetingId') meetingId: string,
-    @Body() body: { hostId: string },
-  ) {
-    return this.participantsService.muteAll(meetingId, body.hostId);
   }
 
   @Post(':userId/remove')
