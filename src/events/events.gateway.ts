@@ -283,7 +283,6 @@ export class EventsGateway
         await this.participantsService.joinMeeting(
           meetingId,
           actualUserId,
-          undefined,
         );
       } catch (error) {
         // Silently fail if meeting doesn't exist or user is not authorized
