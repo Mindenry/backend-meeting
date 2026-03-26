@@ -52,37 +52,68 @@ export class RecordingsUploadController {
     const inputPath = join(tmpdir(), `${tempBase}.webm`);
     const outputPath = join(tmpdir(), `${tempBase}.mp4`);
 
-    const ffmpegArgs = [
-      '-y',
-      '-i',
-      inputPath,
-      '-c:v',
-      'libx264',
-      '-preset',
-      'veryfast',
-      '-crf',
-      '23',
-      '-pix_fmt',
-      'yuv420p',
-      '-c:a',
-      'aac',
-      '-b:a',
-      '128k',
-      '-movflags',
-      '+faststart',
-      '-map',
-      '0',
-      '-shortest',
-      outputPath,
+    const ffmpegArgProfiles = [
+      {
+        name: 'h264-aac',
+        args: [
+          '-y',
+          '-i',
+          inputPath,
+          '-c:v',
+          'libx264',
+          '-preset',
+          'veryfast',
+          '-crf',
+          '23',
+          '-pix_fmt',
+          'yuv420p',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '128k',
+          '-movflags',
+          '+faststart',
+          '-map',
+          '0',
+          '-shortest',
+          outputPath,
+        ],
+      },
+      {
+        name: 'mpeg4-aac-fallback',
+        args: [
+          '-y',
+          '-i',
+          inputPath,
+          '-c:v',
+          'mpeg4',
+          '-q:v',
+          '5',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '128k',
+          '-movflags',
+          '+faststart',
+          '-map',
+          '0',
+          '-shortest',
+          outputPath,
+        ],
+      },
     ];
 
     const runFfmpeg = async (
       command: string,
       label: string,
+      args: string[],
+      profileName: string,
     ): Promise<{ success: boolean; error?: string; stderrTail?: string }> => {
-      this.logger.log(`[Recording] Trying FFmpeg (${label}): ${command}`);
+      this.logger.log(
+        `[Recording] Trying FFmpeg (${label}, profile=${profileName}): ${command}`,
+      );
       return new Promise<{ success: boolean; error?: string; stderrTail?: string }>((resolve) => {
-        const ffmpeg = spawn(command, ffmpegArgs);
+        const ffmpeg = spawn(command, args);
 
         let errorOutput = '';
         ffmpeg.stderr.on('data', (chunk) => {
@@ -141,20 +172,31 @@ export class RecordingsUploadController {
       const diagnostics: string[] = [];
 
       for (const candidate of attemptedCommands) {
-        const result = await runFfmpeg(candidate.command, candidate.label);
-        if (result.success) {
-          success = true;
-          usedCommand = `${candidate.label}:${candidate.command}`;
-          diagnostics.push(`SUCCESS ${usedCommand}`);
+        for (const profile of ffmpegArgProfiles) {
+          const result = await runFfmpeg(
+            candidate.command,
+            candidate.label,
+            profile.args,
+            profile.name,
+          );
+          if (result.success) {
+            success = true;
+            usedCommand = `${candidate.label}:${candidate.command}:${profile.name}`;
+            diagnostics.push(`SUCCESS ${usedCommand}`);
+            break;
+          }
+          const stderrInfo = result.stderrTail
+            ? ` | stderr=${result.stderrTail.replace(/\s+/g, ' ').slice(-280)}`
+            : '';
+          lastError = `${candidate.label} (${candidate.command}) profile=${profile.name} failed: ${result.error || 'Unknown error'}`;
+          const diagnosticLine = `${lastError}${stderrInfo}`;
+          diagnostics.push(diagnosticLine);
+          this.logger.warn(`[Recording] ${diagnosticLine}`);
+        }
+
+        if (success) {
           break;
         }
-        const stderrInfo = result.stderrTail
-          ? ` | stderr=${result.stderrTail.replace(/\s+/g, ' ').slice(-280)}`
-          : '';
-        lastError = `${candidate.label} (${candidate.command}) failed: ${result.error || 'Unknown error'}`;
-        const diagnosticLine = `${lastError}${stderrInfo}`;
-        diagnostics.push(diagnosticLine);
-        this.logger.warn(`[Recording] ${diagnosticLine}`);
       }
 
       if (success) {
@@ -458,9 +500,19 @@ export class RecordingsUploadController {
     }
     
     const finalBuffer = convertedMp4 || file.buffer;
+    const fileExt = (file.originalname || '').split('.').pop()?.toLowerCase();
+    const inferredSourceMime =
+      fileExt === 'webm'
+        ? 'video/webm'
+        : fileExt === 'mp4'
+          ? 'video/mp4'
+          : file.mimetype;
+
     const finalMimetype = convertedMp4
       ? 'video/mp4'
-      : file.mimetype || 'video/webm';
+      : inferredSourceMime && inferredSourceMime !== 'application/octet-stream'
+        ? inferredSourceMime
+        : 'video/webm';
     const finalName = `${dateStr}_${timeStr}${convertedMp4 ? '.mp4' : '.webm'}`;
     this.logger.log(`[Recording] Final file: ${finalName} (${finalMimetype}, ${finalBuffer.length} bytes)`);
 
