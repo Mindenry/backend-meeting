@@ -718,20 +718,19 @@ export class EventsGateway
       >();
 
       participants.forEach((p) => {
-        const socketConnected = this.server.sockets.sockets.has(p.socketId);
-        if (!socketConnected) {
-          const disconnected = this.disconnectedParticipants.get(p.socketId);
-          // Keep participant visible for UI during short reconnect window
-          if (
-            !disconnected ||
-            disconnected.meetingId !== meetingId ||
-            nowMs - disconnected.disconnectedAt.getTime() > DISCONNECTED_UI_GRACE_MS
-          ) {
-            return;
-          }
+        // Discord-like behavior: trust meetingParticipants as source of truth.
+        // Participant entries are removed on explicit leave or cleanup grace timeout,
+        // so we do NOT hide rooms just because a socket momentarily drops.
+        const onlineInfo = this.onlineUsers.get(p.socketId);
+        const disconnected = this.disconnectedParticipants.get(p.socketId);
+        if (
+          disconnected &&
+          disconnected.meetingId === meetingId &&
+          nowMs - disconnected.disconnectedAt.getTime() > DISCONNECTED_UI_GRACE_MS
+        ) {
+          return;
         }
 
-        const onlineInfo = socketConnected ? this.onlineUsers.get(p.socketId) : undefined;
         uniqueParticipants.set(p.peerId, {
           peerId: p.peerId,
           name: p.name,
