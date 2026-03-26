@@ -676,6 +676,12 @@ export class EventsGateway
   }
 
   private getActiveRoomsData() {
+    // UI needs stability: during socket disconnect/reconnect,
+    // backend may temporarily think rooms are empty. We keep disconnected
+    // participants visible for a short grace period to prevent "blink".
+    const DISCONNECTED_UI_GRACE_MS = 5000; // keep in active rooms for 5s after disconnect
+    const nowMs = Date.now();
+
     const rooms: Array<{
       roomId: string;
       name: string;
@@ -712,11 +718,20 @@ export class EventsGateway
       >();
 
       participants.forEach((p) => {
-        // socket.io keeps disconnected sockets in our map during grace.
-        // Only consider participants whose socket is still connected.
-        if (!this.server.sockets.sockets.has(p.socketId)) return;
+        const socketConnected = this.server.sockets.sockets.has(p.socketId);
+        if (!socketConnected) {
+          const disconnected = this.disconnectedParticipants.get(p.socketId);
+          // Keep participant visible for UI during short reconnect window
+          if (
+            !disconnected ||
+            disconnected.meetingId !== meetingId ||
+            nowMs - disconnected.disconnectedAt.getTime() > DISCONNECTED_UI_GRACE_MS
+          ) {
+            return;
+          }
+        }
 
-        const onlineInfo = this.onlineUsers.get(p.socketId);
+        const onlineInfo = socketConnected ? this.onlineUsers.get(p.socketId) : undefined;
         uniqueParticipants.set(p.peerId, {
           peerId: p.peerId,
           name: p.name,
