@@ -1,81 +1,234 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+
+interface CurrentUser {
+  id: string;
+  role: string;
+  organizationId: string;
+}
+
+type DateRangeKey = 'week' | 'month' | 'quarter' | 'year';
 
 @Injectable()
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private isPrivileged(user: CurrentUser): boolean {
+    const role = String(user?.role || '').toLowerCase();
+    return role === 'org_owner' || role === 'admin' || role === 'manager';
+  }
+
+  private async ensureTeamAccess(teamId: string, currentUser: CurrentUser) {
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team) throw new NotFoundException('Team not found');
+
+    if (team.organizationId !== currentUser.organizationId) {
+      throw new ForbiddenException('Team not in your organization');
+    }
+
+    if (this.isPrivileged(currentUser)) return team;
+
+    const membership = await this.prisma.teamMember.findFirst({
+      where: { teamId, userId: currentUser.id },
+      select: { id: true },
+    });
+
+    if (!membership) {
+      throw new ForbiddenException('No access to this team');
+    }
+
+    return team;
+  }
+
+  private enforceOrganizationScope(
+    requestedOrganizationId: string | undefined,
+    currentUser: CurrentUser,
+  ): string {
+    if (requestedOrganizationId) {
+      if (requestedOrganizationId !== currentUser.organizationId) {
+        throw new ForbiddenException('Cannot access another organization');
+      }
+      return requestedOrganizationId;
+    }
+    return currentUser.organizationId;
+  }
+
+  private resolveDateRange(
+    range: DateRangeKey = 'month',
+    startDate?: Date,
+    endDate?: Date,
+  ) {
+    if (startDate || endDate) {
+      return {
+        startDate: startDate ?? new Date(),
+        endDate: endDate ?? new Date(),
+      };
+    }
+
+    const resolvedEndDate = new Date();
+    const resolvedStartDate = new Date();
+
+    switch (range) {
+      case 'week':
+        resolvedStartDate.setDate(resolvedStartDate.getDate() - 7);
+        break;
+      case 'month':
+        resolvedStartDate.setMonth(resolvedStartDate.getMonth() - 1);
+        break;
+      case 'quarter':
+        resolvedStartDate.setMonth(resolvedStartDate.getMonth() - 3);
+        break;
+      case 'year':
+        resolvedStartDate.setFullYear(resolvedStartDate.getFullYear() - 1);
+        break;
+    }
+
+    return {
+      startDate: resolvedStartDate,
+      endDate: resolvedEndDate,
+    };
+  }
+
+  async getOverviewReport(currentUser: CurrentUser, range: DateRangeKey = 'month') {
+    const { startDate, endDate } = this.resolveDateRange(range);
+
+    const userReport = await this.getUserActivityReport(
+      currentUser.id,
+      startDate,
+      endDate,
+      currentUser,
+    );
+
+    const teamMetrics = await this.getUserTeamMetrics(
+      currentUser.id,
+      startDate,
+      endDate,
+      currentUser,
+    );
+
+    const tasksCompleted = userReport.summary?.tasks?.completed || 0;
+    const tasksTotal = userReport.summary?.tasks?.total || 0;
+    const messagesSent = userReport.summary?.messagesSent || 0;
+    const productivityScore =
+      tasksTotal > 0
+        ? Math.min(100, (tasksCompleted / tasksTotal) * 100)
+        : messagesSent > 0
+          ? 100
+          : 0;
+
+    return {
+      tasksCompleted,
+      meetingsAttended: userReport.summary?.meetings?.attended || 0,
+      messagesSent,
+      productivityScore,
+      teamMetrics,
+    };
+  }
+
+  async getUserTeamMetrics(
+    userId: string,
+    startDate: Date,
+    endDate: Date,
+    currentUser: CurrentUser,
+  ) {
+    if (!this.isPrivileged(currentUser) && currentUser.id !== userId) {
+      throw new ForbiddenException('Cannot access another user report');
+    }
+
+    const memberships = await this.prisma.teamMember.findMany({
+      where: {
+        userId,
+        team: { organizationId: currentUser.organizationId },
+      },
+      include: { team: true },
+    });
+
+    return Promise.all(
+      memberships.map(async (membership) => {
+        const teamId = membership.teamId;
+        const [tasksCompleted, meetingsAttended, messagesSent] =
+          await Promise.all([
+            this.prisma.task.count({
+              where: {
+                teamId,
+                assigneeId: userId,
+                status: 'done',
+                createdAt: { gte: startDate, lte: endDate },
+              },
+            }),
+            this.prisma.meetingParticipant.count({
+              where: {
+                userId,
+                meeting: {
+                  teamId,
+                  startTime: { gte: startDate, lte: endDate },
+                },
+              },
+            }),
+            this.prisma.message.count({
+              where: {
+                senderId: userId,
+                channel: { teamId },
+                createdAt: { gte: startDate, lte: endDate },
+              },
+            }),
+          ]);
+
+        return {
+          teamName: membership.team.name,
+          tasksCompleted,
+          meetingsAttended,
+          messagesSent,
+        };
+      }),
+    );
+  }
+
   async getTeamProductivityReport(
     teamId: string,
     startDate: Date,
     endDate: Date,
+    currentUser: CurrentUser,
   ) {
-    // Check if team exists
-    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
-    if (!team) {
-      throw new NotFoundException('Team not found');
-    }
+    const team = await this.ensureTeamAccess(teamId, currentUser);
 
-    // Get team members
-    const teamMembers = await this.prisma.teamMember.findMany({
-      where: { teamId },
-      include: { user: true },
-    });
-
-    // Get tasks
-    const tasks = await this.prisma.task.findMany({
-      where: {
-        teamId,
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
+    const [teamMembers, tasks, meetings, messages] = await Promise.all([
+      this.prisma.teamMember.findMany({
+        where: { teamId },
+        include: {
+          user: { select: { id: true, name: true, email: true } },
         },
-      },
-      include: {
-        assignee: true,
-        timeEntries: true,
-      },
-    });
-
-    // Get meetings
-    const meetings = await this.prisma.meeting.findMany({
-      where: {
-        teamId,
-        startTime: {
-          gte: startDate,
-          lte: endDate,
+      }),
+      this.prisma.task.findMany({
+        where: {
+          teamId,
+          createdAt: { gte: startDate, lte: endDate },
         },
-      },
-      include: {
-        host: true,
-        participants: {
-          include: {
-            user: true,
-          },
+      }),
+      this.prisma.meeting.findMany({
+        where: {
+          teamId,
+          startTime: { gte: startDate, lte: endDate },
         },
-        recordings: true,
-        minutes: true,
-      },
-    });
-
-    // Get messages in team channels
-    const teamChannels = await this.prisma.channel.findMany({
-      where: { teamId },
-      select: { id: true },
-    });
-    const channelIds = teamChannels.map((c) => c.id);
-
-    const messages = await this.prisma.message.findMany({
-      where: {
-        channelId: { in: channelIds },
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
+        include: {
+          participants: { select: { userId: true } },
+          recordings: { select: { id: true } },
+          minutes: { select: { id: true } },
         },
-      },
-    });
+      }),
+      this.prisma.message.findMany({
+        where: {
+          channel: { teamId },
+          createdAt: { gte: startDate, lte: endDate },
+        },
+        select: { senderId: true },
+      }),
+    ]);
 
-    // Calculate statistics
     const taskStats = {
       total: tasks.length,
       byStatus: tasks.reduce(
@@ -104,36 +257,32 @@ export class ReportsService {
         const endTime = m.endTime
           ? new Date(m.endTime).getTime()
           : new Date(m.startTime).getTime();
-        const duration = endTime - new Date(m.startTime).getTime();
-        return sum + duration;
+        return sum + (endTime - new Date(m.startTime).getTime());
       }, 0),
       withRecordings: meetings.filter((m) => m.recordings.length > 0).length,
       withMinutes: meetings.filter((m) => m.minutes.length > 0).length,
     };
 
-    const memberStats = await Promise.all(
-      teamMembers.map(async (member) => {
-        const memberTasks = tasks.filter((t) => t.assigneeId === member.userId);
-        return {
-          user: member.user,
-          tasks: {
-            total: memberTasks.length,
-            completed: memberTasks.filter((t) => t.status === 'done').length,
-            inProgress: memberTasks.filter((t) => t.status === 'in_progress')
-              .length,
-          },
-          messagesSent: messages.filter((m) => m.senderId === member.userId)
+    const memberStats = teamMembers.map((member) => {
+      const memberTasks = tasks.filter((t) => t.assigneeId === member.userId);
+      return {
+        user: member.user,
+        tasks: {
+          total: memberTasks.length,
+          completed: memberTasks.filter((t) => t.status === 'done').length,
+          inProgress: memberTasks.filter((t) => t.status === 'in_progress')
             .length,
-          meetingsAttended: meetings.filter((m) =>
-            m.participants.some((p) => p.userId === member.userId),
-          ).length,
-        };
-      }),
-    );
+        },
+        messagesSent: messages.filter((m) => m.senderId === member.userId).length,
+        meetingsAttended: meetings.filter((m) =>
+          m.participants.some((p) => p.userId === member.userId),
+        ).length,
+      };
+    });
 
     return {
       period: { start: startDate, end: endDate },
-      team: team,
+      team,
       summary: {
         members: teamMembers.length,
         tasks: taskStats,
@@ -148,80 +297,56 @@ export class ReportsService {
     teamId?: string;
     startDate?: Date;
     endDate?: Date;
+    currentUser: CurrentUser;
   }) {
-    const { organizationId, teamId, startDate, endDate } = params;
+    const { organizationId, teamId, startDate, endDate, currentUser } = params;
+
+    const scopedOrgId = this.enforceOrganizationScope(
+      organizationId,
+      currentUser,
+    );
+
+    if (teamId) await this.ensureTeamAccess(teamId, currentUser);
 
     const where: any = {
       status: 'ended',
+      team: { organizationId: scopedOrgId },
     };
 
-    if (teamId) {
-      where.teamId = teamId;
-    }
+    if (teamId) where.teamId = teamId;
 
     if (startDate || endDate) {
       where.actualStartTime = {};
-      if (startDate) {
-        where.actualStartTime.gte = startDate;
-      }
-      if (endDate) {
-        where.actualStartTime.lte = endDate;
-      }
+      if (startDate) where.actualStartTime.gte = startDate;
+      if (endDate) where.actualStartTime.lte = endDate;
     }
 
-    // Get meetings
     const meetings = await this.prisma.meeting.findMany({
       where,
       include: {
-        host: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        team: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        participants: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
-        },
+        host: { select: { id: true, name: true, email: true } },
+        team: { select: { id: true, name: true } },
+        participants: { select: { id: true } },
       },
-      orderBy: {
-        actualStartTime: 'desc',
-      },
+      orderBy: { actualStartTime: 'desc' },
     });
 
     const totalMeetings = meetings.length;
     const totalDuration = meetings.reduce((sum, m) => {
       if (m.actualStartTime && m.actualEndTime) {
-        const duration =
-          m.actualEndTime.getTime() - m.actualStartTime.getTime();
-        return sum + duration;
+        return sum + (m.actualEndTime.getTime() - m.actualStartTime.getTime());
       }
       return sum;
     }, 0);
 
-    const totalParticipants = meetings.reduce((sum, m) => {
-      return sum + m.participants.length;
-    }, 0);
+    const totalParticipants = meetings.reduce(
+      (sum, m) => sum + m.participants.length,
+      0,
+    );
 
-    const avgParticipants =
-      totalMeetings > 0 ? totalParticipants / totalMeetings : 0;
-    const avgDuration =
-      totalMeetings > 0 ? totalDuration / totalMeetings / 1000 / 60 : 0; // in minutes
+    const avgParticipants = totalMeetings > 0 ? totalParticipants / totalMeetings : 0;
+    const avgDuration = totalMeetings > 0 ? totalDuration / totalMeetings / 1000 / 60 : 0;
 
-    // Meetings by team
     const meetingsByTeam = meetings.reduce(
       (acc, m) => {
         const teamName = m.team?.name || 'No Team';
@@ -231,11 +356,9 @@ export class ReportsService {
       {} as Record<string, number>,
     );
 
-    // Most active hosts
     const hostStats = meetings.reduce(
       (acc, m) => {
-        const hostName = m.host.name;
-        acc[hostName] = (acc[hostName] || 0) + 1;
+        acc[m.host.name] = (acc[m.host.name] || 0) + 1;
         return acc;
       },
       {} as Record<string, number>,
@@ -244,7 +367,7 @@ export class ReportsService {
     return {
       summary: {
         totalMeetings,
-        totalDuration: totalDuration / 1000 / 60, // minutes
+        totalDuration: totalDuration / 1000 / 60,
         totalParticipants,
         avgParticipants: Math.round(avgParticipants * 10) / 10,
         avgDuration: Math.round(avgDuration * 10) / 10,
@@ -258,9 +381,7 @@ export class ReportsService {
         endTime: m.actualEndTime,
         duration:
           m.actualStartTime && m.actualEndTime
-            ? (m.actualEndTime.getTime() - m.actualStartTime.getTime()) /
-              1000 /
-              60
+            ? (m.actualEndTime.getTime() - m.actualStartTime.getTime()) / 1000 / 60
             : 0,
         host: m.host.name,
         team: m.team?.name,
@@ -269,66 +390,55 @@ export class ReportsService {
     };
   }
 
-  async getUserActivityReport(userId: string, startDate: Date, endDate: Date) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      throw new NotFoundException('User not found');
+  async getUserActivityReport(
+    userId: string,
+    startDate: Date,
+    endDate: Date,
+    currentUser: CurrentUser,
+  ) {
+    if (!this.isPrivileged(currentUser) && currentUser.id !== userId) {
+      throw new ForbiddenException('Cannot access another user report');
     }
 
-    // Get user's tasks
-    const tasks = await this.prisma.task.findMany({
-      where: {
-        assigneeId: userId,
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, organizationId: currentUser.organizationId },
     });
+    if (!user) throw new NotFoundException('User not found');
 
-    // Get user's time entries
-    const timeEntries = await this.prisma.timeEntry.findMany({
-      where: {
-        userId,
-        startTime: {
-          gte: startDate,
-          lte: endDate,
+    const [tasks, timeEntries, meetings, messages] = await Promise.all([
+      this.prisma.task.findMany({
+        where: {
+          assigneeId: userId,
+          team: { organizationId: currentUser.organizationId },
+          createdAt: { gte: startDate, lte: endDate },
         },
-      },
-      include: {
-        task: true,
-      },
-    });
-
-    // Get meetings user attended
-    const meetings = await this.prisma.meetingParticipant.findMany({
-      where: {
-        userId,
-        joinedAt: {
-          gte: startDate,
-          lte: endDate,
+      }),
+      this.prisma.timeEntry.findMany({
+        where: {
+          userId,
+          startTime: { gte: startDate, lte: endDate },
+          task: { team: { organizationId: currentUser.organizationId } },
         },
-      },
-      include: {
-        meeting: {
-          include: {
-            host: true,
-            team: true,
-          },
+        include: { task: true },
+      }),
+      this.prisma.meetingParticipant.findMany({
+        where: {
+          userId,
+          joinedAt: { gte: startDate, lte: endDate },
+          meeting: { team: { organizationId: currentUser.organizationId } },
         },
-      },
-    });
-
-    // Get messages sent
-    const messages = await this.prisma.message.findMany({
-      where: {
-        senderId: userId,
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
+        include: {
+          meeting: { include: { host: true, team: true } },
         },
-      },
-    });
+      }),
+      this.prisma.message.findMany({
+        where: {
+          senderId: userId,
+          channel: { team: { organizationId: currentUser.organizationId } },
+          createdAt: { gte: startDate, lte: endDate },
+        },
+      }),
+    ]);
 
     return {
       period: { start: startDate, end: endDate },
@@ -342,12 +452,8 @@ export class ReportsService {
         messagesSent: messages.length,
         meetings: {
           attended: meetings.length,
-          totalDuration: meetings.reduce((sum, m) => {
-            const duration = m.duration || 0;
-            return sum + duration;
-          }, 0),
+          totalDuration: meetings.reduce((sum, m) => sum + (m.duration || 0), 0),
         },
-        messages: messages.length,
       },
       details: {
         tasks,
@@ -364,49 +470,45 @@ export class ReportsService {
     assigneeId?: string;
     startDate?: Date;
     endDate?: Date;
+    currentUser: CurrentUser;
   }) {
-    const { teamId, assigneeId, startDate, endDate } = params;
+    const {
+      organizationId,
+      teamId,
+      assigneeId,
+      startDate,
+      endDate,
+      currentUser,
+    } = params;
 
-    const where: any = {};
+    const scopedOrgId = this.enforceOrganizationScope(
+      organizationId,
+      currentUser,
+    );
 
-    if (teamId) {
-      where.teamId = teamId;
-    }
+    if (teamId) await this.ensureTeamAccess(teamId, currentUser);
 
-    if (assigneeId) {
-      where.assigneeId = assigneeId;
-    }
+    const where: any = {
+      team: { organizationId: scopedOrgId },
+    };
+
+    if (teamId) where.teamId = teamId;
+    if (assigneeId) where.assigneeId = assigneeId;
 
     if (startDate || endDate) {
       where.createdAt = {};
-      if (startDate) {
-        where.createdAt.gte = startDate;
-      }
-      if (endDate) {
-        where.createdAt.lte = endDate;
-      }
+      if (startDate) where.createdAt.gte = startDate;
+      if (endDate) where.createdAt.lte = endDate;
     }
 
     const tasks = await this.prisma.task.findMany({
       where,
       include: {
-        assignee: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        team: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        assignee: { select: { id: true, name: true, email: true } },
+        team: { select: { id: true, name: true } },
       },
     });
 
-    // Statistics
     const totalTasks = tasks.length;
     const tasksByStatus = tasks.reduce(
       (acc, t) => {
@@ -471,59 +573,32 @@ export class ReportsService {
 
   async getTeamWorkloadReport(
     teamId: string,
-    startDate?: Date,
-    endDate?: Date,
+    startDate: Date | undefined,
+    endDate: Date | undefined,
+    currentUser: CurrentUser,
   ) {
-    const team = await this.prisma.team.findUnique({
-      where: { id: teamId },
+    const team = await this.ensureTeamAccess(teamId, currentUser);
+
+    const members = await this.prisma.teamMember.findMany({
+      where: { teamId },
       include: {
-        members: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-        },
+        user: { select: { id: true, name: true, email: true } },
       },
     });
-
-    if (!team) {
-      throw new Error('Team not found');
-    }
 
     const tasksWhere: any = { teamId };
     if (startDate || endDate) {
       tasksWhere.createdAt = {};
-      if (startDate) {
-        tasksWhere.createdAt.gte = startDate;
-      }
-      if (endDate) {
-        tasksWhere.createdAt.lte = endDate;
-      }
+      if (startDate) tasksWhere.createdAt.gte = startDate;
+      if (endDate) tasksWhere.createdAt.lte = endDate;
     }
 
-    const tasks = await this.prisma.task.findMany({
-      where: tasksWhere,
-      include: {
-        assignee: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    });
+    const tasks = await this.prisma.task.findMany({ where: tasksWhere });
 
-    const workload = team.members.map((member) => {
+    const workload = members.map((member) => {
       const userTasks = tasks.filter((t) => t.assigneeId === member.userId);
       const completed = userTasks.filter((t) => t.status === 'done').length;
-      const inProgress = userTasks.filter(
-        (t) => t.status === 'in_progress',
-      ).length;
+      const inProgress = userTasks.filter((t) => t.status === 'in_progress').length;
       const todo = userTasks.filter((t) => t.status === 'todo').length;
       const overdue = userTasks.filter((t) => {
         if (!t.dueDate) return false;
@@ -542,10 +617,7 @@ export class ReportsService {
     });
 
     return {
-      team: {
-        id: team.id,
-        name: team.name,
-      },
+      team: { id: team.id, name: team.name },
       workload,
     };
   }
@@ -555,10 +627,17 @@ export class ReportsService {
     teamId?: string;
     startDate?: Date;
     endDate?: Date;
+    currentUser: CurrentUser;
   }) {
-    const { organizationId, teamId, startDate, endDate } = params;
+    const { organizationId, teamId, startDate, endDate, currentUser } = params;
 
-    // Default to last 30 days if no dates provided
+    const scopedOrgId = this.enforceOrganizationScope(
+      organizationId,
+      currentUser,
+    );
+
+    if (teamId) await this.ensureTeamAccess(teamId, currentUser);
+
     const defaultStartDate =
       startDate ??
       (() => {
@@ -568,14 +647,8 @@ export class ReportsService {
       })();
     const defaultEndDate = endDate ?? new Date();
 
-    // Get all users in the organization/team
-    const userWhere: any = {};
-    if (organizationId) {
-      userWhere.organizationId = organizationId;
-    }
-
     const users = await this.prisma.user.findMany({
-      where: userWhere,
+      where: { organizationId: scopedOrgId },
       select: {
         id: true,
         name: true,
@@ -584,42 +657,58 @@ export class ReportsService {
       },
     });
 
-    // Filter users by team if specified
-    let teamUserIds = users.map((u) => u.id);
+    let scopedUsers = users;
     if (teamId) {
       const teamMembers = await this.prisma.teamMember.findMany({
         where: { teamId },
         select: { userId: true },
       });
-      teamUserIds = teamMembers.map((tm) => tm.userId);
+      const ids = new Set(teamMembers.map((m) => m.userId));
+      scopedUsers = users.filter((u) => ids.has(u.id));
     }
 
-    const filteredUsers = users.filter((u) => teamUserIds.includes(u.id));
+    const teamChannelIds = teamId
+      ? (
+          await this.prisma.channel.findMany({
+            where: { teamId },
+            select: { id: true },
+          })
+        ).map((c) => c.id)
+      : (
+          await this.prisma.channel.findMany({
+            where: { team: { organizationId: scopedOrgId } },
+            select: { id: true },
+          })
+        ).map((c) => c.id);
 
-    // 1. Task completion rate per person
+    const meetingsScopeWhere: any = {
+      status: 'ended',
+      team: { organizationId: scopedOrgId },
+      actualStartTime: { gte: defaultStartDate, lte: defaultEndDate },
+    };
+    if (teamId) meetingsScopeWhere.teamId = teamId;
+
+    const meetings = await this.prisma.meeting.findMany({
+      where: meetingsScopeWhere,
+      select: { id: true },
+    });
+    const meetingIds = meetings.map((m) => m.id);
+
     const taskCompletionRates = await Promise.all(
-      filteredUsers.map(async (user) => {
+      scopedUsers.map(async (user) => {
         const tasksWhere: any = {
           assigneeId: user.id,
-          createdAt: {
-            gte: defaultStartDate,
-            lte: defaultEndDate,
-          },
+          team: { organizationId: scopedOrgId },
+          createdAt: { gte: defaultStartDate, lte: defaultEndDate },
         };
+        if (teamId) tasksWhere.teamId = teamId;
 
-        const allTasks = await this.prisma.task.count({
-          where: tasksWhere,
-        });
+        const [allTasks, completedTasks] = await Promise.all([
+          this.prisma.task.count({ where: tasksWhere }),
+          this.prisma.task.count({ where: { ...tasksWhere, status: 'done' } }),
+        ]);
 
-        const completedTasks = await this.prisma.task.count({
-          where: {
-            ...tasksWhere,
-            status: 'done',
-          },
-        });
-
-        const completionRate =
-          allTasks > 0 ? (completedTasks / allTasks) * 100 : 0;
+        const completionRate = allTasks > 0 ? (completedTasks / allTasks) * 100 : 0;
 
         return {
           userId: user.id,
@@ -631,156 +720,8 @@ export class ReportsService {
       }),
     );
 
-    // 2. Meeting attendance rate
     const meetingAttendanceRates = await Promise.all(
-      filteredUsers.map(async (user) => {
-        const meetingsWhere: any = {
-          status: 'ended',
-          actualStartTime: {
-            gte: defaultStartDate,
-            lte: defaultEndDate,
-          },
-        };
-
-        if (teamId) {
-          meetingsWhere.teamId = teamId;
-        }
-
-        const allMeetings = await this.prisma.meeting.findMany({
-          where: meetingsWhere,
-          select: { id: true },
-        });
-
-        const meetingIds = allMeetings.map((m) => m.id);
-        const attendedMeetings = await this.prisma.meetingParticipant.count({
-          where: {
-            userId: user.id,
-            meetingId: { in: meetingIds },
-            leftAt: { not: null }, // Must have left (attended)
-          },
-        });
-
-        const attendanceRate =
-          meetingIds.length > 0
-            ? (attendedMeetings / meetingIds.length) * 100
-            : 0;
-
-        return {
-          userId: user.id,
-          userName: user.name,
-          totalMeetings: meetingIds.length,
-          attendedMeetings,
-          attendanceRate: Math.round(attendanceRate * 10) / 10,
-        };
-      }),
-    );
-
-    // 3. Response time in chat (average time to read messages)
-    const chatResponseTimes = await Promise.all(
-      filteredUsers.map(async (user) => {
-        // Get messages in channels where user is a team member
-        const channelsWhere: any = {};
-        if (teamId) {
-          channelsWhere.teamId = teamId;
-        }
-
-        const channels = await this.prisma.channel.findMany({
-          where: channelsWhere,
-          select: { id: true },
-        });
-
-        const channelIds = channels.map((c) => c.id);
-
-        // Get messages that mention the user or are in their channels
-        const messages = await this.prisma.message.findMany({
-          where: {
-            channelId: { in: channelIds },
-            createdAt: {
-              gte: defaultStartDate,
-              lte: defaultEndDate,
-            },
-            senderId: { not: user.id }, // Not sent by the user
-          },
-          include: {
-            reads: {
-              where: { userId: user.id },
-            },
-          },
-          orderBy: { createdAt: 'asc' },
-        });
-
-        const responseTimes: number[] = [];
-        for (const message of messages) {
-          const read = message.reads[0];
-          if (read) {
-            const responseTime =
-              read.readAt.getTime() - message.createdAt.getTime();
-            if (responseTime > 0 && responseTime < 7 * 24 * 60 * 60 * 1000) {
-              // Less than 7 days
-              responseTimes.push(responseTime);
-            }
-          }
-        }
-
-        const avgResponseTime =
-          responseTimes.length > 0
-            ? responseTimes.reduce((sum, time) => sum + time, 0) /
-              responseTimes.length
-            : null;
-
-        return {
-          userId: user.id,
-          userName: user.name,
-          totalMessages: messages.length,
-          respondedMessages: responseTimes.length,
-          avgResponseTimeMinutes: avgResponseTime
-            ? Math.round((avgResponseTime / 1000 / 60) * 10) / 10
-            : null,
-          avgResponseTimeHours: avgResponseTime
-            ? Math.round((avgResponseTime / 1000 / 60 / 60) * 10) / 10
-            : null,
-        };
-      }),
-    );
-
-    // 4. Collaboration Activity (Total Interactions)
-    const collaborationActivity = await Promise.all(
-      filteredUsers.map(async (user) => {
-        // Output = completed tasks
-        const completedTasks = await this.prisma.task.count({
-          where: {
-            assigneeId: user.id,
-            status: 'done',
-            updatedAt: {
-              gte: defaultStartDate,
-              lte: defaultEndDate,
-            },
-          },
-        });
-
-        // Meetings attended
-        const meetingIds = (
-          await this.prisma.meeting.findMany({
-            where: teamId
-              ? {
-                  teamId,
-                  status: 'ended',
-                  actualStartTime: {
-                    gte: defaultStartDate,
-                    lte: defaultEndDate,
-                  },
-                }
-              : {
-                  status: 'ended',
-                  actualStartTime: {
-                    gte: defaultStartDate,
-                    lte: defaultEndDate,
-                  },
-                },
-            select: { id: true },
-          })
-        ).map((m) => m.id);
-
+      scopedUsers.map(async (user) => {
         const attendedMeetings =
           meetingIds.length > 0
             ? await this.prisma.meetingParticipant.count({
@@ -792,35 +733,50 @@ export class ReportsService {
               })
             : 0;
 
-        // Chat messages sent
-        const channelsWhere: any = {};
-        if (teamId) {
-          channelsWhere.teamId = teamId;
-        }
+        const attendanceRate =
+          meetingIds.length > 0 ? (attendedMeetings / meetingIds.length) * 100 : 0;
 
-        const channelIds = (
-          await this.prisma.channel.findMany({
-            where: channelsWhere,
-            select: { id: true },
-          })
-        ).map((c) => c.id);
+        return {
+          userId: user.id,
+          userName: user.name,
+          totalMeetings: meetingIds.length,
+          attendedMeetings,
+          attendanceRate: Math.round(attendanceRate * 10) / 10,
+        };
+      }),
+    );
 
-        const messagesSent =
-          channelIds.length > 0
-            ? await this.prisma.message.count({
+    const collaborationActivity = await Promise.all(
+      scopedUsers.map(async (user) => {
+        const [completedTasks, attendedMeetings, messagesSent] = await Promise.all([
+          this.prisma.task.count({
+            where: {
+              assigneeId: user.id,
+              status: 'done',
+              team: { organizationId: scopedOrgId },
+              ...(teamId ? { teamId } : {}),
+              updatedAt: { gte: defaultStartDate, lte: defaultEndDate },
+            },
+          }),
+          meetingIds.length > 0
+            ? this.prisma.meetingParticipant.count({
                 where: {
-                  senderId: user.id,
-                  channelId: { in: channelIds },
-                  createdAt: {
-                    gte: defaultStartDate,
-                    lte: defaultEndDate,
-                  },
+                  userId: user.id,
+                  meetingId: { in: meetingIds },
+                  leftAt: { not: null },
                 },
               })
-            : 0;
-
-        const totalInteractions =
-          completedTasks + attendedMeetings + messagesSent;
+            : 0,
+          teamChannelIds.length > 0
+            ? this.prisma.message.count({
+                where: {
+                  senderId: user.id,
+                  channelId: { in: teamChannelIds },
+                  createdAt: { gte: defaultStartDate, lte: defaultEndDate },
+                },
+              })
+            : 0,
+        ]);
 
         return {
           userId: user.id,
@@ -828,7 +784,7 @@ export class ReportsService {
           completedTasks,
           attendedMeetings,
           messagesSent,
-          totalInteractions,
+          totalInteractions: completedTasks + attendedMeetings + messagesSent,
         };
       }),
     );
@@ -840,19 +796,28 @@ export class ReportsService {
       },
       taskCompletionRates,
       meetingAttendanceRates,
-      chatResponseTimes,
       collaborationActivity,
     };
   }
 
-  async createWorkHours(data: {
-    userId: string;
-    date: Date;
-    hours: number;
-    notes?: string;
-    teamId?: string;
-  }) {
-    // Use upsert to update if exists for the same date
+  async createWorkHours(
+    data: {
+      userId: string;
+      date: Date;
+      hours: number;
+      notes?: string;
+      teamId?: string;
+    },
+    currentUser: CurrentUser,
+  ) {
+    if (!this.isPrivileged(currentUser) && currentUser.id !== data.userId) {
+      throw new ForbiddenException('Cannot create work hours for another user');
+    }
+
+    if (data.teamId) {
+      await this.ensureTeamAccess(data.teamId, currentUser);
+    }
+
     return this.prisma.workHours.upsert({
       where: {
         userId_date: {
@@ -883,7 +848,7 @@ export class ReportsService {
     });
   }
 
-  async getMeetingAnalytics(meetingId: string) {
+  async getMeetingAnalytics(meetingId: string, currentUser: CurrentUser) {
     const meeting = await this.prisma.meeting.findUnique({
       where: { id: meetingId },
       include: {
@@ -902,6 +867,10 @@ export class ReportsService {
 
     if (!meeting) {
       throw new NotFoundException('Meeting not found');
+    }
+
+    if (meeting.teamId) {
+      await this.ensureTeamAccess(meeting.teamId, currentUser);
     }
 
     const endTime = meeting.endTime

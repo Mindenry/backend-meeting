@@ -95,47 +95,6 @@ export class UpdateTaskDto {
   @IsString()
   meetingId?: string | null;
 
-  @ApiPropertyOptional({
-    description: 'Sprint ID',
-    example: 'sprint-101',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  sprintId?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Epic ID',
-    example: 'epic-202',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  epicId?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Story points',
-    example: 8,
-    type: Number,
-    minimum: 1,
-    maximum: 100,
-  })
-  @IsOptional()
-  @IsNumber()
-  @Min(1)
-  @Max(100)
-  storyPoints?: number | null;
-
-  @ApiPropertyOptional({
-    description: 'Time estimate in hours',
-    example: 12,
-    type: Number,
-    minimum: 0,
-  })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  estimate?: number | null;
 
   @ApiPropertyOptional({
     description: 'Position in the column',
@@ -155,59 +114,6 @@ export class UpdateTaskDto {
   @IsString()
   userId?: string;
 
-  @ApiPropertyOptional({
-    description: 'Issue type',
-    example: 'bug',
-    enum: ['task', 'bug', 'story', 'epic', 'subtask'],
-  })
-  @IsOptional()
-  @IsEnum(['task', 'bug', 'story', 'epic', 'subtask'])
-  issueType?: 'task' | 'bug' | 'story' | 'epic' | 'subtask';
-
-  @ApiPropertyOptional({
-    description: 'Project ID',
-    example: 'project-123',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  projectId?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Component ID',
-    example: 'component-123',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  componentId?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Version ID',
-    example: 'version-123',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  versionId?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Reporter user ID',
-    example: 'user-123',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  reporterId?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Resolution',
-    example: 'done',
-    enum: ['done', 'wont_fix', 'duplicate', 'cancelled'],
-  })
-  @IsOptional()
-  @IsEnum(['done', 'wont_fix', 'duplicate', 'cancelled'])
-  resolution?: string | null;
 
   @ApiPropertyOptional({
     description: 'Additional assignee user IDs for this task',

@@ -33,16 +33,9 @@ export class TasksService {
     status?: TaskStatus;
     teamId?: string;
     assigneeId?: string;
-    sprintId?: string;
-    epicId?: string;
     meetingId?: string;
     priority?: string;
     search?: string;
-    issueType?: string;
-    componentId?: string;
-    versionId?: string;
-    projectId?: string;
-    parentTaskId?: string;
     dueDateFrom?: string;
     dueDateTo?: string;
     page?: number;
@@ -54,16 +47,9 @@ export class TasksService {
       status,
       teamId,
       assigneeId,
-      sprintId,
-      epicId,
       meetingId,
       priority,
       search,
-      issueType,
-      componentId,
-      versionId,
-      projectId,
-      parentTaskId,
       dueDateFrom,
       dueDateTo,
       page,
@@ -102,16 +88,8 @@ export class TasksService {
     const where = {
       status: status || undefined,
       teamId: teamId || undefined,
-      sprintId: sprintId || undefined,
-      epicId: epicId || undefined,
       meetingId: meetingId || undefined,
       priority: priority || undefined,
-      issueType: issueType || undefined,
-      componentId: componentId || undefined,
-      versionId: versionId || undefined,
-      projectId: projectId || undefined,
-      parentTaskId:
-        parentTaskId !== undefined ? parentTaskId || null : undefined,
       ...(Object.keys(dueDateFilter).length > 0
         ? { dueDate: dueDateFilter }
         : {}),
@@ -124,51 +102,32 @@ export class TasksService {
       select: {
         id: true,
         title: true,
+        description: true,
         status: true,
         priority: true,
-        issueType: true,
         dueDate: true,
         position: true,
         tags: true,
-        storyPoints: true,
-        estimate: true,
         isRecurring: true,
         recurringPattern: true,
         recurringInterval: true,
         recurringEndDate: true,
         templateId: true,
-        parentTaskId: true,
         assigneeId: true,
         teamId: true,
-        projectId: true,
-        sprintId: true,
-        epicId: true,
+        meetingId: true,
         createdAt: true,
         updatedAt: true,
         assignee: {
           select: { id: true, name: true, avatar: true },
         },
-
-        project: {
-          select: { id: true, key: true, name: true, color: true },
-        },
-        sprint: {
-          select: { id: true, name: true },
-        },
-        epic: {
-          select: { id: true, name: true, color: true },
-        },
-        component: {
-          select: { id: true, name: true },
-        },
-        version: {
+        team: {
           select: { id: true, name: true },
         },
         _count: {
           select: {
             subtasks: true,
             comments: true,
-            childTasks: true,
             attachments: true,
           },
         },

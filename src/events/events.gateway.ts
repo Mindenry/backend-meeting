@@ -95,12 +95,12 @@ export class EventsGateway
   > = new Map();
 
   onModuleInit() {
-    // Periodic cleanup every 30 seconds to remove stale participants
-    // Also clean up disconnected participants after grace period (10 seconds)
+    // Periodic cleanup for stale/disconnected participants.
+    // Keep this fairly frequent so Active Rooms doesn't show ghost users too long.
     this.cleanupInterval = setInterval(() => {
       this.cleanupStaleParticipants();
       this.cleanupDisconnectedParticipants();
-    }, 10000); // Run every 10 seconds for faster cleanup
+    }, 3000);
   }
 
   onModuleDestroy() {
@@ -250,6 +250,28 @@ export class EventsGateway
     console.log(
       `[Join] Peer ${peerId} joining meeting ${meetingId}, socket: ${client.id}`,
     );
+
+    // If this socket was previously mapped to another peer/meeting, clean that stale entry first.
+    const previous = this.socketMeetings.get(client.id);
+    if (previous) {
+      const previousParticipants =
+        this.meetingParticipants.get(previous.meetingId) || [];
+      const cleanedPrevious = previousParticipants.filter(
+        (p) => p.peerId !== previous.peerId && p.socketId !== client.id,
+      );
+
+      if (cleanedPrevious.length === 0) {
+        this.meetingParticipants.delete(previous.meetingId);
+      } else {
+        this.meetingParticipants.set(previous.meetingId, cleanedPrevious);
+      }
+
+      if (previous.meetingId !== meetingId || previous.peerId !== peerId) {
+        this.server
+          .to(`meeting:${previous.meetingId}`)
+          .emit('meeting:participant:left', { peerId: previous.peerId });
+      }
+    }
 
     // Join the meeting room
     client.join(`meeting:${meetingId}`);
@@ -716,16 +738,17 @@ export class EventsGateway
       >();
 
       participants.forEach((p) => {
-        // Discord-like behavior: trust meetingParticipants as source of truth.
-        // Participant entries are removed on explicit leave or cleanup grace timeout,
-        // so we do NOT hide rooms just because a socket momentarily drops.
         const onlineInfo = this.onlineUsers.get(p.socketId);
         const disconnected = this.disconnectedParticipants.get(p.socketId);
-        if (
-          disconnected &&
-          disconnected.meetingId === meetingId &&
-          nowMs - disconnected.disconnectedAt.getTime() > DISCONNECTED_UI_GRACE_MS
-        ) {
+        const isSocketConnected = this.server.sockets.sockets.has(p.socketId);
+
+        // Keep short grace period only for recently disconnected sockets.
+        if (disconnected && disconnected.meetingId === meetingId) {
+          if (nowMs - disconnected.disconnectedAt.getTime() > DISCONNECTED_UI_GRACE_MS) {
+            return;
+          }
+        } else if (!isSocketConnected) {
+          // If socket is not connected and not in grace list, treat as stale immediately.
           return;
         }
 
@@ -764,15 +787,36 @@ export class EventsGateway
   }
 
   private cleanupStaleParticipants() {
-    // Remove stale participants whose socket is no longer connected.
-    // This is now handled by cleanupDisconnectedParticipants with grace period
-    // Keep this as a safety net for truly orphaned entries
+    // Safety net for orphaned participant entries (e.g., abrupt tab close before leave event).
+    // If socket no longer exists and it's not in reconnect grace map, remove it immediately.
+    let changed = false;
+
+    for (const [meetingId, participants] of this.meetingParticipants.entries()) {
+      const filtered = participants.filter((p) => {
+        const isConnected = this.server.sockets.sockets.has(p.socketId);
+        const isInGrace = this.disconnectedParticipants.has(p.socketId);
+        return isConnected || isInGrace;
+      });
+
+      if (filtered.length !== participants.length) {
+        changed = true;
+        if (filtered.length === 0) {
+          this.meetingParticipants.delete(meetingId);
+        } else {
+          this.meetingParticipants.set(meetingId, filtered);
+        }
+      }
+    }
+
+    if (changed) {
+      this.broadcastActiveRooms();
+    }
   }
 
   private cleanupDisconnectedParticipants() {
     // Remove participants who have been disconnected for more than 15 seconds
     // This gives time for socket reconnection
-    const GRACE_PERIOD_MS = 15000; // 15 seconds grace period
+    const GRACE_PERIOD_MS = 8000; // 8 seconds grace period
     const now = new Date();
     const toRemove: Array<{
       socketId: string;

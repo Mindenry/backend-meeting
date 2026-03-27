@@ -34,15 +34,9 @@ export class TasksController {
     @Query('status') status?: any,
     @Query('teamId') teamId?: string,
     @Query('assigneeId') assigneeId?: string,
-    @Query('sprintId') sprintId?: string,
-    @Query('epicId') epicId?: string,
     @Query('meetingId') meetingId?: string,
     @Query('priority') priority?: string,
     @Query('search') search?: string,
-    @Query('issueType') issueType?: string,
-    @Query('componentId') componentId?: string,
-    @Query('versionId') versionId?: string,
-    @Query('projectId') projectId?: string,
     @Query('dueDateFrom') dueDateFrom?: string,
     @Query('dueDateTo') dueDateTo?: string,
     @Query('page') page?: string,
@@ -54,15 +48,9 @@ export class TasksController {
       status,
       teamId,
       assigneeId,
-      sprintId,
-      epicId,
       meetingId,
       priority,
       search,
-      issueType,
-      componentId,
-      versionId,
-      projectId,
       dueDateFrom,
       dueDateTo,
       page: page ? parseInt(page) : undefined,
@@ -169,10 +157,6 @@ export class TasksController {
     );
   }
 
-  @Get('analytics')
-  getAnalytics(@Query('teamId') teamId?: string) {
-    return this.tasksService.getAnalytics(teamId);
-  }
 
   @Get('activity')
   getActivity(
@@ -195,12 +179,42 @@ export class TasksController {
   })
   @ApiResponse({ status: 201, description: 'Task created successfully' })
   create(@Body() createTaskDto: CreateTaskDto) {
+    const {
+      title,
+      description,
+      priority,
+      status,
+      dueDate,
+      tags,
+      assigneeId,
+      assigneeIds,
+      teamId,
+      meetingId,
+      isRecurring,
+      recurringPattern,
+      recurringInterval,
+      recurringEndDate,
+      templateId,
+      createdBy,
+    } = createTaskDto;
+
     return this.tasksService.create({
-      ...createTaskDto,
-      dueDate: createTaskDto.dueDate ? new Date(createTaskDto.dueDate) : null,
-      recurringEndDate: createTaskDto.recurringEndDate
-        ? new Date(createTaskDto.recurringEndDate)
-        : null,
+      title,
+      description,
+      priority,
+      status,
+      dueDate: dueDate ? new Date(dueDate) : null,
+      tags,
+      assigneeId,
+      assigneeIds,
+      teamId,
+      meetingId,
+      isRecurring,
+      recurringPattern,
+      recurringInterval,
+      recurringEndDate: recurringEndDate ? new Date(recurringEndDate) : null,
+      templateId,
+      createdBy,
     });
   }
 
@@ -212,13 +226,43 @@ export class TasksController {
   })
   @ApiResponse({ status: 200, description: 'Task updated successfully' })
   update(@Param('id') id: string, @Body() updateTaskDto: UpdateTaskDto) {
-    const { dueDate, recurringEndDate, userId, ...rest } = updateTaskDto;
+    const {
+      title,
+      description,
+      priority,
+      status,
+      dueDate,
+      tags,
+      assigneeId,
+      assigneeIds,
+      teamId,
+      meetingId,
+      isRecurring,
+      recurringPattern,
+      recurringInterval,
+      recurringEndDate,
+      templateId,
+      userId,
+    } = updateTaskDto;
+
     return this.tasksService.update(
       id,
       {
-        ...rest,
+        title,
+        description,
+        priority,
+        status,
         dueDate: dueDate ? new Date(dueDate) : null,
+        tags,
+        assigneeId,
+        assigneeIds,
+        teamId,
+        meetingId,
+        isRecurring,
+        recurringPattern,
+        recurringInterval,
         recurringEndDate: recurringEndDate ? new Date(recurringEndDate) : null,
+        templateId,
       },
       userId,
     );
@@ -255,30 +299,6 @@ export class TasksController {
     return this.tasksService.deleteSubtask(subtaskId);
   }
 
-  @Post(':id/time-entries')
-  addTimeEntry(
-    @Param('id') id: string,
-    @Body()
-    body: {
-      userId: string;
-      hours: number;
-      description?: string;
-      date?: string;
-    },
-  ) {
-    return this.tasksService.addTimeEntry(
-      id,
-      body.userId,
-      body.hours,
-      body.description,
-      body.date ? new Date(body.date) : undefined,
-    );
-  }
-
-  @Delete('time-entries/:timeEntryId')
-  deleteTimeEntry(@Param('timeEntryId') timeEntryId: string) {
-    return this.tasksService.deleteTimeEntry(timeEntryId);
-  }
 
   @Post(':id/attachments')
   addAttachment(
