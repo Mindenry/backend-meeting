@@ -10,7 +10,6 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
-// @ts-ignore - Optional Swagger decorators
 import {
   ApiTags,
   ApiBearerAuth,

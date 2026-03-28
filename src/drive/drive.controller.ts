@@ -175,7 +175,9 @@ export class DriveController {
 
     // Use our MIME type detection for better accuracy (like Google Drive)
     const detectedMimeType = getMimeType(file.originalname, file.mimetype);
-    console.log(`[Drive] Uploading file: ${file.originalname} (${detectedMimeType}, ${file.size} bytes)`);
+    console.log(
+      `[Drive] Uploading file: ${file.originalname} (${detectedMimeType}, ${file.size} bytes)`,
+    );
 
     const { entry, version, url } = await this.driveService.saveFileVersion({
       teamId,

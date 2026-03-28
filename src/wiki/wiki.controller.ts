@@ -10,7 +10,6 @@ import {
   Request,
   Patch,
 } from '@nestjs/common';
-// @ts-ignore - Optional Swagger decorators
 import {
   ApiTags,
   ApiBearerAuth,
@@ -18,6 +17,21 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { WikiService } from './wiki.service';
 import { PrismaService } from '../prisma/prisma.service';
+
+type AuthenticatedRequest = {
+  user: {
+    id: string;
+  };
+};
+
+type WikiArticlePayload = {
+  title: string;
+  content: string;
+  category?: string;
+  tags?: string[];
+  isPublic?: boolean;
+  teamId?: string;
+};
 
 @ApiTags('wiki')
 @Controller('wiki')
@@ -30,7 +44,7 @@ export class WikiController {
   ) {}
 
   @Get('articles')
-  async findAll(@Request() req) {
+  async findAll(@Request() req: AuthenticatedRequest) {
     // Get user's teams from database
     const memberships = await this.prisma.teamMember.findMany({
       where: { userId: req.user.id },
@@ -43,12 +57,15 @@ export class WikiController {
   }
 
   @Get('articles/:id')
-  async findOne(@Param('id') id: string, @Request() req) {
+  async findOne(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     return this.wikiService.findOne(id, req.user.id);
   }
 
   @Post('articles')
-  async create(@Body() body: any, @Request() req) {
+  async create(
+    @Body() body: WikiArticlePayload,
+    @Request() req: AuthenticatedRequest,
+  ) {
     return this.wikiService.create({
       ...body,
       createdBy: req.user.id,
@@ -56,12 +73,16 @@ export class WikiController {
   }
 
   @Put('articles/:id')
-  async update(@Param('id') id: string, @Body() body: any, @Request() req) {
+  async update(
+    @Param('id') id: string,
+    @Body() body: Partial<WikiArticlePayload>,
+    @Request() req: AuthenticatedRequest,
+  ) {
     return this.wikiService.update(id, req.user.id, body);
   }
 
   @Delete('articles/:id')
-  async delete(@Param('id') id: string, @Request() req) {
+  async delete(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     return this.wikiService.delete(id, req.user.id);
   }
 
@@ -74,7 +95,7 @@ export class WikiController {
   async addComment(
     @Param('id') articleId: string,
     @Body() body: { content: string },
-    @Request() req,
+    @Request() req: AuthenticatedRequest,
   ) {
     return this.wikiService.addComment(articleId, req.user.id, body.content);
   }

@@ -91,9 +91,7 @@ export class RecordingsUploadController {
     private readonly auditService: AuditService,
   ) {}
 
-  private async convertToMp4(
-    inputBuffer: Buffer,
-  ): Promise<{
+  private async convertToMp4(inputBuffer: Buffer): Promise<{
     buffer: Buffer | null;
     error?: string;
     ffmpegAvailable?: boolean;
@@ -182,7 +180,11 @@ export class RecordingsUploadController {
       this.logger.log(
         `[Recording] Trying FFmpeg (${label}, profile=${profileName}): ${command}`,
       );
-      return new Promise<{ success: boolean; error?: string; stderrTail?: string }>((resolve) => {
+      return new Promise<{
+        success: boolean;
+        error?: string;
+        stderrTail?: string;
+      }>((resolve) => {
         const ffmpeg = spawn(command, args);
 
         let errorOutput = '';
@@ -214,7 +216,9 @@ export class RecordingsUploadController {
 
     try {
       await fs.writeFile(inputPath, inputBuffer);
-      this.logger.log(`[Recording] Starting FFmpeg conversion: ${inputPath} -> ${outputPath}`);
+      this.logger.log(
+        `[Recording] Starting FFmpeg conversion: ${inputPath} -> ${outputPath}`,
+      );
 
       const sourceProbe = await this.probeMedia(inputPath);
       const sourceHasVideo = sourceProbe.hasVideo;
@@ -225,7 +229,10 @@ export class RecordingsUploadController {
       const attemptedCommands: Array<{ command: string; label: string }> = [];
 
       if (process.env.FFMPEG_PATH) {
-        attemptedCommands.push({ command: process.env.FFMPEG_PATH, label: 'FFMPEG_PATH' });
+        attemptedCommands.push({
+          command: process.env.FFMPEG_PATH,
+          label: 'FFMPEG_PATH',
+        });
       }
 
       // Use system ffmpeg first (works reliably in Railway Docker image)
@@ -606,14 +613,18 @@ export class RecordingsUploadController {
     const convertedMp4 = conversion.buffer;
 
     if (convertedMp4) {
-      this.logger.log(`[Recording] Conversion successful: ${file.buffer.length} bytes -> ${convertedMp4.length} bytes (MP4)`);
+      this.logger.log(
+        `[Recording] Conversion successful: ${file.buffer.length} bytes -> ${convertedMp4.length} bytes (MP4)`,
+      );
     } else {
-      this.logger.warn(`[Recording] Conversion failed, keeping original format. Error: ${conversion.error || 'Unknown'}`);
+      this.logger.warn(
+        `[Recording] Conversion failed, keeping original format. Error: ${conversion.error || 'Unknown'}`,
+      );
     }
 
     const outputFormat = convertedMp4 ? 'mp4' : 'webm';
     const outputStatus = convertedMp4 ? 'converted' : 'fallback';
-    
+
     const finalBuffer = convertedMp4 || file.buffer;
     const fileExt = (file.originalname || '').split('.').pop()?.toLowerCase();
     const inferredSourceMime =
@@ -629,7 +640,9 @@ export class RecordingsUploadController {
         ? inferredSourceMime
         : 'video/webm';
     const finalName = `${dateStr}_${timeStr}${convertedMp4 ? '.mp4' : '.webm'}`;
-    this.logger.log(`[Recording] Final file: ${finalName} (${finalMimetype}, ${finalBuffer.length} bytes)`);
+    this.logger.log(
+      `[Recording] Final file: ${finalName} (${finalMimetype}, ${finalBuffer.length} bytes)`,
+    );
 
     // Upload file to local storage directly (skip Cloudinary for speed)
     const storageFile: StorageUploadedFile = {

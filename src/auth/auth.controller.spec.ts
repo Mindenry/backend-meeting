@@ -105,6 +105,7 @@ describe('AuthController', () => {
       expect(mockAuthService.login).toHaveBeenCalledWith(
         loginDto.email,
         loginDto.password,
+        false,
       );
     });
   });

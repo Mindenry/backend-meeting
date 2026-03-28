@@ -99,7 +99,7 @@ export class NotificationsGateway
       this.userSockets.get(user.id)!.add(client.id);
 
       // Join user-specific room
-      client.join(`user:${user.id}`);
+      void client.join(`user:${user.id}`);
 
       this.logger.log(`User connected: ${user.email} (${client.id})`);
 
@@ -145,7 +145,7 @@ export class NotificationsGateway
   // Send notification to multiple users
   async sendNotificationToUsers(userIds: string[], notification: any) {
     userIds.forEach((userId) => {
-      this.sendNotificationToUser(userId, notification);
+      void this.sendNotificationToUser(userId, notification);
     });
   }
 

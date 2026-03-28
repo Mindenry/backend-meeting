@@ -9,14 +9,50 @@ import {
   Query,
   UseGuards,
   Request,
+  BadRequestException,
 } from '@nestjs/common';
-// @ts-ignore - Optional Swagger decorators
 import {
   ApiTags,
   ApiBearerAuth,
 } from '../common/decorators/swagger.decorators';
 import { WorkflowsService } from './workflows.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+
+type WorkflowCondition = {
+  field: string;
+  operator: string;
+  value: unknown;
+};
+
+type WorkflowAction = {
+  type: string;
+  [key: string]: unknown;
+};
+
+type WorkflowPayload = {
+  name: string;
+  description?: string;
+  trigger: string;
+  conditions?: WorkflowCondition[];
+  actions: WorkflowAction[];
+  teamId?: string;
+  isActive?: boolean;
+};
+
+type AuthenticatedWorkflowRequest = {
+  user: {
+    userId?: string;
+    id?: string;
+  };
+};
+
+function resolveActorId(req: AuthenticatedWorkflowRequest): string {
+  const actorId = req.user.userId ?? req.user.id;
+  if (!actorId) {
+    throw new BadRequestException('Missing authenticated user id');
+  }
+  return actorId;
+}
 
 @ApiTags('workflows')
 @Controller('workflows')
@@ -26,10 +62,13 @@ export class WorkflowsController {
   constructor(private readonly workflowsService: WorkflowsService) {}
 
   @Post()
-  create(@Body() body: any, @Request() req: any) {
+  create(
+    @Body() body: WorkflowPayload,
+    @Request() req: AuthenticatedWorkflowRequest,
+  ) {
     return this.workflowsService.createWorkflow({
       ...body,
-      createdBy: req.user.userId,
+      createdBy: resolveActorId(req),
     });
   }
 
@@ -51,25 +90,29 @@ export class WorkflowsController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() body: any) {
+  update(@Param('id') id: string, @Body() body: Partial<WorkflowPayload>) {
     return this.workflowsService.updateWorkflow(id, body);
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string, @Request() req: any) {
-    return this.workflowsService.deleteWorkflow(id, req.user.userId);
+  delete(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedWorkflowRequest,
+  ) {
+    return this.workflowsService.deleteWorkflow(id, resolveActorId(req));
   }
 
   @Post(':id/execute')
   execute(
     @Param('id') workflowId: string,
-    @Body() body: { input: any },
-    @Request() req?: any,
+    @Body() body: { input: unknown },
+    @Request() req?: AuthenticatedWorkflowRequest,
   ) {
+    const actorId = req ? resolveActorId(req) : undefined;
     return this.workflowsService.executeWorkflow(
       workflowId,
       body.input,
-      req?.user?.userId,
+      actorId,
     );
   }
 
@@ -88,7 +131,7 @@ export class WorkflowsController {
   @Post('trigger/:eventType')
   triggerWorkflow(
     @Param('eventType') eventType: string,
-    @Body() body: { data: any },
+    @Body() body: { data: Record<string, unknown> },
   ) {
     return this.workflowsService.triggerWorkflow(eventType, body.data);
   }

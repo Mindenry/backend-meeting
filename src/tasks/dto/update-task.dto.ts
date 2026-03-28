@@ -95,7 +95,6 @@ export class UpdateTaskDto {
   @IsString()
   meetingId?: string | null;
 
-
   @ApiPropertyOptional({
     description: 'Position in the column',
     example: 2,
@@ -113,7 +112,6 @@ export class UpdateTaskDto {
   @IsOptional()
   @IsString()
   userId?: string;
-
 
   @ApiPropertyOptional({
     description: 'Additional assignee user IDs for this task',

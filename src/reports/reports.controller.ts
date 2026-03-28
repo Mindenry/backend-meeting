@@ -45,7 +45,9 @@ export class ReportsController {
     const normalized = String(range || 'month').toLowerCase();
     const allowed = ['week', 'month', 'quarter', 'year'];
     if (!allowed.includes(normalized)) {
-      throw new BadRequestException('range must be week, month, quarter, or year');
+      throw new BadRequestException(
+        'range must be week, month, quarter, or year',
+      );
     }
     return normalized as 'week' | 'month' | 'quarter' | 'year';
   }
@@ -78,7 +80,10 @@ export class ReportsController {
     @Request() req: any,
   ) {
     const normalizedRange = this.normalizeRange(range);
-    return this.reportsService.getOverviewReport(req.user, normalizedRange as any);
+    return this.reportsService.getOverviewReport(
+      req.user,
+      normalizedRange as any,
+    );
   }
 
   @Get('team-productivity')
@@ -134,7 +139,10 @@ export class ReportsController {
   }
 
   @Get('meeting-analytics')
-  getMeetingAnalytics(@Query('meetingId') meetingId: string, @Request() req: any) {
+  getMeetingAnalytics(
+    @Query('meetingId') meetingId: string,
+    @Request() req: any,
+  ) {
     if (!meetingId) {
       throw new BadRequestException('meetingId is required');
     }
@@ -331,7 +339,9 @@ export class ReportsController {
     const allowedFormats = ['csv', 'xlsx', 'json', 'pdf'];
 
     if (!allowedTypes.includes(normalizedType)) {
-      throw new BadRequestException('type must be overview, team, or performance');
+      throw new BadRequestException(
+        'type must be overview, team, or performance',
+      );
     }
     if (!allowedFormats.includes(normalizedFormat)) {
       throw new BadRequestException('format must be csv, xlsx, json, or pdf');
@@ -350,11 +360,16 @@ export class ReportsController {
     let filename = 'report';
 
     if (normalizedType === 'overview') {
-      reportData = await this.reportsService.getOverviewReport(req.user, rangeValue);
+      reportData = await this.reportsService.getOverviewReport(
+        req.user,
+        rangeValue,
+      );
       filename = `overview_report_${rangeValue}`;
     } else if (normalizedType === 'team') {
       if (!resolvedStartDate || !resolvedEndDate) {
-        throw new BadRequestException('startDate and endDate are required for team report');
+        throw new BadRequestException(
+          'startDate and endDate are required for team report',
+        );
       }
       reportData = await this.reportsService.getTeamProductivityReport(
         teamId as string,
@@ -398,7 +413,10 @@ export class ReportsController {
 
     if (normalizedFormat === 'json') {
       res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}.json"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${safeFilename}.json"`,
+      );
       return res.status(200).send({
         type: normalizedType,
         generatedAt: new Date().toISOString(),
@@ -410,7 +428,10 @@ export class ReportsController {
       const parser = new Json2CsvParser();
       const csv = parser.parse(exportRows.length > 0 ? exportRows : [{}]);
       res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}.csv"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${safeFilename}.csv"`,
+      );
       return res.status(200).send(csv);
     }
 
@@ -427,14 +448,20 @@ export class ReportsController {
 
       sheet.getRow(1).font = { bold: true };
       sheet.columns.forEach((col) => {
-        col.width = Math.max(12, ...(col.values as any[]).map((v) => `${v ?? ''}`.length));
+        col.width = Math.max(
+          12,
+          ...(col.values as any[]).map((v) => `${v ?? ''}`.length),
+        );
       });
 
       res.setHeader(
         'Content-Type',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       );
-      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}.xlsx"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${safeFilename}.xlsx"`,
+      );
 
       await workbook.xlsx.write(res);
       return res.end();
@@ -442,7 +469,10 @@ export class ReportsController {
 
     if (normalizedFormat === 'pdf') {
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}.pdf"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${safeFilename}.pdf"`,
+      );
 
       const doc = new PDFDocument({ margin: 30, size: 'A4' });
       doc.pipe(res);

@@ -29,10 +29,7 @@ export class MeetingParticipantsController {
       if (!body.userId) {
         throw new BadRequestException('userId is required');
       }
-      return await this.participantsService.joinMeeting(
-        meetingId,
-        body.userId,
-      );
+      return await this.participantsService.joinMeeting(meetingId, body.userId);
     } catch (error) {
       console.error('Error joining meeting:', error);
       throw error;

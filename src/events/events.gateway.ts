@@ -226,7 +226,7 @@ export class EventsGateway
     client
       .to(`meeting:${meetingId}`)
       .emit('meeting:participant:left', { peerId });
-    client.leave(`meeting:${meetingId}`);
+    void client.leave(`meeting:${meetingId}`);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -274,7 +274,7 @@ export class EventsGateway
     }
 
     // Join the meeting room
-    client.join(`meeting:${meetingId}`);
+    void client.join(`meeting:${meetingId}`);
 
     // Track this socket's meeting
     this.socketMeetings.set(client.id, { meetingId, peerId });
@@ -302,10 +302,7 @@ export class EventsGateway
     const actualUserId = userId || userInfo?.userId;
     if (actualUserId && !meetingId.startsWith('quick-huddle')) {
       try {
-        await this.participantsService.joinMeeting(
-          meetingId,
-          actualUserId,
-        );
+        await this.participantsService.joinMeeting(meetingId, actualUserId);
       } catch (error) {
         // Silently fail if meeting doesn't exist or user is not authorized
         // This allows the WebSocket connection to continue even if DB record fails
@@ -478,7 +475,7 @@ export class EventsGateway
     const existingIndex = participants.findIndex((p) => p.peerId === peerId);
 
     // Join the socket room
-    client.join(`meeting:${meetingId}`);
+    void client.join(`meeting:${meetingId}`);
 
     // Track this socket's meeting
     this.socketMeetings.set(client.id, { meetingId, peerId });
@@ -744,7 +741,10 @@ export class EventsGateway
 
         // Keep short grace period only for recently disconnected sockets.
         if (disconnected && disconnected.meetingId === meetingId) {
-          if (nowMs - disconnected.disconnectedAt.getTime() > DISCONNECTED_UI_GRACE_MS) {
+          if (
+            nowMs - disconnected.disconnectedAt.getTime() >
+            DISCONNECTED_UI_GRACE_MS
+          ) {
             return;
           }
         } else if (!isSocketConnected) {
@@ -791,7 +791,10 @@ export class EventsGateway
     // If socket no longer exists and it's not in reconnect grace map, remove it immediately.
     let changed = false;
 
-    for (const [meetingId, participants] of this.meetingParticipants.entries()) {
+    for (const [
+      meetingId,
+      participants,
+    ] of this.meetingParticipants.entries()) {
       const filtered = participants.filter((p) => {
         const isConnected = this.server.sockets.sockets.has(p.socketId);
         const isInGrace = this.disconnectedParticipants.has(p.socketId);

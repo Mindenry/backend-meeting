@@ -157,7 +157,6 @@ export class TasksController {
     );
   }
 
-
   @Get('activity')
   getActivity(
     @Query('teamId') teamId?: string,
@@ -298,7 +297,6 @@ export class TasksController {
   deleteSubtask(@Param('subtaskId') subtaskId: string) {
     return this.tasksService.deleteSubtask(subtaskId);
   }
-
 
   @Post(':id/attachments')
   addAttachment(

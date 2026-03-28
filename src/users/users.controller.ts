@@ -9,7 +9,6 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-// @ts-ignore - Optional Swagger decorators
 import {
   ApiTags,
   ApiBearerAuth,
@@ -24,6 +23,11 @@ import { RolesGuard, Roles } from '../auth/roles.guard';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
+
+type ChangePasswordDto = {
+  currentPassword: string;
+  newPassword: string;
+};
 
 @ApiTags('users')
 @Controller('users')
@@ -138,7 +142,10 @@ export class UsersController {
   @ApiParam({ name: 'id', description: 'User ID', example: 'user-123' })
   @ApiResponse({ status: 200, description: 'Password changed successfully' })
   @ApiResponse({ status: 400, description: 'Invalid current password' })
-  changePassword(@Param('id') id: string, @Body() passwords: any) {
+  changePassword(
+    @Param('id') id: string,
+    @Body() passwords: ChangePasswordDto,
+  ) {
     return this.usersService.changePassword(id, passwords);
   }
 }

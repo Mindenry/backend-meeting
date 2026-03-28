@@ -93,7 +93,10 @@ export class ReportsService {
     };
   }
 
-  async getOverviewReport(currentUser: CurrentUser, range: DateRangeKey = 'month') {
+  async getOverviewReport(
+    currentUser: CurrentUser,
+    range: DateRangeKey = 'month',
+  ) {
     const { startDate, endDate } = this.resolveDateRange(range);
 
     const userReport = await this.getUserActivityReport(
@@ -273,7 +276,8 @@ export class ReportsService {
           inProgress: memberTasks.filter((t) => t.status === 'in_progress')
             .length,
         },
-        messagesSent: messages.filter((m) => m.senderId === member.userId).length,
+        messagesSent: messages.filter((m) => m.senderId === member.userId)
+          .length,
         meetingsAttended: meetings.filter((m) =>
           m.participants.some((p) => p.userId === member.userId),
         ).length,
@@ -344,8 +348,10 @@ export class ReportsService {
       0,
     );
 
-    const avgParticipants = totalMeetings > 0 ? totalParticipants / totalMeetings : 0;
-    const avgDuration = totalMeetings > 0 ? totalDuration / totalMeetings / 1000 / 60 : 0;
+    const avgParticipants =
+      totalMeetings > 0 ? totalParticipants / totalMeetings : 0;
+    const avgDuration =
+      totalMeetings > 0 ? totalDuration / totalMeetings / 1000 / 60 : 0;
 
     const meetingsByTeam = meetings.reduce(
       (acc, m) => {
@@ -381,7 +387,9 @@ export class ReportsService {
         endTime: m.actualEndTime,
         duration:
           m.actualStartTime && m.actualEndTime
-            ? (m.actualEndTime.getTime() - m.actualStartTime.getTime()) / 1000 / 60
+            ? (m.actualEndTime.getTime() - m.actualStartTime.getTime()) /
+              1000 /
+              60
             : 0,
         host: m.host.name,
         team: m.team?.name,
@@ -452,7 +460,10 @@ export class ReportsService {
         messagesSent: messages.length,
         meetings: {
           attended: meetings.length,
-          totalDuration: meetings.reduce((sum, m) => sum + (m.duration || 0), 0),
+          totalDuration: meetings.reduce(
+            (sum, m) => sum + (m.duration || 0),
+            0,
+          ),
         },
       },
       details: {
@@ -598,7 +609,9 @@ export class ReportsService {
     const workload = members.map((member) => {
       const userTasks = tasks.filter((t) => t.assigneeId === member.userId);
       const completed = userTasks.filter((t) => t.status === 'done').length;
-      const inProgress = userTasks.filter((t) => t.status === 'in_progress').length;
+      const inProgress = userTasks.filter(
+        (t) => t.status === 'in_progress',
+      ).length;
       const todo = userTasks.filter((t) => t.status === 'todo').length;
       const overdue = userTasks.filter((t) => {
         if (!t.dueDate) return false;
@@ -708,7 +721,8 @@ export class ReportsService {
           this.prisma.task.count({ where: { ...tasksWhere, status: 'done' } }),
         ]);
 
-        const completionRate = allTasks > 0 ? (completedTasks / allTasks) * 100 : 0;
+        const completionRate =
+          allTasks > 0 ? (completedTasks / allTasks) * 100 : 0;
 
         return {
           userId: user.id,
@@ -734,7 +748,9 @@ export class ReportsService {
             : 0;
 
         const attendanceRate =
-          meetingIds.length > 0 ? (attendedMeetings / meetingIds.length) * 100 : 0;
+          meetingIds.length > 0
+            ? (attendedMeetings / meetingIds.length) * 100
+            : 0;
 
         return {
           userId: user.id,
@@ -748,35 +764,36 @@ export class ReportsService {
 
     const collaborationActivity = await Promise.all(
       scopedUsers.map(async (user) => {
-        const [completedTasks, attendedMeetings, messagesSent] = await Promise.all([
-          this.prisma.task.count({
-            where: {
-              assigneeId: user.id,
-              status: 'done',
-              team: { organizationId: scopedOrgId },
-              ...(teamId ? { teamId } : {}),
-              updatedAt: { gte: defaultStartDate, lte: defaultEndDate },
-            },
-          }),
-          meetingIds.length > 0
-            ? this.prisma.meetingParticipant.count({
-                where: {
-                  userId: user.id,
-                  meetingId: { in: meetingIds },
-                  leftAt: { not: null },
-                },
-              })
-            : 0,
-          teamChannelIds.length > 0
-            ? this.prisma.message.count({
-                where: {
-                  senderId: user.id,
-                  channelId: { in: teamChannelIds },
-                  createdAt: { gte: defaultStartDate, lte: defaultEndDate },
-                },
-              })
-            : 0,
-        ]);
+        const [completedTasks, attendedMeetings, messagesSent] =
+          await Promise.all([
+            this.prisma.task.count({
+              where: {
+                assigneeId: user.id,
+                status: 'done',
+                team: { organizationId: scopedOrgId },
+                ...(teamId ? { teamId } : {}),
+                updatedAt: { gte: defaultStartDate, lte: defaultEndDate },
+              },
+            }),
+            meetingIds.length > 0
+              ? this.prisma.meetingParticipant.count({
+                  where: {
+                    userId: user.id,
+                    meetingId: { in: meetingIds },
+                    leftAt: { not: null },
+                  },
+                })
+              : 0,
+            teamChannelIds.length > 0
+              ? this.prisma.message.count({
+                  where: {
+                    senderId: user.id,
+                    channelId: { in: teamChannelIds },
+                    createdAt: { gte: defaultStartDate, lte: defaultEndDate },
+                  },
+                })
+              : 0,
+          ]);
 
         return {
           userId: user.id,
