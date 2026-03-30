@@ -40,7 +40,6 @@ import { HolidaysModule } from './holidays/holidays.module';
 import { StorageModule } from './storage/storage.module';
 import { CommonModule } from './common/common.module';
 import { SearchModule } from './search/search.module';
-import { StandupsModule } from './standups/standups.module';
 import { WikiModule } from './wiki/wiki.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { PermissionsModule } from './permissions/permissions.module';
@@ -50,6 +49,7 @@ import { TaskStatusesModule } from './task-statuses/task-statuses.module';
 import { IssueLinksModule } from './issue-links/issue-links.module';
 import { TaskWatchersModule } from './task-watchers/task-watchers.module';
 import { TaskActivityModule } from './task-activity/task-activity.module';
+import { SeedModule } from './seed/seed.module';
 import { MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { LoggingMiddleware } from './common/middleware/logging.middleware';
 import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
@@ -115,7 +115,6 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     StorageModule,
     CommonModule,
     SearchModule,
-    StandupsModule,
     WikiModule,
     AnnouncementsModule,
     PermissionsModule,
@@ -124,6 +123,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     TaskWatchersModule,
     TaskActivityModule,
     HealthModule,
+    SeedModule,
   ],
   controllers: [AppController, UploadController, AuditController],
   providers: [AppService],

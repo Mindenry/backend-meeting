@@ -4,7 +4,6 @@ import { MessagesService } from './messages.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { EventsModule } from '../events/events.module';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { StandupsModule } from '../standups/standups.module';
 import { WorkflowsModule } from '../workflows/workflows.module';
 
 @Module({
@@ -12,7 +11,6 @@ import { WorkflowsModule } from '../workflows/workflows.module';
     PrismaModule,
     forwardRef(() => EventsModule),
     NotificationsModule,
-    StandupsModule,
     forwardRef(() => WorkflowsModule),
   ],
   controllers: [MessagesController],

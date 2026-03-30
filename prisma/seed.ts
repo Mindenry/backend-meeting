@@ -27,7 +27,7 @@ async function main() {
     'directMessage', 'messageReaction', 'thread', 'notificationPreference',
     'notificationDigest', 'refreshToken', 'documentFolder', 'document',
     'documentVersion', 'documentPermission', 'meetingRecording',
-    'reminderRecipient', 'reminder', 'standupEntry',
+    'reminderRecipient', 'reminder',
     'driveFileVersion', 'driveEntry', 'subtask', 'taskAttachment',
     'meetingReminder', 'workflowRun', 'workflow', 'wikiArticleVersion',
     'wikiComment', 'taskTemplate', 'taskWatcher', 'issueLink',
@@ -1464,20 +1464,7 @@ Contact support if you have urgent matters.`,
     }
   });
 
-  // 32. Standup Entries
-  await prisma.standupEntry.create({
-    data: {
-      userId: users[0].id,
-      teamId: engineeringTeam.id,
-      date: today,
-      rawText: 'Yesterday: stuff. Today: things. Blockers: none.',
-      yesterday: ['Worked on DB stuff'],
-      today: ['Seeding mock data'],
-      blockers: ['None'],
-    }
-  });
-
-  // 33. Drive Entries & Versions
+  // 32. Drive Entries & Versions
   const driveEntry = await prisma.driveEntry.create({
     data: {
       name: 'Logo.png',

@@ -7,7 +7,6 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
-import { StandupsService } from '../standups/standups.service';
 import { WorkflowsService } from '../workflows/workflows.service';
 
 @Injectable()
@@ -17,7 +16,6 @@ export class MessagesService {
     @Inject(forwardRef(() => EventsGateway))
     private readonly eventsGateway: EventsGateway,
     private readonly notificationsService: NotificationsService,
-    private readonly standupsService: StandupsService,
     @Inject(forwardRef(() => WorkflowsService))
     private readonly workflowsService: WorkflowsService,
   ) {}
@@ -360,21 +358,6 @@ export class MessagesService {
     });
 
     this.eventsGateway.emitMessageCreated(message);
-
-    // If this is a standup channel, process the message as a standup entry
-    if (channel.type === 'standup' && channel.teamId) {
-      try {
-        await this.standupsService.handleStandupMessage({
-          userId: data.senderId,
-          teamId: channel.teamId,
-          text: data.text,
-          createdAt: message.createdAt,
-        });
-      } catch (err) {
-        // Do not block message creation if standup processing fails
-        console.error('Failed to process standup message:', err);
-      }
-    }
 
     // Create notifications for mentioned users
     if (data.mentions && data.mentions.length > 0) {
