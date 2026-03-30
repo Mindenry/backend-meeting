@@ -149,6 +149,9 @@ model Meeting {
   startTime        DateTime
   endTime          DateTime?
   meetingCode      String    @unique // Unique meeting code/ID
+  password         String?   // Optional password for meeting
+  waitingRoom      Boolean   @default(false) // Enable waiting room
+  isInstant        Boolean   @default(false) // Is this an instant meeting
   allowScreenShare Boolean   @default(true)
   status           String    @default("scheduled") // scheduled, live, ended
   actualStartTime  DateTime?

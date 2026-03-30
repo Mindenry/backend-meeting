@@ -57,6 +57,26 @@ export class CreateMeetingDto {
   password?: string;
 
   @ApiPropertyOptional({
+    description: 'Enable waiting room',
+    example: false,
+    type: Boolean,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  waitingRoom?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Is instant meeting',
+    example: false,
+    type: Boolean,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isInstant?: boolean;
+
+  @ApiPropertyOptional({
     description: 'Allow screen sharing',
     example: true,
     type: Boolean,
