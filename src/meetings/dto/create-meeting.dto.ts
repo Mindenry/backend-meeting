@@ -48,25 +48,6 @@ export class CreateMeetingDto {
   endTime: string;
 
   @ApiPropertyOptional({
-    description: 'Meeting password',
-    example: 'secure123',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  password?: string;
-
-  @ApiPropertyOptional({
-    description: 'Enable waiting room',
-    example: false,
-    type: Boolean,
-    default: false,
-  })
-  @IsOptional()
-  @IsBoolean()
-  waitingRoom?: boolean;
-
-  @ApiPropertyOptional({
     description: 'Is instant meeting',
     example: false,
     type: Boolean,

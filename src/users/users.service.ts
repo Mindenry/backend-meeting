@@ -92,7 +92,73 @@ export class UsersService {
     if (!exists) {
       throw new NotFoundException('User not found');
     }
-    await this.prisma.user.delete({ where: { id } });
+
+    // Delete related records first to handle foreign key constraints
+    await this.prisma.$transaction([
+      // Delete team memberships
+      this.prisma.teamMember.deleteMany({ where: { userId: id } }),
+      // Delete meeting participants
+      this.prisma.meetingParticipant.deleteMany({ where: { userId: id } }),
+      // Delete meeting reminders
+      this.prisma.meetingReminder.deleteMany({ where: { userId: id } }),
+      // Delete reminders created by user
+      this.prisma.reminder.deleteMany({ where: { createdBy: id } }),
+      // Delete reminder recipients
+      this.prisma.reminderRecipient.deleteMany({ where: { userId: id } }),
+      // Delete notifications
+      this.prisma.notification.deleteMany({ where: { userId: id } }),
+      // Delete notification preferences
+      this.prisma.notificationPreference.deleteMany({ where: { userId: id } }),
+      // Delete notification digests
+      this.prisma.notificationDigest.deleteMany({ where: { userId: id } }),
+      // Delete refresh tokens
+      this.prisma.refreshToken.deleteMany({ where: { userId: id } }),
+      // Delete time entries
+      this.prisma.timeEntry.deleteMany({ where: { userId: id } }),
+      // Delete work hours
+      this.prisma.workHours.deleteMany({ where: { userId: id } }),
+      // Delete messages sent by user
+      this.prisma.message.deleteMany({ where: { senderId: id } }),
+      // Delete direct messages
+      this.prisma.directMessage.deleteMany({ where: { senderId: id } }),
+      this.prisma.directMessage.deleteMany({ where: { receiverId: id } }),
+      // Delete message reads
+      this.prisma.messageRead.deleteMany({ where: { userId: id } }),
+      // Delete message reactions
+      this.prisma.messageReaction.deleteMany({ where: { userId: id } }),
+      // Delete task assignments
+      this.prisma.task.updateMany({ where: { assigneeId: id }, data: { assigneeId: null } }),
+      this.prisma.task.updateMany({ where: { reporterId: id }, data: { reporterId: null } }),
+      // Delete task comments
+      this.prisma.taskComment.deleteMany({ where: { userId: id } }),
+      // Delete task activity logs
+      this.prisma.taskActivityLog.deleteMany({ where: { userId: id } }),
+      // Delete task attachments
+      this.prisma.taskAttachment.deleteMany({ where: { userId: id } }),
+      // Delete task watchers
+      this.prisma.taskWatcher.deleteMany({ where: { userId: id } }),
+      // Delete invites created by user
+      this.prisma.invite.deleteMany({ where: { invitedBy: id } }),
+      // Delete audit logs
+      this.prisma.auditLog.deleteMany({ where: { userId: id } }),
+      // Delete document permissions
+      this.prisma.documentPermission.deleteMany({ where: { userId: id } }),
+      // Delete drive permissions
+      this.prisma.drivePermission.deleteMany({ where: { userId: id } }),
+      // Delete drive file versions
+      this.prisma.driveFileVersion.deleteMany({ where: { createdById: id } }),
+      // Delete drive entries created by user
+      this.prisma.driveEntry.deleteMany({ where: { createdById: id } }),
+      // Delete wiki comments
+      this.prisma.wikiComment.deleteMany({ where: { createdBy: id } }),
+      // Delete wiki article versions
+      this.prisma.wikiArticleVersion.deleteMany({ where: { createdBy: id } }),
+      // Delete announcement reads
+      this.prisma.announcementRead.deleteMany({ where: { userId: id } }),
+      // Finally delete the user
+      this.prisma.user.delete({ where: { id } }),
+    ]);
+
     return { success: true };
   }
 
