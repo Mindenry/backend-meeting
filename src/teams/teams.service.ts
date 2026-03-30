@@ -130,6 +130,8 @@ export class TeamsService {
       }
     }
 
+    // Delete all team members first to avoid foreign key constraint violation
+    await this.prisma.teamMember.deleteMany({ where: { teamId: id } });
     await this.prisma.team.delete({ where: { id } });
     return { success: true };
   }
