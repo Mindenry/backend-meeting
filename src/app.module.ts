@@ -49,6 +49,7 @@ import { TaskStatusesModule } from './task-statuses/task-statuses.module';
 import { IssueLinksModule } from './issue-links/issue-links.module';
 import { TaskWatchersModule } from './task-watchers/task-watchers.module';
 import { TaskActivityModule } from './task-activity/task-activity.module';
+import { MeetingMinutesModule } from './meeting-minutes/meeting-minutes.module';
 import { SeedModule } from './seed/seed.module';
 import { MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { LoggingMiddleware } from './common/middleware/logging.middleware';
@@ -122,6 +123,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     IssueLinksModule,
     TaskWatchersModule,
     TaskActivityModule,
+    MeetingMinutesModule,
     HealthModule,
     SeedModule,
   ],
