@@ -25,7 +25,7 @@ export class CreateMeetingMinutesDto {
 
   @ApiPropertyOptional({
     description: 'Action items as JSON array',
-    example: [{ task: 'Follow up on API issue', assignee: 'John', dueDate: '2024-01-15' }],
+    example: [{ task: 'Follow up on API issue', assigneeId: 'user-uuid', assigneeName: 'John', dueDate: '2024-01-15', completed: false }],
   })
   @IsOptional()
   actionItems?: any;
