@@ -2,16 +2,21 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly emailService: EmailService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -275,8 +280,7 @@ export class AuthService {
       };
     }
 
-    // Usually, we would generate a unique token, save it to DB, and send an email
-    // For this implementation, we will use a JWT token that expires quickly
+    // Generate a JWT token that expires in 1 hour
     const payload = {
       email: user.email,
       sub: user.id,
@@ -284,11 +288,18 @@ export class AuthService {
     };
     const resetToken = this.jwtService.sign(payload, { expiresIn: '1h' });
 
-    // Since we don't have an email sending service integrated yet,
-    // we'll log the token to the console and return it for development purposes.
-    console.log(
-      `Password reset link for ${user.email}: http://localhost:5173/reset-password?token=${resetToken}`,
+    // Send password reset email
+    const emailSent = await this.emailService.sendPasswordResetEmail(
+      user.email,
+      resetToken,
+      '',
     );
+
+    if (emailSent) {
+      this.logger.log(`Password reset email sent to ${user.email}`);
+    } else {
+      this.logger.warn(`Failed to send password reset email to ${user.email}`);
+    }
 
     return {
       success: true,

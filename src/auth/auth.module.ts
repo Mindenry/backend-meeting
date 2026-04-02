@@ -7,12 +7,14 @@ import { JwtStrategy } from './jwt.strategy';
 import { PrismaModule } from '../prisma/prisma.module';
 import { InvitesModule } from '../invites/invites.module';
 import { CommonModule } from '../common/common.module';
+import { EmailModule } from '../email/email.module';
 @Module({
   imports: [
     PrismaModule,
     PassportModule,
     InvitesModule,
     CommonModule,
+    EmailModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
       signOptions: { expiresIn: '15m' },

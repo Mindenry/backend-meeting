@@ -51,6 +51,7 @@ import { TaskWatchersModule } from './task-watchers/task-watchers.module';
 import { TaskActivityModule } from './task-activity/task-activity.module';
 import { MeetingMinutesModule } from './meeting-minutes/meeting-minutes.module';
 import { SeedModule } from './seed/seed.module';
+import { EmailModule } from './email/email.module';
 import { MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { LoggingMiddleware } from './common/middleware/logging.middleware';
 import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
@@ -126,6 +127,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     MeetingMinutesModule,
     HealthModule,
     SeedModule,
+    EmailModule,
   ],
   controllers: [AppController, UploadController, AuditController],
   providers: [AppService],
