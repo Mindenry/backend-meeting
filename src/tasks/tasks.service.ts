@@ -311,6 +311,7 @@ export class TasksService {
     tags?: string[];
     assigneeId?: string | null;
     assigneeIds?: string[];
+    watcherIds?: string[];
     reporterId?: string | null;
     teamId?: string | null;
     meetingId?: string | null;
@@ -333,6 +334,7 @@ export class TasksService {
     const {
       assigneeId,
       assigneeIds,
+      watcherIds,
       reporterId,
       teamId,
       meetingId,
@@ -502,6 +504,17 @@ export class TasksService {
       try {
         await this.taskWatchersService.autoWatch(task.id, task.assigneeId);
       } catch {}
+    }
+
+    // ── Create watchers for additional assignees (multi-assignee support) ──
+    if (watcherIds && watcherIds.length > 0) {
+      for (const watcherId of watcherIds) {
+        if (watcherId !== createdBy && watcherId !== task.assigneeId) {
+          try {
+            await this.taskWatchersService.autoWatch(task.id, watcherId);
+          } catch {}
+        }
+      }
     }
 
     // ── Activity log on parent task if this is a subtask ──
@@ -1025,6 +1038,91 @@ export class TasksService {
 
   async deleteAttachment(attachmentId: string) {
     return this.prisma.taskAttachment.delete({ where: { id: attachmentId } });
+  }
+
+  // Issue Links
+  async addIssueLink(sourceId: string, targetId: string, type: string) {
+    if (sourceId === targetId) {
+      throw new BadRequestException('Cannot link task to itself');
+    }
+
+    const source = await (this.prisma.task as any).findUnique({
+      where: { id: sourceId },
+    });
+    const target = await (this.prisma.task as any).findUnique({
+      where: { id: targetId },
+    });
+
+    if (!source || !target) {
+      throw new NotFoundException('Source or target task not found');
+    }
+
+    const existing = await (this.prisma as any).issueLink.findUnique({
+      where: {
+        sourceId_targetId_type: { sourceId, targetId, type },
+      },
+    });
+
+    if (existing) {
+      throw new BadRequestException('Link already exists');
+    }
+
+    const link = await (this.prisma as any).issueLink.create({
+      data: { sourceId, targetId, type },
+      include: {
+        source: { select: { id: true, title: true, issueType: true, status: true } },
+        target: { select: { id: true, title: true, issueType: true, status: true } },
+      },
+    });
+
+    // Log activity
+    if (source.reporterId) {
+      await this.prisma.taskActivityLog.create({
+        data: {
+          taskId: sourceId,
+          userId: source.reporterId,
+          action: 'link_added',
+          newValue: `${type}:${target.title}`,
+        },
+      });
+    }
+
+    return link;
+  }
+
+  async getIssueLinks(taskId: string) {
+    const [outgoing, incoming] = await Promise.all([
+      (this.prisma as any).issueLink.findMany({
+        where: { sourceId: taskId },
+        include: {
+          target: { select: { id: true, title: true, issueType: true, status: true } },
+        },
+      }),
+      (this.prisma as any).issueLink.findMany({
+        where: { targetId: taskId },
+        include: {
+          source: { select: { id: true, title: true, issueType: true, status: true } },
+        },
+      }),
+    ]);
+
+    return [
+      ...outgoing.map((l: any) => ({ ...l, direction: 'outgoing' })),
+      ...incoming.map((l: any) => ({ ...l, direction: 'incoming' })),
+    ];
+  }
+
+  async deleteIssueLink(linkId: string) {
+    const link = await (this.prisma as any).issueLink.findUnique({
+      where: { id: linkId },
+    });
+
+    if (!link) {
+      throw new NotFoundException('Issue link not found');
+    }
+
+    await (this.prisma as any).issueLink.delete({ where: { id: linkId } });
+    return { success: true };
   }
 
   async getTemplates(filters?: { teamId?: string; createdById?: string }) {

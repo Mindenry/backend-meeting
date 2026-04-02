@@ -325,6 +325,25 @@ export class TasksController {
     return this.tasksService.deleteAttachment(attachmentId);
   }
 
+  // Issue Links
+  @Post(':id/links')
+  addIssueLink(
+    @Param('id') id: string,
+    @Body() body: { targetId: string; type: string },
+  ) {
+    return this.tasksService.addIssueLink(id, body.targetId, body.type);
+  }
+
+  @Get(':id/links')
+  getIssueLinks(@Param('id') id: string) {
+    return this.tasksService.getIssueLinks(id);
+  }
+
+  @Delete('links/:linkId')
+  deleteIssueLink(@Param('linkId') linkId: string) {
+    return this.tasksService.deleteIssueLink(linkId);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.tasksService.remove(id);

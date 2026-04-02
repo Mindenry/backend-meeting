@@ -136,8 +136,25 @@ export class TeamsService {
     return { success: true };
   }
 
-  async addMember(teamId: string, userId: string, role = 'member') {
+  async addMember(teamId: string, userId: string, role = 'member', requester?: any) {
     await this.ensureTeamAndUser(teamId, userId);
+
+    // Permission check
+    if (requester) {
+      const orgRole = requester.role?.toLowerCase() || 'employee';
+      const isGlobalAdmin = ['org_owner', 'admin'].includes(orgRole);
+      if (!isGlobalAdmin) {
+        const requesterMember = await this.prisma.teamMember.findUnique({
+          where: { userId_teamId: { userId: requester.id, teamId } },
+        });
+        if (!requesterMember || requesterMember.role !== 'lead') {
+          throw new ForbiddenException(
+            'You do not have permission to add members to this team',
+          );
+        }
+      }
+    }
+
     const safeRole = this.sanitizeTeamRole(role);
 
     const member = await this.prisma.teamMember.upsert({

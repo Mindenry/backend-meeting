@@ -8,6 +8,8 @@ import {
   Post,
   Query,
   UseGuards,
+  Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -87,35 +89,64 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @UseGuards(RolesGuard)
-  @Roles('org_owner', 'admin', 'manager')
   @ApiOperation({
     summary: 'Update user',
-    description: 'Update user information. Requires admin or manager role.',
+    description: 'Update user information. Users can update their own profile, admins can update any user.',
   })
   @ApiParam({ name: 'id', description: 'User ID', example: 'user-123' })
   @ApiResponse({ status: 200, description: 'User updated successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden - cannot update other users' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden - insufficient permissions',
-  })
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+  async update(
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+    @Request() req: any,
+  ) {
+    const currentUserId = req?.user?.id;
+    const currentUserRole = String(req?.user?.role || '').toLowerCase();
+    const isAdmin = currentUserRole === 'org_owner' || currentUserRole === 'admin' || currentUserRole === 'manager';
+    
+    // Allow users to update their own profile, or admins to update any user
+    if (!isAdmin && currentUserId !== id) {
+      throw new ForbiddenException('You can only update your own profile');
+    }
+    
+    // Non-admins can only update specific fields (name, avatar)
+    if (!isAdmin) {
+      const allowedFields = ['name', 'avatar', 'department', 'position'];
+      const updateKeys = Object.keys(updateUserDto);
+      const invalidFields = updateKeys.filter(key => !allowedFields.includes(key));
+      if (invalidFields.length > 0) {
+        throw new ForbiddenException(`You can only update: ${allowedFields.join(', ')}`);
+      }
+    }
+    
     return this.usersService.update(id, updateUserDto);
   }
 
   @Patch(':id/status')
   @ApiOperation({
     summary: 'Update user status',
-    description: 'Update user status and activity (online/offline/away)',
+    description: 'Update user status and activity (online/offline/away). Users can only update their own status.',
   })
   @ApiParam({ name: 'id', description: 'User ID', example: 'user-123' })
   @ApiResponse({ status: 200, description: 'User status updated successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden - cannot update other user status' })
   @ApiResponse({ status: 404, description: 'User not found' })
   updateStatus(
     @Param('id') id: string,
     @Body() updateStatusDto: UpdateUserStatusDto,
+    @Request() req: any,
   ) {
+    const currentUserId = req?.user?.id;
+    const currentUserRole = String(req?.user?.role || '').toLowerCase();
+    const isAdmin = currentUserRole === 'org_owner' || currentUserRole === 'admin';
+    
+    // Allow users to update their own status, or admins to update any user
+    if (!isAdmin && currentUserId !== id) {
+      throw new ForbiddenException('You can only update your own status');
+    }
+    
     return this.usersService.updateStatus(id, updateStatusDto);
   }
 
@@ -137,15 +168,26 @@ export class UsersController {
   @Patch(':id/password')
   @ApiOperation({
     summary: 'Change user password',
-    description: 'Change user password by providing the current password',
+    description: 'Change user password by providing the current password. Users can only change their own password.',
   })
   @ApiParam({ name: 'id', description: 'User ID', example: 'user-123' })
   @ApiResponse({ status: 200, description: 'Password changed successfully' })
   @ApiResponse({ status: 400, description: 'Invalid current password' })
+  @ApiResponse({ status: 403, description: 'Forbidden - cannot change other user password' })
   changePassword(
     @Param('id') id: string,
     @Body() passwords: ChangePasswordDto,
+    @Request() req: any,
   ) {
+    const currentUserId = req?.user?.id;
+    const currentUserRole = String(req?.user?.role || '').toLowerCase();
+    const isAdmin = currentUserRole === 'org_owner' || currentUserRole === 'admin';
+    
+    // Allow users to change their own password, or admins to change any user password
+    if (!isAdmin && currentUserId !== id) {
+      throw new ForbiddenException('You can only change your own password');
+    }
+    
     return this.usersService.changePassword(id, passwords);
   }
 }

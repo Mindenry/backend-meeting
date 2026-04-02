@@ -50,9 +50,28 @@ export class MeetingsController {
     return this.meetingsService.findAll({ status, teamId });
   }
 
+  // IMPORTANT: This route must come BEFORE @Get(':id') to avoid route collision
+  // When requesting /meetings/code/ABC123, NestJS matches routes in order
+  @Get('code/:code')
+  findByCode(@Param('code') code: string) {
+    return this.meetingsService.findByCode(code);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.meetingsService.findOne(id);
+  }
+
+  @Post('quick-huddle')
+  @ApiOperation({
+    summary: 'Create a Quick Huddle meeting',
+    description: 'Create an instant meeting with shareable meeting code',
+  })
+  @ApiResponse({ status: 201, description: 'Quick Huddle created successfully' })
+  createQuickHuddle(@Request() req: any) {
+    const userId = req.user.id;
+    const userName = req.user.name || 'Host';
+    return this.meetingsService.createQuickHuddle(userId, userName);
   }
 
   @Post()
@@ -118,11 +137,6 @@ export class MeetingsController {
     @Body() body: { userId: string },
   ) {
     return this.meetingsService.leaveMeeting(meetingId, body.userId);
-  }
-
-  @Get('code/:code')
-  findByCode(@Param('code') code: string) {
-    return this.meetingsService.findByCode(code);
   }
 
   @Post(':id/start')

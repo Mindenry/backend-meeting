@@ -5,6 +5,7 @@ import {
   IsArray,
   IsDateString,
   IsNumber,
+  IsNotEmpty,
 } from 'class-validator';
 import {
   ApiProperty,
@@ -18,6 +19,7 @@ export class CreateMeetingDto {
     type: String,
   })
   @IsString()
+  @IsNotEmpty()
   title: string;
 
   @ApiPropertyOptional({

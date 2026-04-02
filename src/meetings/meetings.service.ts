@@ -269,6 +269,54 @@ export class MeetingsService {
     return meeting;
   }
 
+  async createQuickHuddle(hostId: string, hostName: string) {
+    // Generate unique meeting code
+    let meetingCode = this.generateMeetingCode();
+    while (await this.prisma.meeting.findUnique({ where: { meetingCode } })) {
+      meetingCode = this.generateMeetingCode();
+    }
+
+    const now = new Date();
+    const endTime = new Date(now.getTime() + 60 * 60 * 1000); // Default 1 hour
+
+    const meeting = await this.prisma.meeting.create({
+      data: {
+        title: `Quick Huddle - ${hostName}`,
+        description: 'Instant meeting started from Quick Huddle',
+        startTime: now,
+        endTime,
+        meetingCode,
+        status: 'live',
+        actualStartTime: now,
+        isInstant: true,
+        allowScreenShare: true,
+        hostId,
+      },
+      include: {
+        team: true,
+        host: true,
+        participants: true,
+      },
+    });
+
+    this.eventsGateway.emitMeetingCreated(meeting);
+
+    await this.auditService.log({
+      action: 'create',
+      entity: 'meeting',
+      entityId: meeting.id,
+      userId: hostId,
+      userName: hostName,
+      details: {
+        title: meeting.title,
+        meetingCode: meeting.meetingCode,
+        isQuickHuddle: true,
+      },
+    });
+
+    return meeting;
+  }
+
   async startMeeting(id: string) {
     const meeting = await this.prisma.meeting.findUnique({ where: { id } });
     if (!meeting) throw new NotFoundException('Meeting not found');

@@ -152,7 +152,8 @@ export class TeamsController {
   @Post(':id/members')
   @ApiOperation({
     summary: 'Add member to team',
-    description: 'Add a user to a team with optional role',
+    description:
+      'Add a user to a team with optional role. Requires org owner, admin, or team lead.',
   })
   @ApiParam({ name: 'id', description: 'Team ID', example: 'team-123' })
   @ApiResponse({
@@ -160,11 +161,20 @@ export class TeamsController {
     description: 'Member added to team successfully',
   })
   @ApiResponse({ status: 404, description: 'Team or user not found' })
-  addMember(@Param('id') id: string, @Body() addMemberDto: AddMemberDto) {
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - insufficient permissions',
+  })
+  addMember(
+    @Param('id') id: string,
+    @Body() addMemberDto: AddMemberDto,
+    @Req() req: any,
+  ) {
     return this.teamsService.addMember(
       id,
       addMemberDto.userId,
       addMemberDto.role,
+      req.user,
     );
   }
 
