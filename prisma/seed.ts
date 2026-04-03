@@ -26,57 +26,38 @@ async function main() {
       logo: 'https://ui-avatars.com/api/?name=SDS&background=0D8ABC&color=fff',
       settings: {
         departments: [
-          { id: 'engineering', name: 'Engineering', color: '#3B82F6' },
-          { id: 'design', name: 'Design & UX', color: '#8B5CF6' },
-          { id: 'product', name: 'Product', color: '#10B981' },
-          { id: 'qa', name: 'Quality Assurance', color: '#F59E0B' },
-          { id: 'devops', name: 'DevOps & Infrastructure', color: '#EF4444' },
-          { id: 'project', name: 'Project Management', color: '#EC4899' },
-          { id: 'marketing', name: 'Marketing', color: '#6366F1' },
-          { id: 'hr', name: 'Human Resources', color: '#14B8A6' },
-        ],
-        positions: [
-          // Engineering
-          { id: 'cto', name: 'CTO', departmentId: 'engineering' },
-          { id: 'tech_lead', name: 'Technical Lead', departmentId: 'engineering' },
-          { id: 'senior_frontend', name: 'Senior Frontend Developer', departmentId: 'engineering' },
-          { id: 'senior_backend', name: 'Senior Backend Developer', departmentId: 'engineering' },
-          { id: 'frontend_dev', name: 'Frontend Developer', departmentId: 'engineering' },
-          { id: 'backend_dev', name: 'Backend Developer', departmentId: 'engineering' },
-          { id: 'fullstack_dev', name: 'Full Stack Developer', departmentId: 'engineering' },
-          { id: 'mobile_dev', name: 'Mobile Developer', departmentId: 'engineering' },
-          // Design & UX
-          { id: 'design_director', name: 'Design Director', departmentId: 'design' },
-          { id: 'ux_lead', name: 'UX Lead', departmentId: 'design' },
-          { id: 'ui_designer', name: 'UI Designer', departmentId: 'design' },
-          { id: 'ux_designer', name: 'UX Designer', departmentId: 'design' },
-          { id: 'graphic_designer', name: 'Graphic Designer', departmentId: 'design' },
-          // Product
-          { id: 'product_director', name: 'Product Director', departmentId: 'product' },
-          { id: 'product_manager', name: 'Product Manager', departmentId: 'product' },
-          { id: 'product_owner', name: 'Product Owner', departmentId: 'product' },
-          { id: 'business_analyst', name: 'Business Analyst', departmentId: 'product' },
-          // QA
-          { id: 'qa_lead', name: 'QA Lead', departmentId: 'qa' },
-          { id: 'qa_engineer', name: 'QA Engineer', departmentId: 'qa' },
-          { id: 'test_engineer', name: 'Test Engineer', departmentId: 'qa' },
-          // DevOps
-          { id: 'devops_lead', name: 'DevOps Lead', departmentId: 'devops' },
-          { id: 'devops_engineer', name: 'DevOps Engineer', departmentId: 'devops' },
-          { id: 'sre', name: 'Site Reliability Engineer', departmentId: 'devops' },
-          { id: 'cloud_engineer', name: 'Cloud Engineer', departmentId: 'devops' },
-          // Project Management
-          { id: 'pm_director', name: 'PM Director', departmentId: 'project' },
-          { id: 'project_manager', name: 'Project Manager', departmentId: 'project' },
-          { id: 'scrum_master', name: 'Scrum Master', departmentId: 'project' },
-          // Marketing
-          { id: 'marketing_manager', name: 'Marketing Manager', departmentId: 'marketing' },
-          { id: 'content_writer', name: 'Content Writer', departmentId: 'marketing' },
-          { id: 'seo_specialist', name: 'SEO Specialist', departmentId: 'marketing' },
-          // HR
-          { id: 'hr_manager', name: 'HR Manager', departmentId: 'hr' },
-          { id: 'recruiter', name: 'Recruiter', departmentId: 'hr' },
-          { id: 'hr_specialist', name: 'HR Specialist', departmentId: 'hr' },
+          {
+            name: 'Engineering',
+            positions: ['CTO', 'Technical Lead', 'Senior Frontend Developer', 'Senior Backend Developer', 'Frontend Developer', 'Backend Developer', 'Full Stack Developer', 'Mobile Developer'],
+          },
+          {
+            name: 'Design & UX',
+            positions: ['Design Director', 'UX Lead', 'UI Designer', 'UX Designer', 'Graphic Designer'],
+          },
+          {
+            name: 'Product',
+            positions: ['Product Director', 'Product Manager', 'Product Owner', 'Business Analyst'],
+          },
+          {
+            name: 'QA',
+            positions: ['QA Lead', 'QA Engineer', 'Test Engineer'],
+          },
+          {
+            name: 'DevOps & Infrastructure',
+            positions: ['DevOps Lead', 'DevOps Engineer', 'Site Reliability Engineer', 'Cloud Engineer'],
+          },
+          {
+            name: 'Project Management',
+            positions: ['PM Director', 'Project Manager', 'Scrum Master'],
+          },
+          {
+            name: 'Marketing',
+            positions: ['Marketing Manager', 'Content Writer', 'SEO Specialist'],
+          },
+          {
+            name: 'Human Resources',
+            positions: ['HR Manager', 'Recruiter', 'HR Specialist'],
+          },
         ],
       },
     },
