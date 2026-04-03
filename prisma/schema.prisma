@@ -17,6 +17,7 @@ model Organization {
   name           String
   domain         String? // Allowed email domain (e.g., "company.com")
   allowedDomains String[] @default([]) // Multiple allowed domains
+  logo           String? // Organization logo URL
   settings       Json? // Organization settings
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
