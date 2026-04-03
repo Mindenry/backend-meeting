@@ -52,10 +52,16 @@ export class OrganizationsService {
       throw new NotFoundException('Organization not found');
     }
 
-    return this.prisma.organization.update({
+    console.log('Updating organization with data:', JSON.stringify(data, null, 2));
+    console.log('Settings to save:', JSON.stringify(data.settings, null, 2));
+
+    const result = await this.prisma.organization.update({
       where: { id },
       data,
     });
+
+    console.log('Updated organization result:', JSON.stringify(result, null, 2));
+    return result;
   }
 
   async remove(id: string) {
