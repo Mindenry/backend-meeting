@@ -49,14 +49,32 @@ export class UsersController {
     type: Boolean,
     description: 'Include system/bot users when true',
   })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number for pagination',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of users per page (default: 50)',
+  })
   @ApiResponse({
     status: 200,
     description: 'List of users retrieved successfully',
   })
-  findAll(@Query('includeSystem') includeSystem?: string) {
+  findAll(
+    @Query('includeSystem') includeSystem?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
     const includeSystemUsers =
       includeSystem === 'true' || includeSystem === '1';
-    return this.usersService.findAll(includeSystemUsers);
+    const pageNum = page ? parseInt(page) : undefined;
+    const limitNum = limit ? parseInt(limit) : 50;
+    return this.usersService.findAll(includeSystemUsers, pageNum, limitNum);
   }
 
   @Get(':id')

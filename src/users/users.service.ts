@@ -18,7 +18,9 @@ export class UsersService {
     private readonly eventsGateway: EventsGateway,
   ) {}
 
-  findAll(includeSystem = false) {
+  findAll(includeSystem = false, page?: number, limit = 50) {
+    const skip = page ? (page - 1) * limit : undefined;
+    
     return this.prisma.user.findMany({
       where: includeSystem
         ? undefined
@@ -27,6 +29,25 @@ export class UsersService {
               not: 'system',
             },
           },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        displayName: true,
+        role: true,
+        status: true,
+        activity: true,
+        avatar: true,
+        department: true,
+        position: true,
+        isActive: true,
+        organizationId: true,
+        managerId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      ...(skip !== undefined ? { skip, take: limit } : {}),
+      orderBy: { name: 'asc' },
     });
   }
 

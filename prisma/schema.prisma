@@ -96,6 +96,11 @@ model User {
   // Direct messages
   sentDirectMessages      DirectMessage[]         @relation("SentDirectMessages")
   receivedDirectMessages  DirectMessage[]         @relation("ReceivedDirectMessages")
+
+  @@index([organizationId])
+  @@index([role])
+  @@index([status])
+  @@index([name])
 }
 
 model Team {

@@ -8,6 +8,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { setupSwagger } from './config/swagger.config';
 import * as express from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+import compression from 'compression';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -17,6 +18,20 @@ async function bootstrap() {
 
   // Global exception filter
   app.useGlobalFilters(new AllExceptionsFilter());
+
+  // Enable gzip compression for API responses (reduces payload size by ~70%)
+  app.use(
+    compression({
+      filter: (req, res) => {
+        if (req.headers['x-no-compression']) {
+          return false;
+        }
+        return compression.filter(req, res);
+      },
+      threshold: 1024, // Only compress responses > 1KB
+      level: 6, // Compression level (1-9, 6 is good balance)
+    }),
+  );
 
   // Global interceptors
   app.useGlobalInterceptors(

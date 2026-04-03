@@ -8,6 +8,7 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
+import { CacheHelperService } from '../common/cache/cache-helper.service';
 
 @Injectable()
 export class ChannelsService {
@@ -17,29 +18,50 @@ export class ChannelsService {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => EventsGateway))
     private readonly eventsGateway: EventsGateway,
+    private readonly cacheHelper: CacheHelperService,
   ) {}
 
   findAll(params?: { teamId?: string; includeMeeting?: boolean }) {
     const { teamId, includeMeeting = false } = params || {};
-    return this.prisma.channel.findMany({
-      where: {
-        teamId: teamId || undefined,
-        ...(includeMeeting
-          ? {}
-          : {
-              NOT: {
-                OR: [{ type: 'meeting' }, { name: { startsWith: 'meeting-' } }],
+    
+    const cacheKey = `channels:${teamId || 'all'}:${includeMeeting}`;
+    
+    return this.cacheHelper.getOrSet(
+      cacheKey,
+      () =>
+        this.prisma.channel.findMany({
+          where: {
+            teamId: teamId || undefined,
+            ...(includeMeeting
+              ? {}
+              : {
+                  NOT: {
+                    OR: [{ type: 'meeting' }, { name: { startsWith: 'meeting-' } }],
+                  },
+                }),
+          },
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            description: true,
+            createdAt: true,
+            updatedAt: true,
+            teamId: true,
+            team: {
+              select: {
+                id: true,
+                name: true,
               },
-            }),
-      },
-      include: {
-        team: true,
-        _count: {
-          select: { messages: true },
-        },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+            },
+            _count: {
+              select: { messages: true },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        }),
+      30, // 30 seconds TTL
+    );
   }
 
   async findOne(id: string) {

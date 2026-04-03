@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
+import { CacheHelperService } from '../common/cache/cache-helper.service';
 
 @Injectable()
 export class TeamsService {
@@ -15,6 +16,7 @@ export class TeamsService {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => EventsGateway))
     private readonly eventsGateway: EventsGateway,
+    private readonly cacheHelper: CacheHelperService,
   ) {}
 
   private readonly allowedTeamRoles = ['lead', 'member'] as const;
@@ -33,14 +35,48 @@ export class TeamsService {
           },
         }; // Employees see only teams they are part of
 
-    return this.prisma.team.findMany({
-      where: whereClause,
-      include: {
-        members: {
-          include: { user: true },
-        },
-      },
-    });
+    // Cache key based on user's organization and role
+    const cacheKey = `teams:user:${user.id}:${orgRole}`;
+
+    return this.cacheHelper.getOrSet(
+      cacheKey,
+      () =>
+        this.prisma.team.findMany({
+          where: whereClause,
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            createdAt: true,
+            updatedAt: true,
+            organizationId: true,
+            members: {
+              select: {
+                id: true,
+                role: true,
+                userId: true,
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    avatar: true,
+                    status: true,
+                  },
+                },
+              },
+            },
+            _count: {
+              select: {
+                members: true,
+                tasks: true,
+                channels: true,
+              },
+            },
+          },
+        }),
+      30, // 30 seconds TTL for teams list
+    );
   }
 
   findOne(id: string) {
