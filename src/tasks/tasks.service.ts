@@ -929,15 +929,93 @@ export class TasksService {
     });
     if (!task) throw new NotFoundException('Task not found');
 
-    // Update task position and status
-    return this.update(
-      taskId,
-      {
-        status: newStatus as TaskStatus,
-        position: newPosition,
-      },
-      undefined,
-    );
+    const oldStatus = task.status;
+    const oldPosition = task.position ?? 0;
+
+    // Build base where clause for team filtering
+    const teamFilter = teamId ? { teamId } : {};
+
+    // If status changed, we need to reorder tasks in both columns
+    if (oldStatus !== newStatus) {
+      return this.prisma.$transaction(async (tx) => {
+        // Shift tasks in old status column (decrease position for tasks after the moved one)
+        await (tx as any).task.updateMany({
+          where: {
+            status: oldStatus,
+            position: { gt: oldPosition },
+            ...teamFilter,
+          },
+          data: { position: { decrement: 1 } },
+        });
+
+        // Shift tasks in new status column (increase position for tasks at or after newPosition)
+        await (tx as any).task.updateMany({
+          where: {
+            status: newStatus,
+            position: { gte: newPosition },
+            ...teamFilter,
+          },
+          data: { position: { increment: 1 } },
+        });
+
+        // Update the moved task
+        const updated = await (tx as any).task.update({
+          where: { id: taskId },
+          data: {
+            status: newStatus,
+            position: newPosition,
+          },
+          include: {
+            assignee: { select: { id: true, name: true, avatar: true } },
+            team: { select: { id: true, name: true } },
+          },
+        });
+
+        return updated;
+      });
+    }
+
+    // If only position changed within the same status
+    if (oldPosition !== newPosition) {
+      return this.prisma.$transaction(async (tx) => {
+        if (newPosition < oldPosition) {
+          // Moving up: shift tasks between newPosition and oldPosition down
+          await (tx as any).task.updateMany({
+            where: {
+              status: oldStatus,
+              position: { gte: newPosition, lt: oldPosition },
+              ...teamFilter,
+            },
+            data: { position: { increment: 1 } },
+          });
+        } else {
+          // Moving down: shift tasks between oldPosition and newPosition up
+          await (tx as any).task.updateMany({
+            where: {
+              status: oldStatus,
+              position: { gt: oldPosition, lte: newPosition },
+              ...teamFilter,
+            },
+            data: { position: { decrement: 1 } },
+          });
+        }
+
+        // Update the moved task
+        const updated = await (tx as any).task.update({
+          where: { id: taskId },
+          data: { position: newPosition },
+          include: {
+            assignee: { select: { id: true, name: true, avatar: true } },
+            team: { select: { id: true, name: true } },
+          },
+        });
+
+        return updated;
+      });
+    }
+
+    // No change needed
+    return task;
   }
 
   async addSubtask(taskId: string, title: string) {
