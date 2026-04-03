@@ -115,19 +115,265 @@ export class ReportsService {
 
     const tasksCompleted = userReport.summary?.tasks?.completed || 0;
     const tasksTotal = userReport.summary?.tasks?.total || 0;
+    const meetingsAttended = userReport.summary?.meetings?.attended || 0;
     const messagesSent = userReport.summary?.messagesSent || 0;
-    const productivityScore =
-      tasksTotal > 0
-        ? Math.min(100, (tasksCompleted / tasksTotal) * 100)
-        : messagesSent > 0
-          ? 100
-          : 0;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Professional Productivity Score Calculation Methodology
+    // Based on: Balanced Scorecard (Kaplan & Norton, 1996)
+    //           and Team Performance Measurement (Hackman, 2002)
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    // PRODUCTIVITY = Adjusted Task Performance (45%) + Meaningful Engagement (20%)
+    //              + Communication Effectiveness (20%) + Work Consistency (15%)
+    //
+    // 1. Adjusted Task Performance (45% weight) - Core output indicator
+    //    - Completion Rate × 0.6 + On-Time Rate × 0.4
+    //    - Adjusted by Task Difficulty Factor (Easy=1, Medium=2, Hard=3)
+    //    - Measures: Output quality and effort required
+    //
+    // 2. Meaningful Engagement (20% weight) - Collaboration indicator
+    //    - Attendance Rate × 0.6 + Participation Score × 0.4
+    //    - Measures: Active team participation
+    //
+    // 3. Communication Effectiveness (20% weight) - Information flow indicator
+    //    - Responsiveness Score × 0.5 + Relative Activity × 0.5
+    //    - Measures: Timely response and knowledge sharing
+    //
+    // 4. Work Consistency (15% weight) - Sustainability indicator
+    //    - Active Days Ratio (capped if task performance low)
+    //    - Measures: Work regularity and dedication
+    //
+    // ANTI-GAMING RULE:
+    //    If Completion Rate < 30% → Final Score capped at 50%
+    //
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // --- 1. Adjusted Task Performance Score (45%) ---
+    const taskCompletionRate = tasksTotal > 0 ? (tasksCompleted / tasksTotal) * 100 : 0;
+    
+    // Check overdue tasks (tasks not done but past due date)
+    const overdueTasks = await this.prisma.task.count({
+      where: {
+        assigneeId: currentUser.id,
+        status: { not: 'done' },
+        dueDate: { lt: new Date() },
+        createdAt: { gte: startDate, lte: endDate }
+      }
+    });
+    
+    // On-time rate: penalize overdue tasks
+    const onTimeRate = tasksTotal > 0 
+      ? Math.max(0, 100 - (overdueTasks / tasksTotal) * 100)
+      : 0;
+    
+    // Base task score (60% completion, 40% on-time)
+    const baseTaskScore = (taskCompletionRate * 0.6) + (onTimeRate * 0.4);
+    
+    // Task Difficulty Factor: Easy=1, Medium=2, Hard=3, Urgent=4
+    const taskDifficultyCounts = await this.prisma.task.groupBy({
+      by: ['priority'],
+      where: {
+        assigneeId: currentUser.id,
+        createdAt: { gte: startDate, lte: endDate }
+      },
+      _count: true
+    });
+    
+    const difficultyWeights: Record<string, number> = {
+      low: 1,
+      medium: 2,
+      high: 3,
+      urgent: 4
+    };
+    
+    let totalWeightedTasks = 0;
+    let totalTasksForDifficulty = 0;
+    taskDifficultyCounts.forEach(t => {
+      const weight = difficultyWeights[t.priority] || 1;
+      totalWeightedTasks += t._count * weight;
+      totalTasksForDifficulty += t._count;
+    });
+    
+    // Difficulty factor: average difficulty (normalized to 1-1.5 range)
+    const avgDifficulty = totalTasksForDifficulty > 0 
+      ? totalWeightedTasks / totalTasksForDifficulty 
+      : 1;
+    const difficultyFactor = 1 + ((avgDifficulty - 1) / 3) * 0.5; // Scale to 1.0-1.5
+    
+    // Adjusted task performance
+    const adjustedTaskPerformance = Math.min(100, baseTaskScore * difficultyFactor);
+
+    // --- 2. Meaningful Engagement Score (20%) ---
+    // Get total meetings user was invited to
+    const totalMeetingsInvited = await this.prisma.meetingParticipant.count({
+      where: {
+        userId: currentUser.id,
+        meeting: {
+          startTime: { gte: startDate, lte: endDate }
+        }
+      }
+    });
+    
+    const meetingAttendanceRate = totalMeetingsInvited > 0 
+      ? (meetingsAttended / totalMeetingsInvited) * 100 
+      : (meetingsAttended > 0 ? 100 : 0);
+    
+    // Participation score: proxy via messages in meeting channels or reactions
+    // For now, use message activity as participation proxy
+    const meetingChannelMessages = await this.prisma.message.count({
+      where: {
+        senderId: currentUser.id,
+        createdAt: { gte: startDate, lte: endDate },
+        channel: {
+          name: { contains: 'meeting' }
+        }
+      }
+    });
+    
+    // Participation score (normalized, max 100)
+    const participationScore = Math.min(100, meetingChannelMessages * 10);
+    
+    // Meaningful engagement = Attendance (60%) + Participation (40%)
+    const meaningfulEngagement = (meetingAttendanceRate * 0.6) + (participationScore * 0.4);
+
+    // --- 3. Communication Effectiveness Score (20%) ---
+    // Normalize by team average to measure relative contribution
+    const teamMembers = await this.prisma.teamMember.findMany({
+      where: {
+        team: { organizationId: currentUser.organizationId }
+      },
+      select: { userId: true }
+    });
+    
+    const teamUserIds = [...new Set(teamMembers.map(m => m.userId))];
+    
+    // Get average messages per team member
+    const teamMessageCounts = await this.prisma.message.groupBy({
+      by: ['senderId'],
+      where: {
+        senderId: { in: teamUserIds },
+        createdAt: { gte: startDate, lte: endDate }
+      },
+      _count: true
+    });
+    
+    const avgTeamMessages = teamMessageCounts.length > 0
+      ? teamMessageCounts.reduce((sum, m) => sum + m._count, 0) / teamMessageCounts.length
+      : 1;
+    
+    // Relative Activity Score: ratio to team average
+    const relativeActivityScore = avgTeamMessages > 0
+      ? Math.min(100, (messagesSent / avgTeamMessages) * 50)
+      : (messagesSent > 0 ? 50 : 0);
+    
+    // Responsiveness Score: based on reply patterns (simplified)
+    // Check how many messages are replies (in threads)
+    const replyMessages = await this.prisma.message.count({
+      where: {
+        senderId: currentUser.id,
+        createdAt: { gte: startDate, lte: endDate },
+        threadId: { not: null }
+      }
+    });
+    
+    const responsivenessScore = messagesSent > 0
+      ? Math.min(100, (replyMessages / messagesSent) * 100 + 50) // Base 50 + bonus for replies
+      : 0;
+    
+    // Communication Effectiveness = Responsiveness (50%) + Relative Activity (50%)
+    const communicationEffectiveness = (responsivenessScore * 0.5) + (relativeActivityScore * 0.5);
+
+    // --- 4. Consistency Factor (15%) ---
+    // Calculate active days (days with at least one activity)
+    const [taskUpdates, messages, meetingParticipations] = await Promise.all([
+      // Days with task status changes (using updatedAt as proxy for activity)
+      this.prisma.task.findMany({
+        where: {
+          assigneeId: currentUser.id,
+          updatedAt: { gte: startDate, lte: endDate }
+        },
+        select: { updatedAt: true }
+      }),
+      // Days with messages
+      this.prisma.message.findMany({
+        where: {
+          senderId: currentUser.id,
+          createdAt: { gte: startDate, lte: endDate }
+        },
+        select: { createdAt: true }
+      }),
+      // Days with meetings
+      this.prisma.meetingParticipant.findMany({
+        where: {
+          userId: currentUser.id,
+          meeting: {
+            startTime: { gte: startDate, lte: endDate }
+          }
+        },
+        select: { meeting: { select: { startTime: true } } }
+      })
+    ]);
+    
+    // Extract unique active days
+    const activeDaysSet = new Set<string>();
+    taskUpdates.forEach(t => {
+      activeDaysSet.add(t.updatedAt.toISOString().split('T')[0]);
+    });
+    messages.forEach(m => {
+      activeDaysSet.add(m.createdAt.toISOString().split('T')[0]);
+    });
+    meetingParticipations.forEach(m => {
+      activeDaysSet.add(m.meeting.startTime.toISOString().split('T')[0]);
+    });
+    
+    const activeDays = activeDaysSet.size;
+    const periodDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    let consistencyScore = periodDays > 0 ? Math.min(100, (activeDays / periodDays) * 100) : 0;
+    
+    // Cap consistency if task performance is very low (anti-gaming)
+    if (taskCompletionRate < 30) {
+      consistencyScore = Math.min(consistencyScore, 50);
+    }
+
+    // --- Calculate Final Productivity Score ---
+    const weights = {
+      adjustedTaskPerformance: 45,
+      meaningfulEngagement: 20,
+      communicationEffectiveness: 20,
+      workConsistency: 15
+    };
+
+    let productivityScore = Math.round(
+      (adjustedTaskPerformance * weights.adjustedTaskPerformance / 100) +
+      (meaningfulEngagement * weights.meaningfulEngagement / 100) +
+      (communicationEffectiveness * weights.communicationEffectiveness / 100) +
+      (consistencyScore * weights.workConsistency / 100)
+    );
+    
+    // ANTI-GAMING RULE: Cap at 50% if completion rate < 30%
+    if (taskCompletionRate < 30) {
+      productivityScore = Math.min(productivityScore, 50);
+    }
 
     return {
       tasksCompleted,
-      meetingsAttended: userReport.summary?.meetings?.attended || 0,
+      meetingsAttended,
       messagesSent,
       productivityScore,
+      taskCompletionRate: Math.round(taskCompletionRate),
+      productivityBreakdown: {
+        adjustedTaskPerformance: Math.round(adjustedTaskPerformance),
+        meaningfulEngagement: Math.round(meaningfulEngagement),
+        communicationEffectiveness: Math.round(communicationEffectiveness),
+        workConsistency: Math.round(consistencyScore),
+        difficultyFactor: Math.round(difficultyFactor * 100) / 100,
+        activeDays,
+        periodDays,
+        weights,
+        antiGamingApplied: taskCompletionRate < 30,
+        methodology: 'Based on Balanced Scorecard (Kaplan & Norton, 1996) with Task Difficulty Adjustment and Anti-Gaming Rules',
+      },
       teamMetrics,
     };
   }
