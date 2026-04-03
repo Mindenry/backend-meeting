@@ -6,6 +6,7 @@ import {
   Post,
   Query,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import { TaskWatchersService } from './task-watchers.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -16,12 +17,18 @@ export class TaskWatchersController {
   constructor(private readonly taskWatchersService: TaskWatchersService) {}
 
   @Get()
-  getWatchers(@Query('taskId') taskId: string) {
+  async getWatchers(@Query('taskId') taskId: string) {
+    if (!taskId || typeof taskId !== 'string') {
+      throw new BadRequestException('taskId query parameter is required');
+    }
     return this.taskWatchersService.getWatchers(taskId);
   }
 
   @Get('is-watching')
-  isWatching(@Query('taskId') taskId: string, @Query('userId') userId: string) {
+  async isWatching(@Query('taskId') taskId: string, @Query('userId') userId: string) {
+    if (!taskId || !userId) {
+      throw new BadRequestException('taskId and userId query parameters are required');
+    }
     return this.taskWatchersService.isWatching(taskId, userId);
   }
 

@@ -8,6 +8,8 @@ import {
   Post,
   Query,
   UseGuards,
+  NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -166,8 +168,15 @@ export class TasksController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.tasksService.findOne(id);
+  async findOne(@Param('id') id: string) {
+    if (!id || typeof id !== 'string') {
+      throw new BadRequestException('Invalid task ID');
+    }
+    const task = await this.tasksService.findOne(id);
+    if (!task) {
+      throw new NotFoundException(`Task with ID ${id} not found`);
+    }
+    return task;
   }
 
   @Post()

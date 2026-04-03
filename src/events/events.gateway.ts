@@ -426,6 +426,7 @@ export class EventsGateway
         peerId: p.peerId,
         name: p.name,
         avatar: p.avatar,
+        userId: p.userId,
         state: p.state,
       }));
 
@@ -436,6 +437,7 @@ export class EventsGateway
       peerId,
       name: peerName,
       avatar: userInfo?.avatar,
+      userId: userId || userInfo?.userId,
       state: newParticipant.state,
     });
 
