@@ -141,13 +141,41 @@ export class MeetingsService {
     const isQuickHuddle = (meetingId || '').startsWith('quick-huddle');
 
     let isHost = false;
+    let meeting: Awaited<ReturnType<typeof this.prisma.meeting.findUnique>> = null;
+    
     if (meetingId && !isQuickHuddle) {
-      const meeting = await this.prisma.meeting.findUnique({
+      // Try to find meeting by ID or meetingCode
+      meeting = await this.prisma.meeting.findUnique({
         where: { id: meetingId },
       });
-      if (meeting) {
-        isHost = meeting.hostId === userId;
+      
+      // If not found by ID, try by meetingCode
+      if (!meeting) {
+        meeting = await this.prisma.meeting.findUnique({
+          where: { meetingCode: meetingId },
+        });
       }
+      
+      // If meeting still not found, throw error - don't allow random codes
+      if (!meeting) {
+        throw new NotFoundException(
+          'Meeting not found. Please check the meeting ID or code.',
+        );
+      }
+      
+      // Check if meeting has ended
+      const now = new Date();
+      const endTime = meeting.endTime ? new Date(meeting.endTime) : null;
+      const isPast = endTime && endTime.getTime() < now.getTime();
+      const isEnded = meeting.status === 'ended' || isPast;
+      
+      if (isEnded) {
+        throw new BadRequestException(
+          'This meeting has already ended and cannot be joined.',
+        );
+      }
+      
+      isHost = meeting.hostId === userId;
     }
 
     // Fetch user to get avatar

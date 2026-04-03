@@ -288,18 +288,21 @@ export class AuthService {
     };
     const resetToken = this.jwtService.sign(payload, { expiresIn: '1h' });
 
-    // Send password reset email
-    const emailSent = await this.emailService.sendPasswordResetEmail(
+    // Send password reset email asynchronously (fire and forget)
+    // Don't wait for email to complete - respond immediately to avoid timeout
+    this.emailService.sendPasswordResetEmail(
       user.email,
       resetToken,
       '',
-    );
-
-    if (emailSent) {
-      this.logger.log(`Password reset email sent to ${user.email}`);
-    } else {
-      this.logger.warn(`Failed to send password reset email to ${user.email}`);
-    }
+    ).then((emailSent) => {
+      if (emailSent) {
+        this.logger.log(`Password reset email sent to ${user.email}`);
+      } else {
+        this.logger.warn(`Failed to send password reset email to ${user.email}`);
+      }
+    }).catch((error) => {
+      this.logger.error(`Error sending password reset email: ${error.message}`);
+    });
 
     return {
       success: true,

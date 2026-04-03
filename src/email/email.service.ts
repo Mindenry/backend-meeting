@@ -16,12 +16,21 @@ export class EmailService {
     const smtpUser = this.configService.get<string>('SMTP_USER');
     const smtpPass = this.configService.get<string>('SMTP_PASS');
 
+    // Skip transporter initialization if credentials not configured
+    if (!smtpUser || !smtpPass) {
+      this.logger.warn('SMTP credentials not configured. Email sending is disabled.');
+      return;
+    }
+
     this.transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: smtpUser,
         pass: smtpPass,
       },
+      // Add timeouts to prevent hanging
+      connectionTimeout: 10000, // 10 seconds
+      socketTimeout: 10000, // 10 seconds
     });
 
     // Verify connection configuration
@@ -39,6 +48,12 @@ export class EmailService {
     resetToken: string,
     resetUrl: string,
   ): Promise<boolean> {
+    // Check if transporter is initialized
+    if (!this.transporter) {
+      this.logger.warn('Email transporter not initialized. Cannot send password reset email.');
+      return false;
+    }
+    
     const appName = this.configService.get<string>('APP_NAME', 'Team Connect');
     const frontendUrl = this.configService.get<string>(
       'FRONTEND_URL',
