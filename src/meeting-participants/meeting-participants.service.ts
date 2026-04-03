@@ -9,20 +9,29 @@ import { PrismaService } from '../prisma/prisma.service';
 export class MeetingParticipantsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async joinMeeting(meetingId: string, userId: string) {
-    const meeting = await this.prisma.meeting.findUnique({
-      where: { id: meetingId },
+  async joinMeeting(meetingIdOrCode: string, userId: string) {
+    // Try to find meeting by id first, then by meetingCode
+    let meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingIdOrCode },
     });
+    if (!meeting) {
+      meeting = await this.prisma.meeting.findUnique({
+        where: { meetingCode: meetingIdOrCode },
+      });
+    }
 
     if (!meeting) {
       throw new NotFoundException('Meeting not found');
     }
 
+    // Use the actual meeting id for participant record
+    const actualMeetingId = meeting.id;
+
     // Check if already a participant
     const existing = await this.prisma.meetingParticipant.findUnique({
       where: {
         meetingId_userId: {
-          meetingId,
+          meetingId: actualMeetingId,
           userId,
         },
       },
@@ -33,7 +42,7 @@ export class MeetingParticipantsService {
       return this.prisma.meetingParticipant.update({
         where: {
           meetingId_userId: {
-            meetingId,
+            meetingId: actualMeetingId,
             userId,
           },
         },
@@ -57,7 +66,7 @@ export class MeetingParticipantsService {
     // Create new participant
     return this.prisma.meetingParticipant.create({
       data: {
-        meetingId,
+        meetingId: actualMeetingId,
         userId,
       },
       include: {
@@ -73,11 +82,25 @@ export class MeetingParticipantsService {
     });
   }
 
-  async leaveMeeting(meetingId: string, userId: string) {
+  async leaveMeeting(meetingIdOrCode: string, userId: string) {
+    // Find meeting by id or meetingCode
+    let meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingIdOrCode },
+    });
+    if (!meeting) {
+      meeting = await this.prisma.meeting.findUnique({
+        where: { meetingCode: meetingIdOrCode },
+      });
+    }
+    if (!meeting) {
+      throw new NotFoundException('Meeting not found');
+    }
+    const actualMeetingId = meeting.id;
+
     const participant = await this.prisma.meetingParticipant.findUnique({
       where: {
         meetingId_userId: {
-          meetingId,
+          meetingId: actualMeetingId,
           userId,
         },
       },
@@ -90,7 +113,7 @@ export class MeetingParticipantsService {
     return this.prisma.meetingParticipant.update({
       where: {
         meetingId_userId: {
-          meetingId,
+          meetingId: actualMeetingId,
           userId,
         },
       },
@@ -100,19 +123,25 @@ export class MeetingParticipantsService {
     });
   }
 
-  async getParticipants(meetingId: string) {
-    // Check if meeting exists first
-    const meeting = await this.prisma.meeting.findUnique({
-      where: { id: meetingId },
+  async getParticipants(meetingIdOrCode: string) {
+    // Find meeting by id or meetingCode
+    let meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingIdOrCode },
     });
+    if (!meeting) {
+      meeting = await this.prisma.meeting.findUnique({
+        where: { meetingCode: meetingIdOrCode },
+      });
+    }
 
     if (!meeting) {
       throw new NotFoundException('Meeting not found');
     }
+    const actualMeetingId = meeting.id;
 
     return this.prisma.meetingParticipant.findMany({
       where: {
-        meetingId,
+        meetingId: actualMeetingId,
         leftAt: null,
       },
       include: {
@@ -132,7 +161,7 @@ export class MeetingParticipantsService {
   }
 
   async updateParticipantStatus(
-    meetingId: string,
+    meetingIdOrCode: string,
     userId: string,
     data: {
       handRaised?: boolean;
@@ -141,10 +170,24 @@ export class MeetingParticipantsService {
       isSharing?: boolean;
     },
   ) {
+    // Find meeting by id or meetingCode
+    let meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingIdOrCode },
+    });
+    if (!meeting) {
+      meeting = await this.prisma.meeting.findUnique({
+        where: { meetingCode: meetingIdOrCode },
+      });
+    }
+    if (!meeting) {
+      throw new NotFoundException('Meeting not found');
+    }
+    const actualMeetingId = meeting.id;
+
     return this.prisma.meetingParticipant.update({
       where: {
         meetingId_userId: {
-          meetingId,
+          meetingId: actualMeetingId,
           userId,
         },
       },
@@ -162,15 +205,22 @@ export class MeetingParticipantsService {
     });
   }
 
-  async removeParticipant(meetingId: string, userId: string, hostId: string) {
-    const meeting = await this.prisma.meeting.findUnique({
-      where: { id: meetingId },
+  async removeParticipant(meetingIdOrCode: string, userId: string, hostId: string) {
+    // Find meeting by id or meetingCode
+    let meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingIdOrCode },
     });
+    if (!meeting) {
+      meeting = await this.prisma.meeting.findUnique({
+        where: { meetingCode: meetingIdOrCode },
+      });
+    }
 
     if (!meeting || meeting.hostId !== hostId) {
       throw new BadRequestException('Only host can remove participants');
     }
+    const actualMeetingId = meeting.id;
 
-    return this.leaveMeeting(meetingId, userId);
+    return this.leaveMeeting(actualMeetingId, userId);
   }
 }

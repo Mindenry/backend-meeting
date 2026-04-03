@@ -285,10 +285,17 @@ export class EventsGateway
       !meetingId.startsWith('quick-huddle')
     ) {
       try {
-        const meeting = await this.prisma.meeting.findUnique({
+        // Try to find meeting by id or meetingCode
+        let meeting = await this.prisma.meeting.findUnique({
           where: { id: meetingId },
-          select: { title: true },
+          select: { title: true, id: true },
         });
+        if (!meeting) {
+          meeting = await this.prisma.meeting.findUnique({
+            where: { meetingCode: meetingId },
+            select: { title: true, id: true },
+          });
+        }
         if (meeting?.title) {
           this.meetingTitles.set(meetingId, meeting.title);
         }

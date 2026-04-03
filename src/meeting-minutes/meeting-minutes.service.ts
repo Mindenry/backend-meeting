@@ -80,15 +80,17 @@ export class MeetingMinutesService {
       throw new ForbiddenException('Only the creator can update meeting minutes');
     }
 
+    // Build update data, only include defined fields
+    const updateData: any = {};
+    if (dto.title !== undefined) updateData.title = dto.title;
+    if (dto.content !== undefined) updateData.content = dto.content;
+    if (dto.actionItems !== undefined) updateData.actionItems = dto.actionItems;
+    if (dto.decisions !== undefined) updateData.decisions = dto.decisions;
+    if (dto.attendees !== undefined) updateData.attendees = dto.attendees;
+
     return this.prisma.meetingMinutes.update({
       where: { id },
-      data: {
-        title: dto.title,
-        content: dto.content,
-        actionItems: dto.actionItems,
-        decisions: dto.decisions,
-        attendees: dto.attendees,
-      },
+      data: updateData,
       include: {
         creator: {
           select: { id: true, name: true, email: true, avatar: true },
