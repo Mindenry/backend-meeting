@@ -298,12 +298,20 @@ export class StorageService {
         ? `${this.config.cloudinary.folder}/${folder}/${Date.now()}`
         : `${this.config.cloudinary.folder}/${Date.now()}`;
 
+      // Determine resource type: PDFs must be uploaded as 'image' to allow iframe embedding
+      // Otherwise Cloudinary will block PDF embedding with 401 error
+      const isPDF = file.mimetype === 'application/pdf' || 
+                    file.originalname.toLowerCase().endsWith('.pdf');
+      const resourceType = isPDF ? 'image' : 'auto';
+
       const result = await new Promise<any>((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
             folder: uploadPath,
-            resource_type: 'auto', // auto-detect image, video, raw
+            resource_type: resourceType,
             public_id: file.originalname.replace(/\.[^/.]+$/, ''), // remove extension
+            // For PDFs, ensure they can be viewed inline
+            ...(isPDF && { format: 'pdf', flags: 'attachment:false' }),
           },
           (error, result) => {
             if (error) reject(error);
