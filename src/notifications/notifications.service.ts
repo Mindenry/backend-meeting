@@ -86,29 +86,46 @@ export class NotificationsService {
         priority,
         groupedId,
       },
-      include: { user: true },
+      select: {
+        id: true,
+        userId: true,
+        type: true,
+        title: true,
+        message: true,
+        relatedId: true,
+        relatedType: true,
+        link: true,
+        priority: true,
+        read: true,
+        createdAt: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+      },
     });
 
-    // Check if should send realtime based on preferences
-    let shouldSendRealtime = true;
-    let preferences: any = null;
-    if (this.preferencesService) {
-      shouldSendRealtime = await this.preferencesService.shouldSendRealtime(
-        data.userId,
-        data.type,
-      );
-      preferences = await this.preferencesService.getPreferences(data.userId);
-    }
+    // Send real-time notification asynchronously (don't wait for it)
+    // This makes the API response faster
+    if (this.notificationsGateway) {
+      // Fire and forget - don't await
+      this.notificationsGateway
+        .sendNotificationToUser(data.userId, notification)
+        .catch((err) => {
+          console.error('Failed to send real-time notification:', err);
+        });
 
-    // Send real-time notification via WebSocket only if preferences allow
-    if (shouldSendRealtime && this.notificationsGateway) {
-      await this.notificationsGateway.sendNotificationToUser(
-        data.userId,
-        notification,
-      );
+      // Check preferences asynchronously
+      if (this.preferencesService) {
+        this.preferencesService
+          .shouldSendRealtime(data.userId, data.type)
+          .catch(() => {});
+      }
     }
-
-    // Send external notifications for high priority items
 
     return notification;
   }

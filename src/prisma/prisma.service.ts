@@ -19,7 +19,22 @@ export class PrismaService
         process.env.NODE_ENV === 'production'
           ? ['error', 'warn']
           : ['query', 'info', 'warn', 'error'],
+      // Connection pooling for better performance
+      datasources: {
+        db: {
+          url: process.env.DATABASE_URL,
+        },
+      },
     });
+
+    // Log slow queries in development
+    if (process.env.NODE_ENV !== 'production') {
+      this.$on('query' as never, (e: any) => {
+        if (e.duration > 100) {
+          this.logger.warn(`Slow query (${e.duration}ms): ${e.query}`);
+        }
+      });
+    }
   }
 
   async onModuleInit() {

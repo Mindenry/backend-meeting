@@ -182,71 +182,133 @@ export class TasksService {
   }
 
   findOne(id: string) {
+    // Use select instead of include for better performance
+    // Limit nested arrays to prevent large payloads
     return (this.prisma.task as any).findUnique({
       where: { id },
-      include: {
-        assignee: true,
-        team: true,
-        meeting: true,
-        sprint: true,
-        epic: true,
-        subtasks: { orderBy: { position: 'asc' } },
-        timeEntries: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                avatar: true,
-              },
-            },
-          },
-          orderBy: { startTime: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        dueDate: true,
+        position: true,
+        tags: true,
+        issueType: true,
+        storyPoints: true,
+        estimate: true,
+        isRecurring: true,
+        recurringPattern: true,
+        recurringInterval: true,
+        recurringEndDate: true,
+        templateId: true,
+        createdAt: true,
+        updatedAt: true,
+        assigneeId: true,
+        teamId: true,
+        meetingId: true,
+        sprintId: true,
+        epicId: true,
+        reporterId: true,
+        projectId: true,
+        componentId: true,
+        versionId: true,
+        parentTaskId: true,
+        assignee: {
+          select: { id: true, name: true, email: true, avatar: true, status: true },
         },
-        attachments: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-          orderBy: { createdAt: 'desc' },
+        team: {
+          select: { id: true, name: true },
         },
-        comments: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                avatar: true,
-              },
-            },
-          },
-          orderBy: { createdAt: 'asc' },
+        meeting: {
+          select: { id: true, title: true },
         },
-        activityLog: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-          orderBy: { createdAt: 'desc' },
+        sprint: {
+          select: { id: true, name: true },
         },
-        reporter: true,
-        project: true,
-        component: true,
-        version: true,
+        epic: {
+          select: { id: true, name: true },
+        },
+        reporter: {
+          select: { id: true, name: true, email: true, avatar: true },
+        },
+        project: {
+          select: { id: true, name: true, key: true },
+        },
+        component: {
+          select: { id: true, name: true },
+        },
+        version: {
+          select: { id: true, name: true, released: true },
+        },
         parentTask: {
           select: { id: true, title: true, status: true },
+        },
+        // Limit subtasks to 50 most recent
+        subtasks: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            priority: true,
+            position: true,
+            assigneeId: true,
+            assignee: { select: { id: true, name: true, avatar: true } },
+          },
+          orderBy: { position: 'asc' },
+          take: 50,
+        },
+        // Limit time entries to 20 most recent
+        timeEntries: {
+          select: {
+            id: true,
+            startTime: true,
+            endTime: true,
+            duration: true,
+            description: true,
+            user: { select: { id: true, name: true, avatar: true } },
+          },
+          orderBy: { startTime: 'desc' },
+          take: 20,
+        },
+        // Limit attachments to 20 most recent
+        attachments: {
+          select: {
+            id: true,
+            filename: true,
+            url: true,
+            mimeType: true,
+            size: true,
+            createdAt: true,
+            user: { select: { id: true, name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
+        // Limit comments to 30 most recent
+        comments: {
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+            updatedAt: true,
+            user: { select: { id: true, name: true, avatar: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 30,
+        },
+        // Limit activity log to 20 most recent
+        activityLog: {
+          select: {
+            id: true,
+            action: true,
+            details: true,
+            createdAt: true,
+            user: { select: { id: true, name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
         },
         childTasks: {
           select: {
@@ -257,34 +319,25 @@ export class TasksService {
             assigneeId: true,
           },
         },
-
         watchers: {
-          include: {
-            user: true,
+          select: {
+            id: true,
+            userId: true,
+            user: { select: { id: true, name: true, avatar: true } },
           },
         },
         linkedIssues: {
-          include: {
-            target: {
-              select: {
-                id: true,
-                title: true,
-                issueType: true,
-                status: true,
-              },
-            },
+          select: {
+            id: true,
+            type: true,
+            target: { select: { id: true, title: true, issueType: true, status: true } },
           },
         },
         linkedFrom: {
-          include: {
-            source: {
-              select: {
-                id: true,
-                title: true,
-                issueType: true,
-                status: true,
-              },
-            },
+          select: {
+            id: true,
+            type: true,
+            source: { select: { id: true, title: true, issueType: true, status: true } },
           },
         },
         _count: {
@@ -292,8 +345,9 @@ export class TasksService {
             subtasks: true,
             timeEntries: true,
             attachments: true,
-            linkedIssues: true,
+            comments: true,
             watchers: true,
+            linkedIssues: true,
           },
         },
       },

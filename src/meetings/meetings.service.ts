@@ -232,38 +232,33 @@ export class MeetingsService {
       },
     });
 
-    // Create notifications for team members if meeting is team-based
+    // Create notifications for team members asynchronously (don't wait)
+    // This makes the API response faster
     if (meeting.teamId) {
-      try {
-        const teamMembers = await this.prisma.teamMember.findMany({
+      // Fire and forget notifications
+      this.prisma.teamMember
+        .findMany({
           where: { teamId: meeting.teamId },
-          include: { user: true },
-        });
-
-        const notifications = teamMembers
-          .filter((m) => m.userId !== meeting.hostId)
-          .map((member) =>
-            this.notificationsService
-              .create({
-                userId: member.userId,
-                type: 'meeting_created',
-                title: 'New meeting scheduled',
-                message: `${meeting.host.name} scheduled: ${meeting.title}`,
-                relatedId: meeting.id,
-                relatedType: 'meeting',
-              })
-              .catch((err) => {
-                console.error(
-                  `Failed to create notification for user ${member.userId}:`,
-                  err,
-                );
-              }),
-          );
-
-        await Promise.allSettled(notifications);
-      } catch (err) {
-        console.error('Failed to create meeting notifications:', err);
-      }
+          select: { userId: true },
+        })
+        .then((teamMembers) => {
+          const notifications = teamMembers
+            .filter((m) => m.userId !== meeting.hostId)
+            .map((member) =>
+              this.notificationsService
+                .create({
+                  userId: member.userId,
+                  type: 'meeting_created',
+                  title: 'New meeting scheduled',
+                  message: `${meeting.host.name} scheduled: ${meeting.title}`,
+                  relatedId: meeting.id,
+                  relatedType: 'meeting',
+                })
+                .catch(() => {}),
+            );
+          return Promise.allSettled(notifications);
+        })
+        .catch(() => {});
     }
 
     return meeting;
