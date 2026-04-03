@@ -61,7 +61,13 @@ export class UploadController {
     };
 
     // Upload to configured storage (local, S3, etc.)
-    const result = await this.storageService.uploadFile(storageFile, folder);
+    let result;
+    try {
+      result = await this.storageService.uploadFile(storageFile, folder);
+    } catch (error: any) {
+      console.error('Upload failed:', error);
+      throw new BadRequestException(`Failed to upload file: ${error?.message || 'Unknown error'}`);
+    }
 
     // Log audit trail
     if (req?.user) {
