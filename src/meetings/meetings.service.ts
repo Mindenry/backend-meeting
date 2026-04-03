@@ -67,8 +67,8 @@ export class MeetingsService {
     });
   }
 
-  findOne(id: string) {
-    return this.prisma.meeting.findUnique({
+  async findOne(id: string) {
+    const meeting = await this.prisma.meeting.findUnique({
       where: { id },
       include: {
         team: true,
@@ -90,10 +90,14 @@ export class MeetingsService {
         minutes: true,
       },
     });
+    if (!meeting) {
+      throw new NotFoundException('Meeting not found');
+    }
+    return meeting;
   }
 
-  findByCode(meetingCode: string) {
-    return this.prisma.meeting.findUnique({
+  async findByCode(meetingCode: string) {
+    const meeting = await this.prisma.meeting.findUnique({
       where: { meetingCode },
       include: {
         team: true,
@@ -119,6 +123,10 @@ export class MeetingsService {
         },
       },
     });
+    if (!meeting) {
+      throw new NotFoundException('Meeting not found');
+    }
+    return meeting;
   }
 
   async generateLivekitToken(
