@@ -198,27 +198,42 @@ export class EventsGateway
       }
     }
 
-    // Quick Huddle: if host left/disconnected, reassign to first remaining participant
+    // Quick Huddle: if host left/disconnected, end the meeting for everyone
     if (meetingId.startsWith('quick-huddle')) {
       const hostUserId = this.quickHuddleHosts.get(meetingId);
       if (hostUserId && userInfo?.userId === hostUserId) {
-        let nextHostUserId: string | null = null;
-        for (const p of updated) {
-          const online = this.onlineUsers.get(p.socketId);
-          if (online?.userId) {
-            nextHostUserId = online.userId;
-            break;
-          }
-        }
-        if (nextHostUserId) {
-          this.quickHuddleHosts.set(meetingId, nextHostUserId);
-          this.server.to(`meeting:${meetingId}`).emit('meeting:host:set', {
-            meetingId,
-            hostUserId: nextHostUserId,
+        console.log(`[QuickHuddle] Host ${hostUserId} left, ending meeting ${meetingId}`);
+        
+        // End meeting in database
+        try {
+          await this.prisma.meeting.updateMany({
+            where: { meetingCode: meetingId, status: 'live' },
+            data: { status: 'ended', actualEndTime: new Date() },
           });
-        } else {
-          this.quickHuddleHosts.delete(meetingId);
+        } catch (error) {
+          console.warn(`Failed to end quick huddle meeting ${meetingId}:`, error);
         }
+        
+        // Notify all participants that meeting has ended
+        this.server.to(`meeting:${meetingId}`).emit('meeting:ended', {
+          meetingId,
+          reason: 'Host left the meeting',
+        });
+        
+        // Clear meeting data
+        this.quickHuddleHosts.delete(meetingId);
+        this.meetingParticipants.delete(meetingId);
+        this.meetingTitles.delete(meetingId);
+        
+        // Make all sockets leave the room
+        const sockets = await this.server.in(`meeting:${meetingId}`).fetchSockets();
+        for (const socket of sockets) {
+          void socket.leave(`meeting:${meetingId}`);
+        }
+        
+        // Broadcast updated active rooms
+        this.broadcastActiveRooms();
+        return; // Don't continue with normal leave logic
       }
     }
 
@@ -250,6 +265,34 @@ export class EventsGateway
     console.log(
       `[Join] Peer ${peerId} joining meeting ${meetingId}, socket: ${client.id}`,
     );
+
+    // Validate that meeting exists (for non-quick-huddle meetings)
+    if (!meetingId.startsWith('quick-huddle')) {
+      let meeting = await this.prisma.meeting.findUnique({
+        where: { id: meetingId },
+        select: { id: true },
+      });
+      if (!meeting) {
+        meeting = await this.prisma.meeting.findUnique({
+          where: { meetingCode: meetingId },
+          select: { id: true },
+        });
+      }
+      if (!meeting) {
+        console.warn(
+          `[Join] Rejected - Meeting ${meetingId} does not exist`,
+        );
+        client.emit('meeting:join:error', {
+          message: 'Meeting not found',
+          meetingId,
+        });
+        return {
+          event: 'meeting:join:error',
+          error: 'Meeting not found',
+          meetingId,
+        };
+      }
+    }
 
     // If this socket was previously mapped to another peer/meeting, clean that stale entry first.
     const previous = this.socketMeetings.get(client.id);
