@@ -671,12 +671,19 @@ export class ReportsService {
     });
     if (!user) throw new NotFoundException('User not found');
 
+    // For productivity report, we want:
+    // - Tasks that were created in the period, OR
+    // - Tasks that were completed (updated) in the period
+    // This gives a more accurate picture of work done during the period
     const [tasks, timeEntries, meetings, messages] = await Promise.all([
       this.prisma.task.findMany({
         where: {
           assigneeId: userId,
           team: { organizationId: currentUser.organizationId },
-          createdAt: { gte: startDate, lte: endDate },
+          OR: [
+            { createdAt: { gte: startDate, lte: endDate } },
+            { updatedAt: { gte: startDate, lte: endDate } },
+          ],
         },
       }),
       this.prisma.timeEntry.findMany({
@@ -706,13 +713,21 @@ export class ReportsService {
       }),
     ]);
 
+    // Count completed tasks that were actually completed within the period
+    // (status = done AND updatedAt within period)
+    const completedTasks = tasks.filter((t) => 
+      t.status === 'done' && 
+      t.updatedAt >= startDate && 
+      t.updatedAt <= endDate
+    ).length;
+
     return {
       period: { start: startDate, end: endDate },
       user,
       summary: {
         tasks: {
           total: tasks.length,
-          completed: tasks.filter((t) => t.status === 'done').length,
+          completed: completedTasks,
           inProgress: tasks.filter((t) => t.status === 'in_progress').length,
         },
         messagesSent: messages.length,
