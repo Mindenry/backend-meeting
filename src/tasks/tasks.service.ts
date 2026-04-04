@@ -87,15 +87,27 @@ export class TasksService {
       });
     }
 
-    // Personal calendar: show only user's own tasks (assignee)
+    // Task visibility: show tasks from teams the user is a member of, or tasks assigned to them
     let teamFilter: any = undefined;
     if (user) {
       const orgRole = user.role?.toLowerCase() || 'employee';
       const isGlobalAdmin = ['org_owner', 'admin'].includes(orgRole);
       
       if (!isGlobalAdmin) {
-        // Show only tasks assigned to the user
-        teamFilter = { assigneeId: user.id };
+        // Get teams the user is a member of
+        const userTeams = await this.prisma.teamMember.findMany({
+          where: { userId: user.id },
+          select: { teamId: true },
+        });
+        const teamIds = userTeams.map((t) => t.teamId);
+        
+        // Show tasks: assigned to user OR in teams the user is a member of
+        teamFilter = {
+          OR: [
+            { assigneeId: user.id },
+            ...(teamIds.length > 0 ? [{ teamId: { in: teamIds } }] : []),
+          ],
+        };
       }
     }
 
