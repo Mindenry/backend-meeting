@@ -250,11 +250,8 @@ export class TasksService {
           select: {
             id: true,
             title: true,
-            status: true,
-            priority: true,
+            isCompleted: true,
             position: true,
-            assigneeId: true,
-            assignee: { select: { id: true, name: true, avatar: true } },
           },
           orderBy: { position: 'asc' },
           take: 50,

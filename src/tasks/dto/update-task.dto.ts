@@ -8,7 +8,6 @@ import {
   Min,
   Max,
   IsBoolean,
-  ValidateIf,
 } from 'class-validator';
 import { ApiPropertyOptional } from '../../common/decorators/swagger.decorators';
 
@@ -28,9 +27,8 @@ export class UpdateTaskDto {
     type: String,
   })
   @IsOptional()
-  @ValidateIf((o) => o.description !== null)
   @IsString()
-  description?: string | null;
+  description?: string;
 
   @ApiPropertyOptional({
     description: 'Task priority',
