@@ -43,6 +43,7 @@ export class UsersService {
         isActive: true,
         organizationId: true,
         managerId: true,
+        lastActiveAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -98,9 +99,14 @@ export class UsersService {
     if (!exists) {
       throw new NotFoundException('User not found');
     }
+    // Update lastActiveAt when user goes online or changes status
+    const updateData: any = { ...data };
+    if (data.status === 'online' || data.status === 'busy' || data.status === 'away') {
+      updateData.lastActiveAt = new Date();
+    }
     const user = await this.prisma.user.update({
       where: { id },
-      data,
+      data: updateData,
     });
     if (data.status) {
       this.eventsGateway.emitUserStatusChanged(id, data.status);

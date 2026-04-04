@@ -278,9 +278,9 @@ async function main() {
   );
 
   // ============================================
-  // Channels & Messages
+  // Channels & Messages (reduced: 2 channels per team)
   // ============================================
-  const channelNames = ['general', 'announcements', 'engineering', 'random'];
+  const channelNames = ['general', 'announcements'];
   const channels = await Promise.all(
     teams.flatMap(team =>
       channelNames.map(name =>
@@ -296,33 +296,15 @@ async function main() {
     )
   );
 
-  // Messages per channel
+  // Messages per channel (reduced: 2-3 messages per channel)
   const MESSAGES: Record<string, string[]> = {
     general: [
       'สวัสดีครับ วันนี้มีอะไรให้ช่วยไหมครับ?',
       'Reminder: วันนี้ 17:00 มี team meeting ครับ',
-      'ใครมีเวลาว่างช่วย review PR หน่อยได้ไหมครับ?',
-      'ขอบคุณครับ ทำเสร็จแล้วครับ',
-      'เยี่ยมมากครับ! 👍',
     ],
     announcements: [
       '📢 ประกาศ: พรุ่งนี้จะมีการ deploy version ใหม่ครับ',
       '🎉 ยินดีด้วย! Sprint นี้เราผ่านเป้าหมายแล้ว',
-      '📋 กรุณาอัปเดต timesheet ภายในวันศุกร์นะครับ',
-      '🔔 Reminder: วันหยุดสงกรานต์ 13-15 เมษายน',
-    ],
-    engineering: [
-      'PR #42 พร้อม review แล้วครับ',
-      'Deploy เสร็จแล้ว ทุกอย่างปกติครับ',
-      'เจอ bug ตรง auth flow แก้เสร็จแล้วนะครับ',
-      'Performance test ผ่านแล้ว ✅',
-      'Code freeze วันนี้ 18:00 นะครับ',
-    ],
-    random: [
-      'ใครกินข้าวยังครับ? ไปกินด้วยกันไหม?',
-      'วันนี้อาหารกลางวันอร่อยมาก! 😋',
-      'มีใครดูซีรีส์เรื่องไหนดีไหมครับ?',
-      'สุดสัปดาห์นี้มีแผนอะไรบ้างครับ?',
     ],
   };
 
@@ -332,13 +314,14 @@ async function main() {
       const teamUserIds = teamMembers.filter(tm => tm.teamId === channel.teamId).map(tm => tm.userId);
       const channelUsers = users.filter(u => teamUserIds.includes(u.id));
 
-      return Array.from({ length: 4 }, () => {
+      // Reduced: 2 messages per channel
+      return Array.from({ length: 2 }, (_, i) => {
         const sender = pick(channelUsers);
         return prisma.message.create({
           data: {
             channelId: channel.id,
             senderId: sender.id,
-            text: pick(pool),
+            text: pool[i % pool.length],
           },
         }).then(m => ({ id: m.id, channelId: m.channelId, senderId: m.senderId, createdAt: m.createdAt }));
       });

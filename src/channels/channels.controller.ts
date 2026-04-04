@@ -8,6 +8,7 @@ import {
   Post,
   Query,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 // @ts-ignore - Optional Swagger decorators
 import {
@@ -30,6 +31,32 @@ import { UpdateChannelDto } from './dto/update-channel.dto';
 @ApiBearerAuth('JWT-auth')
 export class ChannelsController {
   constructor(private readonly channelsService: ChannelsService) {}
+
+  @Get('mine')
+  @ApiOperation({
+    summary: 'Get channels for current user',
+    description: 'Retrieve channels from teams the current user is a member of',
+  })
+  @ApiQuery({
+    name: 'includeMeeting',
+    required: false,
+    description: 'Include meeting channels when true',
+    example: 'false',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of channels retrieved successfully',
+  })
+  findMine(
+    @Request() req: any,
+    @Query('includeMeeting') includeMeeting?: string,
+  ) {
+    const includeMeetingChannels =
+      includeMeeting === 'true' || includeMeeting === '1';
+    return this.channelsService.findByUserTeams(req.user?.id, {
+      includeMeeting: includeMeetingChannels,
+    });
+  }
 
   @Get()
   @ApiOperation({

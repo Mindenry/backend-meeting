@@ -41,10 +41,11 @@ model User {
   activity    String   @default("Available")
   avatar      String? // Avatar URL
   isActive    Boolean  @default(true)
-  department  String?  // Optional department
-  position    String?  // Optional job title
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  department   String?   // Optional department
+  position     String?   // Optional job title
+  lastActiveAt DateTime? // Last time user was active/online
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])

@@ -21,6 +21,54 @@ export class ChannelsService {
     private readonly cacheHelper: CacheHelperService,
   ) {}
 
+  async findByUserTeams(userId: string, params?: { includeMeeting?: boolean }) {
+    const { includeMeeting = false } = params || {};
+    
+    // Get all teams the user is a member of
+    const memberships = await this.prisma.teamMember.findMany({
+      where: { userId },
+      select: { teamId: true },
+    });
+    
+    const teamIds = memberships.map(m => m.teamId);
+    
+    if (teamIds.length === 0) {
+      return [];
+    }
+    
+    return this.prisma.channel.findMany({
+      where: {
+        teamId: { in: teamIds },
+        ...(includeMeeting
+          ? {}
+          : {
+              NOT: {
+                OR: [{ type: 'meeting' }, { name: { startsWith: 'meeting-' } }],
+              },
+            }),
+      },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        description: true,
+        createdAt: true,
+        updatedAt: true,
+        teamId: true,
+        team: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        _count: {
+          select: { messages: true },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   findAll(params?: { teamId?: string; includeMeeting?: boolean }) {
     const { teamId, includeMeeting = false } = params || {};
     
