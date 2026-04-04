@@ -645,7 +645,7 @@ export class TasksService {
     id: string,
     data: Partial<{
       title: string;
-      description?: string;
+      description?: string | null;
       priority: 'high' | 'medium' | 'low' | 'urgent';
       status: TaskStatus;
       issueType?: 'task' | 'bug' | 'story' | 'epic' | 'subtask';

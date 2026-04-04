@@ -28,7 +28,7 @@ export class UpdateTaskDto {
   })
   @IsOptional()
   @IsString()
-  description?: string;
+  description?: string | null;
 
   @ApiPropertyOptional({
     description: 'Task priority',
