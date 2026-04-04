@@ -6,7 +6,8 @@ import { Transporter } from 'nodemailer';
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private transporter: Transporter;
+  private transporter: Transporter | null = null;
+  private initializationError: string | null = null;
 
   constructor(private configService: ConfigService) {
     this.initializeTransporter();
@@ -16,31 +17,54 @@ export class EmailService {
     const smtpUser = this.configService.get<string>('SMTP_USER');
     const smtpPass = this.configService.get<string>('SMTP_PASS');
 
+    console.log('========================================');
+    console.log('📧 Email Service Initialization');
+    console.log('========================================');
+    console.log('SMTP_USER:', smtpUser ? '✅ Configured' : '❌ Not set');
+    console.log('SMTP_PASS:', smtpPass ? '✅ Configured' : '❌ Not set');
+    console.log('========================================\n');
+
     // Skip transporter initialization if credentials not configured
     if (!smtpUser || !smtpPass) {
+      this.initializationError = 'SMTP credentials not configured';
       this.logger.warn('SMTP credentials not configured. Email sending is disabled.');
       return;
     }
 
-    this.transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: smtpUser,
-        pass: smtpPass,
-      },
-      // Add timeouts to prevent hanging
-      connectionTimeout: 10000, // 10 seconds
-      socketTimeout: 10000, // 10 seconds
-    });
+    try {
+      this.transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+        // Add timeouts to prevent hanging
+        connectionTimeout: 10000, // 10 seconds
+        socketTimeout: 10000, // 10 seconds
+      });
 
-    // Verify connection configuration
-    this.transporter.verify((error) => {
-      if (error) {
-        this.logger.error(`SMTP connection error: ${error.message}`);
-      } else {
-        this.logger.log('SMTP server is ready to send emails');
-      }
-    });
+      // Verify connection configuration
+      this.transporter.verify((error) => {
+        if (error) {
+          this.initializationError = error.message;
+          this.logger.error(`SMTP connection error: ${error.message}`);
+          console.error('❌ SMTP Connection Error:', error.message);
+        } else {
+          this.logger.log('SMTP server is ready to send emails');
+          console.log('✅ SMTP server is ready to send emails');
+        }
+      });
+    } catch (error: any) {
+      this.initializationError = error.message;
+      this.logger.error(`Failed to initialize email transporter: ${error.message}`);
+    }
+  }
+
+  getStatus(): { configured: boolean; error: string | null } {
+    return {
+      configured: this.transporter !== null,
+      error: this.initializationError,
+    };
   }
 
   async sendPasswordResetEmail(
@@ -50,7 +74,9 @@ export class EmailService {
   ): Promise<boolean> {
     // Check if transporter is initialized
     if (!this.transporter) {
-      this.logger.warn('Email transporter not initialized. Cannot send password reset email.');
+      const errorMsg = this.initializationError || 'Email transporter not initialized';
+      this.logger.error(`Cannot send password reset email: ${errorMsg}`);
+      console.error('❌ Cannot send email:', errorMsg);
       return false;
     }
     
@@ -260,10 +286,13 @@ ${fullResetUrl}
     };
 
     try {
+      if (!this.transporter) {
+        return false;
+      }
       await this.transporter.sendMail(mailOptions);
       this.logger.log(`Verification email sent to ${email}`);
       return true;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Failed to send verification email: ${error.message}`);
       return false;
     }
@@ -285,10 +314,14 @@ ${fullResetUrl}
       `,
     };
 
+    if (!this.transporter) {
+      return { success: false, message: 'Email service not configured' };
+    }
+
     try {
       await this.transporter.sendMail(mailOptions);
       return { success: true, message: 'Test email sent successfully' };
-    } catch (error) {
+    } catch (error: any) {
       return { success: false, message: error.message };
     }
   }

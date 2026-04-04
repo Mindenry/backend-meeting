@@ -266,7 +266,7 @@ export class AuthService {
 
   async forgotPassword(
     email: string,
-  ): Promise<{ success: boolean; message?: string }> {
+  ): Promise<{ success: boolean; message?: string; emailSent?: boolean; token?: string }> {
     const user = await this.prisma.user.findUnique({
       where: { email: email.toLowerCase() },
     });
@@ -288,25 +288,42 @@ export class AuthService {
     };
     const resetToken = this.jwtService.sign(payload, { expiresIn: '1h' });
 
-    // Send password reset email asynchronously (fire and forget)
-    // Don't wait for email to complete - respond immediately to avoid timeout
-    this.emailService.sendPasswordResetEmail(
-      user.email,
-      resetToken,
-      '',
-    ).then((emailSent) => {
+    // Log token in development for debugging
+    console.log('\n========================================');
+    console.log('🔐 PASSWORD RESET TOKEN');
+    console.log('========================================');
+    console.log('Email:', user.email);
+    console.log('Token:', resetToken);
+    console.log('Reset URL:', `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`);
+    console.log('========================================\n');
+
+    // Send password reset email and wait for result
+    let emailSent = false;
+    try {
+      emailSent = await this.emailService.sendPasswordResetEmail(
+        user.email,
+        resetToken,
+        '',
+      );
       if (emailSent) {
         this.logger.log(`Password reset email sent to ${user.email}`);
       } else {
         this.logger.warn(`Failed to send password reset email to ${user.email}`);
       }
-    }).catch((error) => {
+    } catch (error: any) {
       this.logger.error(`Error sending password reset email: ${error.message}`);
-    });
+    }
 
+    // In development mode, return the token for testing
+    const isDev = process.env.NODE_ENV !== 'production';
+    
     return {
       success: true,
-      message: 'Password reset instructions have been sent to your email.',
+      message: emailSent 
+        ? 'Password reset instructions have been sent to your email.'
+        : 'Email could not be sent. Check server logs for the reset token.',
+      emailSent,
+      ...(isDev && { token: resetToken }),
     };
   }
 

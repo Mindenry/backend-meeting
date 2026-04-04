@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Query } from '@nestjs/common';
+import { Controller, Post, Body, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { EmailService } from './email.service';
 
@@ -6,6 +6,13 @@ import { EmailService } from './email.service';
 @Controller('email')
 export class EmailController {
   constructor(private readonly emailService: EmailService) {}
+
+  @Get('status')
+  @ApiOperation({ summary: 'Get email service status', description: 'Check if email service is configured and ready' })
+  @ApiResponse({ status: 200, description: 'Email service status' })
+  getStatus() {
+    return this.emailService.getStatus();
+  }
 
   @Post('test')
   @ApiOperation({ summary: 'Send test email', description: 'Send a test email to verify SMTP configuration' })
