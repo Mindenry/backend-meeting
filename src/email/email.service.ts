@@ -33,19 +33,19 @@ export class EmailService {
 
     try {
       // Use explicit SMTP settings without 'service' to force IPv4
+      // Try port 465 with SSL instead of 587 (some cloud providers block 587)
       this.transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
-        port: 587,
-        secure: false,
+        port: 465,
+        secure: true,
         auth: {
           user: smtpUser,
           pass: smtpPass,
         },
         // Force IPv4 DNS resolution
         family: 4,
-        requireTLS: true,
-        connectionTimeout: 15000,
-        socketTimeout: 15000,
+        connectionTimeout: 20000,
+        socketTimeout: 20000,
       });
 
       // Verify connection configuration
