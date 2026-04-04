@@ -41,12 +41,11 @@ export class EmailService {
           user: smtpUser,
           pass: smtpPass,
         },
+        // Force IPv4 DNS resolution
+        family: 4,
         requireTLS: true,
-        connectionTimeout: 10000,
-        socketTimeout: 10000,
-        tls: {
-          ciphers: 'SSLv3',
-        },
+        connectionTimeout: 15000,
+        socketTimeout: 15000,
       });
 
       // Verify connection configuration
