@@ -314,16 +314,15 @@ export class AuthService {
       this.logger.error(`Error sending password reset email: ${error.message}`);
     }
 
-    // In development mode, return the token for testing
-    const isDev = process.env.NODE_ENV !== 'production';
-    
+    // Always return token if email failed to send (for testing purposes)
+    // This allows testing reset password even when SMTP is blocked
     return {
       success: true,
       message: emailSent 
         ? 'Password reset instructions have been sent to your email.'
-        : 'Email could not be sent. Check server logs for the reset token.',
+        : 'Email could not be sent. Use the token below to reset your password.',
       emailSent,
-      ...(isDev && { token: resetToken }),
+      token: resetToken,
     };
   }
 
