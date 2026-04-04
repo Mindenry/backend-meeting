@@ -46,7 +46,7 @@ export class EmailService {
         family: 4,
         connectionTimeout: 20000,
         socketTimeout: 20000,
-      });
+      } as any);
 
       // Verify connection configuration
       this.transporter.verify((error) => {
