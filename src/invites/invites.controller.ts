@@ -65,11 +65,10 @@ export class InvitesController {
   }
 
   /**
-   * List all active invites in the requester’s organization.
-   * Accessible to org_owner, admin, and manager.
+   * List all active invites in the requester's organization.
+   * All authenticated users can view invites (read-only for non-managers)
    */
   @Get('organization/:orgId')
-  @Roles('org_owner', 'admin', 'manager')
   async getInvitesByOrganization(
     @Param('orgId') orgId: string,
     @Request() req: any,

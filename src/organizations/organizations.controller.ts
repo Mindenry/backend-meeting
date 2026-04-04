@@ -44,10 +44,9 @@ export class OrganizationsController {
 
   /**
    * Get the organization details for the given ID.
-   * org_owner, admin, and manager can access their own organization only.
+   * All authenticated users can access their own organization.
    */
   @Get(':id')
-  @Roles('org_owner', 'admin', 'manager')
   findOne(@Param('id') id: string, @Request() req: any) {
     const userOrgId = req.user?.organizationId;
     if (!userOrgId || userOrgId !== id) {

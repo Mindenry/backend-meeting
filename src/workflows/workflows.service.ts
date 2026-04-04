@@ -275,6 +275,12 @@ export class WorkflowsService {
   private async executeAction(action: any, input: any, workflow: any) {
     switch (action.type) {
       case 'create_task':
+        // Prevent infinite loop: don't create task from task_created trigger
+        // The input contains task data when triggered by task_created
+        if (input.id && input.title && input.status && workflow.trigger === 'task_created') {
+          console.log('Skipping create_task action for task_created trigger to prevent duplicate');
+          return { success: true, skipped: true, reason: 'Prevented duplicate task creation' };
+        }
         return await this.tasksService.create({
           title: this.interpolate(action.title, input),
           description: this.interpolate(action.description || '', input),

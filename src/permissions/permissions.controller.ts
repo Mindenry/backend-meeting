@@ -20,9 +20,9 @@ export class PermissionsController {
 
   /**
    * Get all permissions for a given organization
+   * All authenticated users can view permissions (read-only for non-admins)
    */
   @Get(':orgId')
-  @Roles('org_owner', 'admin')
   async getPermissions(@Param('orgId') orgId: string, @Request() req: any) {
     this.validateOrgAccess(req, orgId);
     return this.permissionsService.getPermissions(orgId);
@@ -32,7 +32,6 @@ export class PermissionsController {
    * Get permissions for a specific role
    */
   @Get(':orgId/:role')
-  @Roles('org_owner', 'admin')
   async getPermissionsByRole(
     @Param('orgId') orgId: string,
     @Param('role') role: string,
@@ -44,6 +43,7 @@ export class PermissionsController {
 
   /**
    * Bulk update permissions
+   * Only org_owner and admin can modify permissions
    */
   @Put(':orgId')
   @Roles('org_owner', 'admin')
