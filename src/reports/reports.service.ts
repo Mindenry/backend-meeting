@@ -502,31 +502,43 @@ export class ReportsService {
       total: meetings.length,
       completed: meetings.filter((m) => m.status === 'ended').length,
       scheduled: meetings.filter((m) => m.status === 'scheduled').length,
-      totalDuration: meetings.reduce((sum, m) => {
+      totalDuration: Math.round(meetings.reduce((sum, m) => {
         const endTime = m.endTime
           ? new Date(m.endTime).getTime()
           : new Date(m.startTime).getTime();
         return sum + (endTime - new Date(m.startTime).getTime());
-      }, 0),
+      }, 0) / 60000), // Convert ms to minutes
       withRecordings: meetings.filter((m) => m.recordings.length > 0).length,
       withMinutes: meetings.filter((m) => m.minutes.length > 0).length,
     };
 
     const memberStats = teamMembers.map((member) => {
       const memberTasks = tasks.filter((t) => t.assigneeId === member.userId);
+      const totalTasks = memberTasks.length;
+      const completedTasks = memberTasks.filter((t) => t.status === 'done').length;
+      const inProgressTasks = memberTasks.filter((t) => t.status === 'in_progress').length;
+      const messagesByMember = messages.filter((m) => m.senderId === member.userId).length;
+      const meetingsByMember = meetings.filter((m) =>
+        m.participants.some((p) => p.userId === member.userId),
+      ).length;
+      
+      // Calculate productivity score for this member
+      const taskCompletionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+      const taskScore = taskCompletionRate * 0.5; // 50% weight on tasks
+      const engagementScore = Math.min(100, meetingsByMember * 10) * 0.3; // 30% weight on meetings
+      const communicationScore = Math.min(100, messagesByMember * 2) * 0.2; // 20% weight on messages
+      const productivityScore = Math.round(taskScore + engagementScore + communicationScore);
+      
       return {
         user: member.user,
         tasks: {
-          total: memberTasks.length,
-          completed: memberTasks.filter((t) => t.status === 'done').length,
-          inProgress: memberTasks.filter((t) => t.status === 'in_progress')
-            .length,
+          total: totalTasks,
+          completed: completedTasks,
+          inProgress: inProgressTasks,
         },
-        messagesSent: messages.filter((m) => m.senderId === member.userId)
-          .length,
-        meetingsAttended: meetings.filter((m) =>
-          m.participants.some((p) => p.userId === member.userId),
-        ).length,
+        messagesSent: messagesByMember,
+        meetingsAttended: meetingsByMember,
+        productivityScore,
       };
     });
 
@@ -863,15 +875,26 @@ export class ReportsService {
         if (!t.dueDate) return false;
         return new Date(t.dueDate) < new Date() && t.status !== 'done';
       }).length;
+      
+      // Calculate workload percentage (based on active tasks relative to team average)
+      const activeTasks = inProgress + todo;
+      const totalTeamActiveTasks = members.reduce((sum, m) => {
+        const mTasks = tasks.filter((t) => t.assigneeId === m.userId);
+        return sum + mTasks.filter((t) => t.status === 'in_progress' || t.status === 'todo').length;
+      }, 0);
+      const avgActiveTasks = members.length > 0 ? totalTeamActiveTasks / members.length : 1;
+      const workloadPercentage = avgActiveTasks > 0 ? Math.round((activeTasks / avgActiveTasks) * 100) : 0;
 
       return {
         userId: member.userId,
         userName: member.user.name,
+        userEmail: member.user.email,
         totalTasks: userTasks.length,
         completed,
         inProgress,
         todo,
         overdue,
+        workloadPercentage: Math.min(150, workloadPercentage), // Cap at 150%
       };
     });
 
