@@ -273,7 +273,7 @@ export class TasksService {
         attachments: {
           select: {
             id: true,
-            filename: true,
+            name: true,
             url: true,
             mimeType: true,
             size: true,
@@ -287,7 +287,7 @@ export class TasksService {
         comments: {
           select: {
             id: true,
-            content: true,
+            text: true,
             createdAt: true,
             updatedAt: true,
             user: { select: { id: true, name: true, avatar: true } },
@@ -300,7 +300,8 @@ export class TasksService {
           select: {
             id: true,
             action: true,
-            details: true,
+            oldValue: true,
+            newValue: true,
             createdAt: true,
             user: { select: { id: true, name: true } },
           },
@@ -353,7 +354,7 @@ export class TasksService {
 
   async create(data: {
     title: string;
-    description?: string;
+    description?: string | null;
     priority?: 'high' | 'medium' | 'low' | 'urgent';
     status?: TaskStatus;
     issueType?: 'task' | 'bug' | 'story' | 'epic' | 'subtask';
