@@ -369,6 +369,7 @@ export class RecordingsUploadController {
     let teamId: string | null = null;
     let meetingTitle = 'Quick Huddle';
     let resolvedMeetingId: string | null = null;
+    let isPersonalMeeting = false; // Track if this is a personal meeting (no team assigned)
 
     const isQuickHuddle = (meetingId || '').startsWith('quick-huddle');
 
@@ -377,6 +378,7 @@ export class RecordingsUploadController {
       // For Quick Huddle, create/find a personal recordings folder for this user
       // Do NOT use team's shared drive for Quick Huddle
       meetingTitle = 'Quick Huddle';
+      isPersonalMeeting = true;
     } else {
       // Get meeting details
       const meeting = await this.prisma.meeting.findUnique({
@@ -402,23 +404,16 @@ export class RecordingsUploadController {
         teamId = meeting.teamId;
         meetingTitle = meeting.title || 'Meeting';
 
+        // Personal meeting = meeting exists but has no team assigned
         if (!teamId) {
-          // Meeting exists but no team - use user's first team
-          const userTeams = await this.prisma.teamMember.findFirst({
-            where: { userId: createdBy },
-            include: { team: true },
-          });
-
-          if (userTeams?.team) {
-            teamId = userTeams.team.id;
-          }
+          isPersonalMeeting = true;
         }
       }
     }
 
-    // For Quick Huddle, always create/find a personal folder for this user
-    // This ensures Quick Huddle recordings go to Personal, not Shared Drive
-    if (isQuickHuddle && !teamId) {
+    // For Quick Huddle or Personal meetings, always create/find a personal folder for this user
+    // This ensures recordings go to Personal, not Shared Drive
+    if ((isQuickHuddle || isPersonalMeeting) && !teamId) {
       const user = await this.prisma.user.findUnique({
         where: { id: createdBy },
         select: { organizationId: true },
@@ -567,9 +562,9 @@ export class RecordingsUploadController {
     }
 
     // Create meeting-specific folder:
-    // - Quick Huddle -> Personal (user-only recordings)
+    // - Quick Huddle / Personal meeting -> Personal (user-only recordings)
     // - Others -> meeting title
-    const meetingFolderName = isQuickHuddle
+    const meetingFolderName = (isQuickHuddle || isPersonalMeeting)
       ? 'Personal'
       : sanitizedTitle || 'Meeting';
     const meetingFolderPath = `/${parentFolderName}`;
