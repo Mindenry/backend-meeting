@@ -449,8 +449,9 @@ export class RecordingsUploadController {
       }
     }
 
-    // If no team found, create/find a personal folder for this user
-    if (!teamId) {
+    // If no team found and NOT a personal meeting, use organization team as fallback
+    // Personal meetings should use Personal Recordings team, not org team
+    if (!teamId && !isPersonalMeeting) {
       // Get user's organization
       const user = await this.prisma.user.findUnique({
         where: { id: createdBy },
@@ -469,7 +470,7 @@ export class RecordingsUploadController {
       }
     }
 
-    // If still no team, create/find a fallback personal recordings team
+    // If still no team (or personal meeting without Personal Recordings team), create/find one
     if (!teamId) {
       const user = await this.prisma.user.findUnique({
         where: { id: createdBy },
@@ -602,19 +603,30 @@ export class RecordingsUploadController {
       }
     }
 
-    // Standardize final output to mp4 when ffmpeg is available
-    this.logger.log('[Recording] Starting MP4 conversion...');
-    const conversion = await this.convertToMp4(file.buffer);
-    const convertedMp4 = conversion.buffer;
+    // Skip FFmpeg conversion on production to avoid Railway timeout (30s limit)
+    // WebM is natively supported by all modern browsers
+    const skipConversion = process.env.NODE_ENV === 'production' || process.env.SKIP_FFMPEG === 'true';
+    
+    let convertedMp4: Buffer | null = null;
+    let conversion: any = { buffer: null, error: null, diagnostics: [], sourceHasVideo: true, outputHasVideo: true };
+    
+    if (!skipConversion) {
+      // Standardize final output to mp4 when ffmpeg is available (dev only)
+      this.logger.log('[Recording] Starting MP4 conversion...');
+      conversion = await this.convertToMp4(file.buffer);
+      convertedMp4 = conversion.buffer;
 
-    if (convertedMp4) {
-      this.logger.log(
-        `[Recording] Conversion successful: ${file.buffer.length} bytes -> ${convertedMp4.length} bytes (MP4)`,
-      );
+      if (convertedMp4) {
+        this.logger.log(
+          `[Recording] Conversion successful: ${file.buffer.length} bytes -> ${convertedMp4.length} bytes (MP4)`,
+        );
+      } else {
+        this.logger.warn(
+          `[Recording] Conversion failed, keeping original format. Error: ${conversion.error || 'Unknown'}`,
+        );
+      }
     } else {
-      this.logger.warn(
-        `[Recording] Conversion failed, keeping original format. Error: ${conversion.error || 'Unknown'}`,
-      );
+      this.logger.log('[Recording] Skipping FFmpeg conversion on production - saving as WebM');
     }
 
     const outputFormat = convertedMp4 ? 'mp4' : 'webm';
@@ -759,7 +771,7 @@ export class RecordingsUploadController {
         ? undefined
         : conversion.error
           ? `FFmpeg conversion to mp4 failed: ${conversion.error}`
-          : 'FFmpeg conversion failed, recording stored as WebM',
+          : 'FFmpeg conversion skipped, recording stored as WebM',
       conversionDiagnostics: conversion.diagnostics,
       ffmpegCommandUsed: conversion.usedCommand,
       sourceHasVideo: conversion.sourceHasVideo,
