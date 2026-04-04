@@ -32,16 +32,15 @@ export class EmailService {
     }
 
     try {
+      // Use explicit SMTP settings without 'service' to force IPv4
       this.transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
         auth: {
           user: smtpUser,
           pass: smtpPass,
         },
-        // Force IPv4 to avoid IPv6 connectivity issues on Railway
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false,
         requireTLS: true,
         connectionTimeout: 10000,
         socketTimeout: 10000,
