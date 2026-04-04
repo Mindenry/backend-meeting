@@ -46,8 +46,8 @@ export class MeetingsController {
   }
 
   @Get()
-  findAll(@Query('status') status?: string, @Query('teamId') teamId?: string) {
-    return this.meetingsService.findAll({ status, teamId });
+  findAll(@Request() req: any, @Query('status') status?: string, @Query('teamId') teamId?: string) {
+    return this.meetingsService.findAll({ status, teamId, user: req.user });
   }
 
   // IMPORTANT: This route must come BEFORE @Get(':id') to avoid route collision

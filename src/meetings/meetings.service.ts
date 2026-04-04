@@ -38,14 +38,38 @@ export class MeetingsService {
     return randomBytes(4).toString('hex').substring(0, 9).toUpperCase();
   }
 
-  findAll(params?: { status?: string; teamId?: string; hostId?: string }) {
-    const { status, teamId, hostId } = params || {};
+  async findAll(params?: { status?: string; teamId?: string; hostId?: string; user?: any }) {
+    const { status, teamId, hostId, user } = params || {};
+    
+    // Build base where clause
+    const where: any = {
+      status: status || undefined,
+      teamId: teamId || undefined,
+      hostId: hostId || undefined,
+    };
+    
+    // Personal calendar: show only user's own meetings (host or participant)
+    if (user) {
+      const orgRole = user.role?.toLowerCase() || 'employee';
+      const isGlobalAdmin = ['org_owner', 'admin'].includes(orgRole);
+      
+      if (!isGlobalAdmin) {
+        // Get meetings where user is host or participant
+        const participantMeetings = await this.prisma.meetingParticipant.findMany({
+          where: { userId: user.id },
+          select: { meetingId: true },
+        });
+        const participantMeetingIds = participantMeetings.map((p) => p.meetingId);
+        
+        where.OR = [
+          { hostId: user.id }, // User is host
+          { id: { in: participantMeetingIds } }, // User is participant
+        ];
+      }
+    }
+    
     return this.prisma.meeting.findMany({
-      where: {
-        status: status || undefined,
-        teamId: teamId || undefined,
-        hostId: hostId || undefined,
-      },
+      where,
       include: {
         team: true,
         host: true,

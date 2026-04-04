@@ -88,6 +88,26 @@ export class ReportsController {
     );
   }
 
+  @Get('overview')
+  async getOverviewDashboard(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('teamId') teamId?: string,
+    @Query('range') range?: string,
+    @Request() req?: any,
+  ) {
+    const normalizedRange = this.normalizeRange(range);
+    const { startDate: resolvedStart, endDate: resolvedEnd } = 
+      startDate || endDate 
+        ? { startDate: this.toDateOrThrow(startDate, 'startDate'), endDate: this.toDateOrThrow(endDate, 'endDate') }
+        : this.buildDateRange(normalizedRange);
+    
+    return this.reportsService.getOverviewReport(
+      req.user,
+      normalizedRange as any,
+    );
+  }
+
   @Get('team-productivity')
   getTeamProductivityReport(
     @Query('teamId') teamId: string,

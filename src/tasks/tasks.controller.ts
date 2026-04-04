@@ -10,6 +10,7 @@ import {
   UseGuards,
   NotFoundException,
   BadRequestException,
+  Request,
 } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -33,6 +34,7 @@ export class TasksController {
 
   @Get()
   findAll(
+    @Request() req: any,
     @Query('status') status?: any,
     @Query('teamId') teamId?: string,
     @Query('assigneeId') assigneeId?: string,
@@ -59,6 +61,7 @@ export class TasksController {
       limit: limit ? parseInt(limit) : undefined,
       sortBy,
       sortOrder,
+      user: req.user,
     });
   }
 

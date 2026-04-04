@@ -29,7 +29,7 @@ export class TasksService {
     private readonly taskWatchersService: TaskWatchersService,
   ) {}
 
-  findAll(params?: {
+  async findAll(params?: {
     status?: TaskStatus;
     teamId?: string;
     assigneeId?: string;
@@ -42,6 +42,7 @@ export class TasksService {
     limit?: number;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
+    user?: any;
   }) {
     const {
       status,
@@ -56,6 +57,7 @@ export class TasksService {
       limit = 200,
       sortBy,
       sortOrder = 'asc',
+      user,
     } = params || {};
 
     // Build due date range filter
@@ -85,6 +87,18 @@ export class TasksService {
       });
     }
 
+    // Personal calendar: show only user's own tasks (assignee)
+    let teamFilter: any = undefined;
+    if (user) {
+      const orgRole = user.role?.toLowerCase() || 'employee';
+      const isGlobalAdmin = ['org_owner', 'admin'].includes(orgRole);
+      
+      if (!isGlobalAdmin) {
+        // Show only tasks assigned to the user
+        teamFilter = { assigneeId: user.id };
+      }
+    }
+
     const where = {
       status: status || undefined,
       teamId: teamId || undefined,
@@ -94,6 +108,7 @@ export class TasksService {
         ? { dueDate: dueDateFilter }
         : {}),
       ...(andClauses.length ? { AND: andClauses } : {}),
+      ...(teamFilter ? teamFilter : {}),
     };
 
     // Lightweight select for board/list views — only what the UI actually renders
