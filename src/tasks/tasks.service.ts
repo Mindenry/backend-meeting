@@ -1561,6 +1561,17 @@ export class TasksService {
       details: { title: exists.title },
     });
 
+    // Delete all related records first to avoid foreign key constraint errors
+    // These models don't have onDelete: Cascade in the schema
+    await this.prisma.taskComment.deleteMany({ where: { taskId: id } });
+    await this.prisma.taskActivityLog.deleteMany({ where: { taskId: id } });
+    await this.prisma.timeEntry.deleteMany({ where: { taskId: id } });
+    await this.prisma.taskWatcher.deleteMany({ where: { taskId: id } });
+    await this.prisma.issueLink.deleteMany({ where: { sourceId: id } });
+    await this.prisma.issueLink.deleteMany({ where: { targetId: id } });
+    await this.prisma.subtask.deleteMany({ where: { taskId: id } });
+    await this.prisma.taskAttachment.deleteMany({ where: { taskId: id } });
+
     await (this.prisma.task as any).delete({ where: { id } });
     this.eventsGateway.emitTaskDeleted(id);
     return { success: true };

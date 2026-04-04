@@ -204,12 +204,21 @@ export class EventsGateway
       if (hostUserId && userInfo?.userId === hostUserId) {
         console.log(`[QuickHuddle] Host ${hostUserId} left, ending meeting ${meetingId}`);
         
-        // End meeting in database
+        // End meeting in database and fetch the updated meeting
+        let endedMeeting: any = null;
         try {
-          await this.prisma.meeting.updateMany({
+          const updateResult = await this.prisma.meeting.updateMany({
             where: { meetingCode: meetingId, status: 'live' },
             data: { status: 'ended', actualEndTime: new Date() },
           });
+          
+          // Fetch the ended meeting to broadcast
+          if (updateResult.count > 0) {
+            endedMeeting = await this.prisma.meeting.findFirst({
+              where: { meetingCode: meetingId, status: 'ended' },
+              include: { team: true, host: true, participants: true },
+            });
+          }
         } catch (error) {
           console.warn(`Failed to end quick huddle meeting ${meetingId}:`, error);
         }
@@ -219,6 +228,11 @@ export class EventsGateway
           meetingId,
           reason: 'Host left the meeting',
         });
+        
+        // Broadcast meeting:updated to all clients so Dashboard/Meetings page updates status
+        if (endedMeeting) {
+          this.emitMeetingUpdated(endedMeeting);
+        }
         
         // Clear meeting data
         this.quickHuddleHosts.delete(meetingId);
