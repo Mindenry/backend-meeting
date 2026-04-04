@@ -255,12 +255,13 @@ export class EventsGateway
       meetingId: string;
       peerId: string;
       peerName: string;
+      peerAvatar?: string;
       state: any;
       userId?: string;
     },
     @ConnectedSocket() client: Socket,
   ) {
-    const { meetingId, peerId, peerName, state, userId } = data;
+    const { meetingId, peerId, peerName, peerAvatar, state, userId } = data;
 
     console.log(
       `[Join] Peer ${peerId} joining meeting ${meetingId}, socket: ${client.id}`,
@@ -370,7 +371,7 @@ export class EventsGateway
     const newParticipant: MeetingParticipant = {
       peerId,
       name: peerName,
-      avatar: userInfo?.avatar,
+      avatar: peerAvatar || userInfo?.avatar,
       userId: userId || userInfo?.userId,
       socketId: client.id,
       state: state || {
@@ -436,7 +437,7 @@ export class EventsGateway
     client.to(`meeting:${meetingId}`).emit('meeting:participant:joined', {
       peerId,
       name: peerName,
-      avatar: userInfo?.avatar,
+      avatar: peerAvatar || userInfo?.avatar,
       userId: userId || userInfo?.userId,
       state: newParticipant.state,
     });
@@ -500,12 +501,13 @@ export class EventsGateway
       meetingId: string;
       peerId: string;
       peerName: string;
+      peerAvatar?: string;
       state: any;
       userId?: string;
     },
     @ConnectedSocket() client: Socket,
   ) {
-    const { meetingId, peerId, peerName, state, userId } = data;
+    const { meetingId, peerId, peerName, peerAvatar, state, userId } = data;
 
     console.log(
       `[Rejoin] Peer ${peerId} rejoining meeting ${meetingId} with new socket ${client.id}`,
@@ -543,7 +545,7 @@ export class EventsGateway
     const newParticipant: MeetingParticipant = {
       peerId,
       name: peerName,
-      avatar: userInfo?.avatar,
+      avatar: peerAvatar || userInfo?.avatar,
       userId: userId || userInfo?.userId,
       socketId: client.id,
       state: state || {
@@ -583,7 +585,7 @@ export class EventsGateway
     client.to(`meeting:${meetingId}`).emit('meeting:participant:joined', {
       peerId,
       name: peerName,
-      avatar: userInfo?.avatar,
+      avatar: peerAvatar || userInfo?.avatar,
       state: newParticipant.state,
     });
 
