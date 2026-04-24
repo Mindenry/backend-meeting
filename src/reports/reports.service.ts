@@ -150,59 +150,63 @@ export class ReportsService {
     // ═══════════════════════════════════════════════════════════════════════════
 
     // --- 1. Adjusted Task Performance Score (45%) ---
-    const taskCompletionRate = tasksTotal > 0 ? (tasksCompleted / tasksTotal) * 100 : 0;
-    
+    const taskCompletionRate =
+      tasksTotal > 0 ? (tasksCompleted / tasksTotal) * 100 : 0;
+
     // Check overdue tasks (tasks not done but past due date)
     const overdueTasks = await this.prisma.task.count({
       where: {
         assigneeId: currentUser.id,
         status: { not: 'done' },
         dueDate: { lt: new Date() },
-        createdAt: { gte: startDate, lte: endDate }
-      }
+        createdAt: { gte: startDate, lte: endDate },
+      },
     });
-    
+
     // On-time rate: penalize overdue tasks
-    const onTimeRate = tasksTotal > 0 
-      ? Math.max(0, 100 - (overdueTasks / tasksTotal) * 100)
-      : 0;
-    
+    const onTimeRate =
+      tasksTotal > 0 ? Math.max(0, 100 - (overdueTasks / tasksTotal) * 100) : 0;
+
     // Base task score (60% completion, 40% on-time)
-    const baseTaskScore = (taskCompletionRate * 0.6) + (onTimeRate * 0.4);
-    
+    const baseTaskScore = taskCompletionRate * 0.6 + onTimeRate * 0.4;
+
     // Task Difficulty Factor: Easy=1, Medium=2, Hard=3, Urgent=4
     const taskDifficultyCounts = await this.prisma.task.groupBy({
       by: ['priority'],
       where: {
         assigneeId: currentUser.id,
-        createdAt: { gte: startDate, lte: endDate }
+        createdAt: { gte: startDate, lte: endDate },
       },
-      _count: true
+      _count: true,
     });
-    
+
     const difficultyWeights: Record<string, number> = {
       low: 1,
       medium: 2,
       high: 3,
-      urgent: 4
+      urgent: 4,
     };
-    
+
     let totalWeightedTasks = 0;
     let totalTasksForDifficulty = 0;
-    taskDifficultyCounts.forEach(t => {
+    taskDifficultyCounts.forEach((t) => {
       const weight = difficultyWeights[t.priority] || 1;
       totalWeightedTasks += t._count * weight;
       totalTasksForDifficulty += t._count;
     });
-    
+
     // Difficulty factor: average difficulty (normalized to 1-1.5 range)
-    const avgDifficulty = totalTasksForDifficulty > 0 
-      ? totalWeightedTasks / totalTasksForDifficulty 
-      : 1;
+    const avgDifficulty =
+      totalTasksForDifficulty > 0
+        ? totalWeightedTasks / totalTasksForDifficulty
+        : 1;
     const difficultyFactor = 1 + ((avgDifficulty - 1) / 3) * 0.5; // Scale to 1.0-1.5
-    
+
     // Adjusted task performance
-    const adjustedTaskPerformance = Math.min(100, baseTaskScore * difficultyFactor);
+    const adjustedTaskPerformance = Math.min(
+      100,
+      baseTaskScore * difficultyFactor,
+    );
 
     // --- 2. Meaningful Engagement Score (20%) ---
     // Get total meetings user was invited to
@@ -210,15 +214,18 @@ export class ReportsService {
       where: {
         userId: currentUser.id,
         meeting: {
-          startTime: { gte: startDate, lte: endDate }
-        }
-      }
+          startTime: { gte: startDate, lte: endDate },
+        },
+      },
     });
-    
-    const meetingAttendanceRate = totalMeetingsInvited > 0 
-      ? (meetingsAttended / totalMeetingsInvited) * 100 
-      : (meetingsAttended > 0 ? 100 : 0);
-    
+
+    const meetingAttendanceRate =
+      totalMeetingsInvited > 0
+        ? (meetingsAttended / totalMeetingsInvited) * 100
+        : meetingsAttended > 0
+          ? 100
+          : 0;
+
     // Participation score: proxy via messages in meeting channels or reactions
     // For now, use message activity as participation proxy
     const meetingChannelMessages = await this.prisma.message.count({
@@ -226,63 +233,71 @@ export class ReportsService {
         senderId: currentUser.id,
         createdAt: { gte: startDate, lte: endDate },
         channel: {
-          name: { contains: 'meeting' }
-        }
-      }
+          name: { contains: 'meeting' },
+        },
+      },
     });
-    
+
     // Participation score (normalized, max 100)
     const participationScore = Math.min(100, meetingChannelMessages * 10);
-    
+
     // Meaningful engagement = Attendance (60%) + Participation (40%)
-    const meaningfulEngagement = (meetingAttendanceRate * 0.6) + (participationScore * 0.4);
+    const meaningfulEngagement =
+      meetingAttendanceRate * 0.6 + participationScore * 0.4;
 
     // --- 3. Communication Effectiveness Score (20%) ---
     // Normalize by team average to measure relative contribution
     const teamMembers = await this.prisma.teamMember.findMany({
       where: {
-        team: { organizationId: currentUser.organizationId }
+        team: { organizationId: currentUser.organizationId },
       },
-      select: { userId: true }
+      select: { userId: true },
     });
-    
-    const teamUserIds = [...new Set(teamMembers.map(m => m.userId))];
-    
+
+    const teamUserIds = [...new Set(teamMembers.map((m) => m.userId))];
+
     // Get average messages per team member
     const teamMessageCounts = await this.prisma.message.groupBy({
       by: ['senderId'],
       where: {
         senderId: { in: teamUserIds },
-        createdAt: { gte: startDate, lte: endDate }
+        createdAt: { gte: startDate, lte: endDate },
       },
-      _count: true
+      _count: true,
     });
-    
-    const avgTeamMessages = teamMessageCounts.length > 0
-      ? teamMessageCounts.reduce((sum, m) => sum + m._count, 0) / teamMessageCounts.length
-      : 1;
-    
+
+    const avgTeamMessages =
+      teamMessageCounts.length > 0
+        ? teamMessageCounts.reduce((sum, m) => sum + m._count, 0) /
+          teamMessageCounts.length
+        : 1;
+
     // Relative Activity Score: ratio to team average
-    const relativeActivityScore = avgTeamMessages > 0
-      ? Math.min(100, (messagesSent / avgTeamMessages) * 50)
-      : (messagesSent > 0 ? 50 : 0);
-    
+    const relativeActivityScore =
+      avgTeamMessages > 0
+        ? Math.min(100, (messagesSent / avgTeamMessages) * 50)
+        : messagesSent > 0
+          ? 50
+          : 0;
+
     // Responsiveness Score: based on reply patterns (simplified)
     // Check how many messages are replies (in threads)
     const replyMessages = await this.prisma.message.count({
       where: {
         senderId: currentUser.id,
         createdAt: { gte: startDate, lte: endDate },
-        threadId: { not: null }
-      }
+        threadId: { not: null },
+      },
     });
-    
-    const responsivenessScore = messagesSent > 0
-      ? Math.min(100, (replyMessages / messagesSent) * 100 + 50) // Base 50 + bonus for replies
-      : 0;
-    
+
+    const responsivenessScore =
+      messagesSent > 0
+        ? Math.min(100, (replyMessages / messagesSent) * 100 + 50) // Base 50 + bonus for replies
+        : 0;
+
     // Communication Effectiveness = Responsiveness (50%) + Relative Activity (50%)
-    const communicationEffectiveness = (responsivenessScore * 0.5) + (relativeActivityScore * 0.5);
+    const communicationEffectiveness =
+      responsivenessScore * 0.5 + relativeActivityScore * 0.5;
 
     // --- 4. Consistency Factor (15%) ---
     // Calculate active days (days with at least one activity)
@@ -291,46 +306,49 @@ export class ReportsService {
       this.prisma.task.findMany({
         where: {
           assigneeId: currentUser.id,
-          updatedAt: { gte: startDate, lte: endDate }
+          updatedAt: { gte: startDate, lte: endDate },
         },
-        select: { updatedAt: true }
+        select: { updatedAt: true },
       }),
       // Days with messages
       this.prisma.message.findMany({
         where: {
           senderId: currentUser.id,
-          createdAt: { gte: startDate, lte: endDate }
+          createdAt: { gte: startDate, lte: endDate },
         },
-        select: { createdAt: true }
+        select: { createdAt: true },
       }),
       // Days with meetings
       this.prisma.meetingParticipant.findMany({
         where: {
           userId: currentUser.id,
           meeting: {
-            startTime: { gte: startDate, lte: endDate }
-          }
+            startTime: { gte: startDate, lte: endDate },
+          },
         },
-        select: { meeting: { select: { startTime: true } } }
-      })
+        select: { meeting: { select: { startTime: true } } },
+      }),
     ]);
-    
+
     // Extract unique active days
     const activeDaysSet = new Set<string>();
-    taskUpdates.forEach(t => {
+    taskUpdates.forEach((t) => {
       activeDaysSet.add(t.updatedAt.toISOString().split('T')[0]);
     });
-    messages.forEach(m => {
+    messages.forEach((m) => {
       activeDaysSet.add(m.createdAt.toISOString().split('T')[0]);
     });
-    meetingParticipations.forEach(m => {
+    meetingParticipations.forEach((m) => {
       activeDaysSet.add(m.meeting.startTime.toISOString().split('T')[0]);
     });
-    
+
     const activeDays = activeDaysSet.size;
-    const periodDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-    let consistencyScore = periodDays > 0 ? Math.min(100, (activeDays / periodDays) * 100) : 0;
-    
+    const periodDays = Math.ceil(
+      (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+    );
+    let consistencyScore =
+      periodDays > 0 ? Math.min(100, (activeDays / periodDays) * 100) : 0;
+
     // Cap consistency if task performance is very low (anti-gaming)
     if (taskCompletionRate < 30) {
       consistencyScore = Math.min(consistencyScore, 50);
@@ -341,16 +359,17 @@ export class ReportsService {
       adjustedTaskPerformance: 45,
       meaningfulEngagement: 20,
       communicationEffectiveness: 20,
-      workConsistency: 15
+      workConsistency: 15,
     };
 
     let productivityScore = Math.round(
-      (adjustedTaskPerformance * weights.adjustedTaskPerformance / 100) +
-      (meaningfulEngagement * weights.meaningfulEngagement / 100) +
-      (communicationEffectiveness * weights.communicationEffectiveness / 100) +
-      (consistencyScore * weights.workConsistency / 100)
+      (adjustedTaskPerformance * weights.adjustedTaskPerformance) / 100 +
+        (meaningfulEngagement * weights.meaningfulEngagement) / 100 +
+        (communicationEffectiveness * weights.communicationEffectiveness) /
+          100 +
+        (consistencyScore * weights.workConsistency) / 100,
     );
-    
+
     // ANTI-GAMING RULE: Cap at 50% if completion rate < 30%
     if (taskCompletionRate < 30) {
       productivityScore = Math.min(productivityScore, 50);
@@ -358,6 +377,7 @@ export class ReportsService {
 
     return {
       tasksCompleted,
+      tasksTotal,
       meetingsAttended,
       messagesSent,
       productivityScore,
@@ -372,7 +392,8 @@ export class ReportsService {
         periodDays,
         weights,
         antiGamingApplied: taskCompletionRate < 30,
-        methodology: 'Based on Balanced Scorecard (Kaplan & Norton, 1996) with Task Difficulty Adjustment and Anti-Gaming Rules',
+        methodology:
+          'Based on Balanced Scorecard (Kaplan & Norton, 1996) with Task Difficulty Adjustment and Anti-Gaming Rules',
       },
       teamMetrics,
     };
@@ -502,12 +523,14 @@ export class ReportsService {
       total: meetings.length,
       completed: meetings.filter((m) => m.status === 'ended').length,
       scheduled: meetings.filter((m) => m.status === 'scheduled').length,
-      totalDuration: Math.round(meetings.reduce((sum, m) => {
-        const endTime = m.endTime
-          ? new Date(m.endTime).getTime()
-          : new Date(m.startTime).getTime();
-        return sum + (endTime - new Date(m.startTime).getTime());
-      }, 0) / 60000), // Convert ms to minutes
+      totalDuration: Math.round(
+        meetings.reduce((sum, m) => {
+          const endTime = m.endTime
+            ? new Date(m.endTime).getTime()
+            : new Date(m.startTime).getTime();
+          return sum + (endTime - new Date(m.startTime).getTime());
+        }, 0) / 60000,
+      ), // Convert ms to minutes
       withRecordings: meetings.filter((m) => m.recordings.length > 0).length,
       withMinutes: meetings.filter((m) => m.minutes.length > 0).length,
     };
@@ -515,20 +538,29 @@ export class ReportsService {
     const memberStats = teamMembers.map((member) => {
       const memberTasks = tasks.filter((t) => t.assigneeId === member.userId);
       const totalTasks = memberTasks.length;
-      const completedTasks = memberTasks.filter((t) => t.status === 'done').length;
-      const inProgressTasks = memberTasks.filter((t) => t.status === 'in_progress').length;
-      const messagesByMember = messages.filter((m) => m.senderId === member.userId).length;
+      const completedTasks = memberTasks.filter(
+        (t) => t.status === 'done',
+      ).length;
+      const inProgressTasks = memberTasks.filter(
+        (t) => t.status === 'in_progress',
+      ).length;
+      const messagesByMember = messages.filter(
+        (m) => m.senderId === member.userId,
+      ).length;
       const meetingsByMember = meetings.filter((m) =>
         m.participants.some((p) => p.userId === member.userId),
       ).length;
-      
+
       // Calculate productivity score for this member
-      const taskCompletionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+      const taskCompletionRate =
+        totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
       const taskScore = taskCompletionRate * 0.5; // 50% weight on tasks
       const engagementScore = Math.min(100, meetingsByMember * 10) * 0.3; // 30% weight on meetings
       const communicationScore = Math.min(100, messagesByMember * 2) * 0.2; // 20% weight on messages
-      const productivityScore = Math.round(taskScore + engagementScore + communicationScore);
-      
+      const productivityScore = Math.round(
+        taskScore + engagementScore + communicationScore,
+      );
+
       return {
         user: member.user,
         tasks: {
@@ -671,19 +703,21 @@ export class ReportsService {
     });
     if (!user) throw new NotFoundException('User not found');
 
-    // For productivity report, we want:
-    // - Tasks that were created in the period, OR
-    // - Tasks that were completed (updated) in the period
-    // This gives a more accurate picture of work done during the period
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Kanban-style Task Completion Rate Calculation
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Total Tasks = Tasks created in the period (new work that came in)
+    // Completed Tasks = Tasks with status='done' (current state, regardless of when marked)
+    //
+    // This gives a true picture of: "Of all work assigned in this period, how much is done?"
+    // ═══════════════════════════════════════════════════════════════════════════
     const [tasks, timeEntries, meetings, messages] = await Promise.all([
+      // Tasks created in the period (new assignments)
       this.prisma.task.findMany({
         where: {
           assigneeId: userId,
           team: { organizationId: currentUser.organizationId },
-          OR: [
-            { createdAt: { gte: startDate, lte: endDate } },
-            { updatedAt: { gte: startDate, lte: endDate } },
-          ],
+          createdAt: { gte: startDate, lte: endDate },
         },
       }),
       this.prisma.timeEntry.findMany({
@@ -713,13 +747,13 @@ export class ReportsService {
       }),
     ]);
 
-    // Count completed tasks that were actually completed within the period
-    // (status = done AND updatedAt within period)
-    const completedTasks = tasks.filter((t) => 
-      t.status === 'done' && 
-      t.updatedAt >= startDate && 
-      t.updatedAt <= endDate
+    // Count completed tasks (status = done, regardless of when it was marked done)
+    // This is the Kanban approach: we measure current state of tasks assigned in the period
+    const completedTasks = tasks.filter((t) => t.status === 'done').length;
+    const inProgressTasks = tasks.filter(
+      (t) => t.status === 'in_progress',
     ).length;
+    const todoTasks = tasks.filter((t) => t.status === 'todo').length;
 
     return {
       period: { start: startDate, end: endDate },
@@ -728,7 +762,13 @@ export class ReportsService {
         tasks: {
           total: tasks.length,
           completed: completedTasks,
-          inProgress: tasks.filter((t) => t.status === 'in_progress').length,
+          inProgress: inProgressTasks,
+          todo: todoTasks,
+          // True completion rate: of tasks created in period, how many are done now
+          completionRate:
+            tasks.length > 0
+              ? Math.round((completedTasks / tasks.length) * 100)
+              : 0,
         },
         messagesSent: messages.length,
         meetings: {
@@ -890,15 +930,24 @@ export class ReportsService {
         if (!t.dueDate) return false;
         return new Date(t.dueDate) < new Date() && t.status !== 'done';
       }).length;
-      
+
       // Calculate workload percentage (based on active tasks relative to team average)
       const activeTasks = inProgress + todo;
       const totalTeamActiveTasks = members.reduce((sum, m) => {
         const mTasks = tasks.filter((t) => t.assigneeId === m.userId);
-        return sum + mTasks.filter((t) => t.status === 'in_progress' || t.status === 'todo').length;
+        return (
+          sum +
+          mTasks.filter(
+            (t) => t.status === 'in_progress' || t.status === 'todo',
+          ).length
+        );
       }, 0);
-      const avgActiveTasks = members.length > 0 ? totalTeamActiveTasks / members.length : 1;
-      const workloadPercentage = avgActiveTasks > 0 ? Math.round((activeTasks / avgActiveTasks) * 100) : 0;
+      const avgActiveTasks =
+        members.length > 0 ? totalTeamActiveTasks / members.length : 1;
+      const workloadPercentage =
+        avgActiveTasks > 0
+          ? Math.round((activeTasks / avgActiveTasks) * 100)
+          : 0;
 
       return {
         userId: member.userId,
@@ -1079,13 +1128,19 @@ export class ReportsService {
               : 0,
           ]);
 
+        // Calculate total interactions and activity score
+        const totalInteractions =
+          completedTasks + attendedMeetings + messagesSent;
+        const activityScore = Math.min(100, totalInteractions * 2);
+
         return {
           userId: user.id,
           userName: user.name,
           completedTasks,
           attendedMeetings,
           messagesSent,
-          totalInteractions: completedTasks + attendedMeetings + messagesSent,
+          totalInteractions,
+          activityScore,
         };
       }),
     );
